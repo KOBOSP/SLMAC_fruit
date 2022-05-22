@@ -211,11 +211,6 @@ void Viewer::Run()
     bool bStepByStep = false;
     bool bCameraView = true;
 
-    if(mpTracker->mSensor == mpSystem->MONOCULAR || mpTracker->mSensor == mpSystem->STEREO || mpTracker->mSensor == mpSystem->RGBD)
-    {
-        menuShowGraph = true;
-    }
-
     float trackedImageScale = mpTracker->GetImageScale();
 
     cout << "Starting the Viewer" << endl;
