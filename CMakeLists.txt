@@ -50,8 +50,8 @@ ${PROJECT_SOURCE_DIR}/include
 ${PROJECT_SOURCE_DIR}/include/CameraModels
 ${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/Pangolin/include
 ${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/Pangolin/build/src/include
-${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/DBoW2/DBoW2
-${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/g2o/g2o
+${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/DBoW2
+${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/g2o
 ${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/Sophus
 ${EIGEN3_INCLUDE_DIR}
 )

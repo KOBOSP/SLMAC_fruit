@@ -19,7 +19,7 @@
 #include "KeyFrameDatabase.h"
 
 #include "KeyFrame.h"
-#include "../ORB3Thirdparty/DBoW2/DBoW2/BowVector.h"
+#include "DBoW2/BowVector.h"
 
 #include <mutex>
 

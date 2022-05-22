@@ -22,10 +22,10 @@
 
 #include<vector>
 
-#include "../ORB3Thirdparty/DBoW2/DBoW2/BowVector.h"
-#include "../ORB3Thirdparty/DBoW2/DBoW2/FeatureVector.h"
+#include "DBoW2/BowVector.h"
+#include "DBoW2/FeatureVector.h"
 
-#include "../ORB3Thirdparty/Sophus/sophus/geometry.hpp"
+#include "sophus/geometry.hpp"
 
 #include "ImuTypes.h"
 #include "ORBVocabulary.h"
