@@ -33,82 +33,72 @@
 
 using namespace std;
 
-void LoadImages(const string &strPathLeft, const string &strPathRight, const string &strPathTimes,
-                vector<string> &vstrImageLeft, vector<string> &vstrImageRight, vector<double> &vTimeStamps);
+void LoadImages(const string &sCam0Path, const string &sCam1Path, const string &sImageTimeStampPath,
+                vector<string> &vsImageLeftPath, vector<string> &vsImageRightPath, vector<double> &vdImageTimestamp);
 
 void
-LoadIMU(const string &strImuPath, vector<double> &vTimeStamps, vector<cv::Point3f> &vAcc, vector<cv::Point3f> &vGyro);
+LoadIMU(const string &sImuPath, vector<double> &vdImuTimestamp, vector<cv::Point3f> &vAcc, vector<cv::Point3f> &vGyr);
 
 
 int main(int argc, char **argv) {
-    if (argc < 5) {
+    if (argc != 6) {
         cerr << endl
              << "Usage: ./stereo_inertial_euroc path_to_vocabulary path_to_settings path_to_sequence_folder_1 path_to_times_file_1 (path_to_image_folder_2 path_to_times_file_2 ... path_to_image_folder_N path_to_times_file_N) "
              << endl;
         return 1;
     }
 
-    const int num_seq = (argc - 3) / 2;
-    cout << "num_seq = " << num_seq << endl;
-    bool bFileName = (((argc - 3) % 2) == 1);
-    string file_name;
-    if (bFileName) {
-        file_name = string(argv[argc - 1]);
-        cout << "file name: " << file_name << endl;
-    }
+    const int nSeqNum = (argc - 3) / 2;
+    cout << "nSeqNum = " << nSeqNum << endl;
 
     // Load all sequences:
-    int seq;
-    vector<vector<string> > vstrImageLeft;
-    vector<vector<string> > vstrImageRight;
-    vector<vector<double> > vTimestampsCam;
-    vector<vector<cv::Point3f> > vAcc, vGyro;
-    vector<vector<double> > vTimestampsImu;
-    vector<int> nImages;
-    vector<int> nImu;
-    vector<int> first_imu(num_seq, 0);
+    int nSeqId;
+    vector<vector<string> > vvsImageLeftPath;
+    vector<vector<string> > vvsImageRightPath;
+    vector<vector<double> > vvdImageTimestamp;
+    vector<vector<cv::Point3f> > vvAcc, vvGyr;
+    vector<vector<double> > vvdImuTimestamp;
+    vector<int> nImageNumInSeq;
+    vector<int> nImuNumInSeq;
+    vector<int> nFirstImuInSeq(nSeqNum, 0);
 
-    vstrImageLeft.resize(num_seq);
-    vstrImageRight.resize(num_seq);
-    vTimestampsCam.resize(num_seq);
-    vAcc.resize(num_seq);
-    vGyro.resize(num_seq);
-    vTimestampsImu.resize(num_seq);
-    nImages.resize(num_seq);
-    nImu.resize(num_seq);
+    vvsImageLeftPath.resize(nSeqNum);
+    vvsImageRightPath.resize(nSeqNum);
+    vvdImageTimestamp.resize(nSeqNum);
+    vvAcc.resize(nSeqNum);
+    vvGyr.resize(nSeqNum);
+    vvdImuTimestamp.resize(nSeqNum);
+    nImageNumInSeq.resize(nSeqNum);
+    nImuNumInSeq.resize(nSeqNum);
 
-    int tot_images = 0;
-    for (seq = 0; seq < num_seq; seq++) {
-        cout << "Loading images for sequence " << seq << "...";
+    int nTotImageNum = 0;
+    for (nSeqId = 0; nSeqId < nSeqNum; nSeqId++) {
+        string sDatasetPath(argv[(2 * nSeqId) + 3]);
+        string sImageTimeStampPath(argv[(2 * nSeqId) + 4]);
+        string sCam0Path = sDatasetPath + "/mav0/cam0/data";
+        string sCam1Path = sDatasetPath + "/mav0/cam1/data";
+        string sImuPath = sDatasetPath + "/mav0/imu0/data.csv";
 
-        string pathSeq(argv[(2 * seq) + 3]);
-        string pathTimeStamps(argv[(2 * seq) + 4]);
-
-        string pathCam0 = pathSeq + "/mav0/cam0/data";
-        string pathCam1 = pathSeq + "/mav0/cam1/data";
-        string pathImu = pathSeq + "/mav0/imu0/data.csv";
-
-        LoadImages(pathCam0, pathCam1, pathTimeStamps, vstrImageLeft[seq], vstrImageRight[seq], vTimestampsCam[seq]);
+        cout << "Loading Image Form Sequence " << nSeqId << "...";
+        LoadImages(sCam0Path, sCam1Path, sImageTimeStampPath, vvsImageLeftPath[nSeqId], vvsImageRightPath[nSeqId], vvdImageTimestamp[nSeqId]);
         cout << "LOADED!" << endl;
 
-        cout << "Loading IMU for sequence " << seq << "...";
-        LoadIMU(pathImu, vTimestampsImu[seq], vAcc[seq], vGyro[seq]);
+        cout << "Loading IMU Form Sequence " << nSeqId << "...";
+        LoadIMU(sImuPath, vvdImuTimestamp[nSeqId], vvAcc[nSeqId], vvGyr[nSeqId]);
         cout << "LOADED!" << endl;
 
-        nImages[seq] = vstrImageLeft[seq].size();
-        tot_images += nImages[seq];
-        nImu[seq] = vTimestampsImu[seq].size();
+        nImageNumInSeq[nSeqId] = vvsImageLeftPath[nSeqId].size();
+        nImuNumInSeq[nSeqId] = vvdImuTimestamp[nSeqId].size();
+        nTotImageNum += nImageNumInSeq[nSeqId];
 
-        if ((nImages[seq] <= 0) || (nImu[seq] <= 0)) {
-            cerr << "ERROR: Failed to load images or IMU for sequence" << seq << endl;
+        if ((nImageNumInSeq[nSeqId] <= 0) || (nImuNumInSeq[nSeqId] <= 0)) {
+            cerr << "ERROR: Failed to load images or IMU for sequence" << nSeqId << endl;
             return 1;
         }
-
         // Find first imu to be considered, supposing imu measurements start first
-
-        while (vTimestampsImu[seq][first_imu[seq]] <= vTimestampsCam[seq][0])
-            first_imu[seq]++;
-        first_imu[seq]--; // first imu measurement to be considered
+        while (vvdImuTimestamp[nSeqId][nFirstImuInSeq[nSeqId]] <= vvdImageTimestamp[nSeqId][0])
+            nFirstImuInSeq[nSeqId]++;
+        nFirstImuInSeq[nSeqId]--; // first imu measurement to be considered
     }
 
     // Read rectification parameters
@@ -120,171 +110,135 @@ int main(int argc, char **argv) {
 
     // Vector for tracking time statistics
     vector<float> vTimesTrack;
-    vTimesTrack.resize(tot_images);
+    vTimesTrack.resize(nTotImageNum);
 
-    cout << endl << "-------" << endl;
-    cout.precision(17);
+    cout << endl << "----------------" << endl;
+    cout.precision(17);//整个数的位数（包括整数部分）为val位
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::IMU_STEREO, true);
 
-    cv::Mat imLeft, imRight;
-    for (seq = 0; seq < num_seq; seq++) {
-        // Seq loop
-        vector<ORB_SLAM3::IMU::Point> vImuMeas;
-        double t_rect = 0.f;
-        double t_resize = 0.f;
-        double t_track = 0.f;
-        int num_rect = 0;
-        int proccIm = 0;
-        for (int ni = 0; ni < nImages[seq]; ni++, proccIm++) {
+    cv::Mat ImLeft, ImgRight;
+    for (nSeqId = 0; nSeqId < nSeqNum; nSeqId++) {        // Seq loop
+        vector<ORB_SLAM3::IMU::Point> vImuIntervalSet;
+        for (int ni = 0; ni < nImageNumInSeq[nSeqId]; ni++) {
             // Read left and right images from file
-            imLeft = cv::imread(vstrImageLeft[seq][ni], cv::IMREAD_UNCHANGED);
-            imRight = cv::imread(vstrImageRight[seq][ni], cv::IMREAD_UNCHANGED);
-
-            if (imLeft.empty()) {
+            ImLeft = cv::imread(vvsImageLeftPath[nSeqId][ni], cv::IMREAD_UNCHANGED);
+            ImgRight = cv::imread(vvsImageRightPath[nSeqId][ni], cv::IMREAD_UNCHANGED);
+            if (ImLeft.empty()) {
                 cerr << endl << "Failed to load image at: "
-                     << string(vstrImageLeft[seq][ni]) << endl;
+                     << string(vvsImageLeftPath[nSeqId][ni]) << endl;
                 return 1;
             }
-
-            if (imRight.empty()) {
+            if (ImgRight.empty()) {
                 cerr << endl << "Failed to load image at: "
-                     << string(vstrImageRight[seq][ni]) << endl;
+                     << string(vvsImageRightPath[nSeqId][ni]) << endl;
                 return 1;
             }
-
-            double tframe = vTimestampsCam[seq][ni];
-
+            double dImageTime = vvdImageTimestamp[nSeqId][ni];
             // Load imu measurements from previous frame
-            vImuMeas.clear();
-
-            if (ni > 0)
-                while (vTimestampsImu[seq][first_imu[seq]] <=
-                       vTimestampsCam[seq][ni]) // while(vTimestampsImu[first_imu]<=vTimestampsCam[ni])
-                {
-                    vImuMeas.push_back(ORB_SLAM3::IMU::Point(vAcc[seq][first_imu[seq]].x, vAcc[seq][first_imu[seq]].y,
-                                                             vAcc[seq][first_imu[seq]].z,
-                                                             vGyro[seq][first_imu[seq]].x, vGyro[seq][first_imu[seq]].y,
-                                                             vGyro[seq][first_imu[seq]].z,
-                                                             vTimestampsImu[seq][first_imu[seq]]));
-                    first_imu[seq]++;
+            vImuIntervalSet.clear();
+            if (ni > 0){
+                while (vvdImuTimestamp[nSeqId][nFirstImuInSeq[nSeqId]] <= vvdImageTimestamp[nSeqId][ni]){
+                    vImuIntervalSet.push_back(ORB_SLAM3::IMU::Point(vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].x,
+                                                                    vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].y,
+                                                                    vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].z,
+                                                                    vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].x,
+                                                                    vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].y,
+                                                                    vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].z,
+                                                                    vvdImuTimestamp[nSeqId][nFirstImuInSeq[nSeqId]]));
+                    nFirstImuInSeq[nSeqId]++;
                 }
-
-#ifdef COMPILEDWITHC11
+            }
             std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-#else
-            std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
-#endif
-
-            // Pass the images to the SLAM system
-            SLAM.TrackStereo(imLeft, imRight, tframe, vImuMeas);
-
-#ifdef COMPILEDWITHC11
+            SLAM.TrackStereo(ImLeft, ImgRight, dImageTime, vImuIntervalSet);
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-#else
-            std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
-#endif
-
-#ifdef REGISTER_TIMES
-            t_track = t_rect + t_resize + std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t2 - t1).count();
-            SLAM.InsertTrackTime(t_track);
-#endif
-
-            double ttrack = std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-
-            vTimesTrack[ni] = ttrack;
+            double dTrackTime = std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+            vTimesTrack[ni] = dTrackTime;
 
             // Wait to load the next frame
-            double T = 0;
-            if (ni < nImages[seq] - 1)
-                T = vTimestampsCam[seq][ni + 1] - tframe;
-            else if (ni > 0)
-                T = tframe - vTimestampsCam[seq][ni - 1];
-
-            if (ttrack < T)
-                usleep((T - ttrack) * 1e6); // 1e6
+            double dFrameTime = 0;
+            if (ni < nImageNumInSeq[nSeqId] - 1)
+                dFrameTime = vvdImageTimestamp[nSeqId][ni + 1] - dImageTime;
+            else if (ni > 0){
+                dFrameTime = dImageTime - vvdImageTimestamp[nSeqId][ni - 1];
+                cout<< endl <<" go to the step never be execution ? "<<endl;
+            }
+            if (dTrackTime < dFrameTime)
+                usleep((dFrameTime - dTrackTime) * 1e6); // 1e6
         }
-
-        if (seq < num_seq - 1) {
+        if (nSeqId < nSeqNum - 1) {
             cout << "Changing the dataset" << endl;
-
             SLAM.ChangeDataset();
         }
-
-
     }
     // Stop all threads
     SLAM.Shutdown();
 
-
     // Save camera trajectory
-    if (bFileName) {
-        const string kf_file = "kf_" + string(argv[argc - 1]) + ".txt";
-        const string f_file = "f_" + string(argv[argc - 1]) + ".txt";
-        SLAM.SaveTrajectoryEuRoC(f_file);
-        SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
-    } else {
-        SLAM.SaveTrajectoryEuRoC("CameraTrajectory.txt");
-        SLAM.SaveKeyFrameTrajectoryEuRoC("KeyFrameTrajectory.txt");
-    }
+    string sSaveFileName = string(argv[argc - 1]);
+    cout << "sSaveFileName: " << sSaveFileName << endl;
+    const string kf_file = "Camera" + sSaveFileName + ".txt";
+    const string f_file = "KeyFrame" + sSaveFileName + ".txt";
+    SLAM.SaveTrajectoryEuRoC(f_file);
+    SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
 
     return 0;
 }
 
-void LoadImages(const string &strPathLeft, const string &strPathRight, const string &strPathTimes,
-                vector<string> &vstrImageLeft, vector<string> &vstrImageRight, vector<double> &vTimeStamps) {
+
+
+void LoadImages(const string &sCam0Path, const string &sCam1Path, const string &sImageTimeStampPath,
+                vector<string> &vsImageLeftPath, vector<string> &vsImageRightPath, vector<double> &vdImageTimestamp) {
     ifstream fTimes;
-    fTimes.open(strPathTimes.c_str());
-    vTimeStamps.reserve(5000);
-    vstrImageLeft.reserve(5000);
-    vstrImageRight.reserve(5000);
+    fTimes.open(sImageTimeStampPath.c_str());
+    vdImageTimestamp.reserve(5000);
+    vsImageLeftPath.reserve(5000);
+    vsImageRightPath.reserve(5000);
     while (!fTimes.eof()) {
-        string s;
-        getline(fTimes, s);
-        if (!s.empty()) {
+        string sTmp;
+        getline(fTimes, sTmp);
+        if (!sTmp.empty()) {
             stringstream ss;
-            ss << s;
-            vstrImageLeft.push_back(strPathLeft + "/" + ss.str() + ".png");
-            vstrImageRight.push_back(strPathRight + "/" + ss.str() + ".png");
+            ss << sTmp;
+            vsImageLeftPath.push_back(sCam0Path + "/" + ss.str() + ".png");
+            vsImageRightPath.push_back(sCam1Path + "/" + ss.str() + ".png");
             double t;
             ss >> t;
-            vTimeStamps.push_back(t / 1e9);
-
+            vdImageTimestamp.push_back(t / 1e9);
         }
     }
 }
 
-void
-LoadIMU(const string &strImuPath, vector<double> &vTimeStamps, vector<cv::Point3f> &vAcc, vector<cv::Point3f> &vGyro) {
+
+void LoadIMU(const string &sImuPath, vector<double> &vdImuTimestamp, vector<cv::Point3f> &vAcc, vector<cv::Point3f> &vGyr) {
     ifstream fImu;
-    fImu.open(strImuPath.c_str());
-    vTimeStamps.reserve(5000);
+    fImu.open(sImuPath.c_str());
+    vdImuTimestamp.reserve(5000);
     vAcc.reserve(5000);
-    vGyro.reserve(5000);
+    vGyr.reserve(5000);
 
     while (!fImu.eof()) {
-        string s;
-        getline(fImu, s);
-        if (s[0] == '#')
+        string sTmp;
+        getline(fImu, sTmp);
+        if (sTmp[0] == '#')
             continue;
 
-        if (!s.empty()) {
-            string item;
-            size_t pos = 0;
-            double data[7];
-            int count = 0;
-            while ((pos = s.find(',')) != string::npos) {
-                item = s.substr(0, pos);
-                data[count++] = stod(item);
-                s.erase(0, pos + 1);
+        if (!sTmp.empty()) {
+            string sValue;
+            size_t nCnt = 0;
+            double vData[7];
+            int nPos = 0;
+            while ((nCnt = sTmp.find(',')) != string::npos) {//Maximum value for size_t该值表示直到字符串结尾
+                sValue = sTmp.substr(0, nCnt);
+                vData[nPos++] = stod(sValue);
+                sTmp.erase(0, nCnt + 1);
             }
-            item = s.substr(0, pos);
-            data[6] = stod(item);
-
-            vTimeStamps.push_back(data[0] / 1e9);
-            vAcc.push_back(cv::Point3f(data[4], data[5], data[6]));
-            vGyro.push_back(cv::Point3f(data[1], data[2], data[3]));
+            sValue = sTmp.substr(0, nCnt);
+            vData[6] = stod(sValue);
+            vdImuTimestamp.push_back(vData[0] / 1e9);
+            vAcc.push_back(cv::Point3f(vData[4], vData[5], vData[6]));
+            vGyr.push_back(cv::Point3f(vData[1], vData[2], vData[3]));
         }
     }
 }

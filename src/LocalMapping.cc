@@ -62,12 +62,6 @@ LocalMapping::LocalMapping(System* pSys, Atlas *pAtlas, const float bMonocular, 
 
     mNumLM = 0;
     mNumKFCulling=0;
-
-#ifdef REGISTER_TIMES
-    nLBA_exec = 0;
-    nLBA_abort = 0;
-#endif
-
 }
 
 /**
@@ -106,33 +100,14 @@ void LocalMapping::Run()
 
         // Check if there are keyframes in the queue
         // 等待处理的关键帧列表不为空 并且imu正常
-        if(CheckNewKeyFrames() && !mbBadImu)
-        {
-#ifdef REGISTER_TIMES
-            double timeLBA_ms = 0;
-            double timeKFCulling_ms = 0;
-
-            std::chrono::steady_clock::time_point time_StartProcessKF = std::chrono::steady_clock::now();
-#endif
+        if(CheckNewKeyFrames() && !mbBadImu){
             // BoW conversion and insertion in Map
             // Step 2 处理列表中的关键帧，包括计算BoW、更新观测、描述子、共视图，插入到地图等
             ProcessNewKeyFrame();
-#ifdef REGISTER_TIMES
-            std::chrono::steady_clock::time_point time_EndProcessKF = std::chrono::steady_clock::now();
-
-            double timeProcessKF = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndProcessKF - time_StartProcessKF).count();
-            vdKFInsert_ms.push_back(timeProcessKF);
-#endif
 
             // Check recent MapPoints
             // Step 3 根据地图点的观测情况剔除质量不好的地图点
             MapPointCulling();
-#ifdef REGISTER_TIMES
-            std::chrono::steady_clock::time_point time_EndMPCulling = std::chrono::steady_clock::now();
-
-            double timeMPCulling = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndMPCulling - time_EndProcessKF).count();
-            vdMPCulling_ms.push_back(timeMPCulling);
-#endif
 
             // Triangulate new MapPoints
             // Step 4 当前关键帧与相邻关键帧通过三角化产生新的地图点，使得跟踪更稳
@@ -150,13 +125,6 @@ void LocalMapping::Run()
                 // 再完成当前关键帧与相邻关键帧的地图点的融合（在当前关键帧中查找当前相邻关键帧的地图点）
                 SearchInNeighbors();
             }
-
-#ifdef REGISTER_TIMES
-            std::chrono::steady_clock::time_point time_EndMPCreation = std::chrono::steady_clock::now();
-
-            double timeMPCreation = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndMPCreation - time_EndMPCulling).count();
-            vdMPCreation_ms.push_back(timeMPCreation);
-#endif
 
             bool b_doneLBA = false;
             int num_FixedKF_BA = 0;
@@ -208,29 +176,7 @@ void LocalMapping::Run()
                         Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA);
                         b_doneLBA = true;
                     }
-
                 }
-#ifdef REGISTER_TIMES
-                std::chrono::steady_clock::time_point time_EndLBA = std::chrono::steady_clock::now();
-
-                if(b_doneLBA)
-                {
-                    timeLBA_ms = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndLBA - time_EndMPCreation).count();
-                    vdLBA_ms.push_back(timeLBA_ms);
-
-                    nLBA_exec += 1;
-                    if(mbAbortBA)
-                    {
-                        nLBA_abort += 1;
-                    }
-                    vnLBA_edges.push_back(num_edges_BA);
-                    vnLBA_KFopt.push_back(num_OptKF_BA);
-                    vnLBA_KFfixed.push_back(num_FixedKF_BA);
-                    vnLBA_MPs.push_back(num_MPs_BA);
-                }
-
-#endif
-
                 // Initialize IMU here
                 // Step 7 当前关键帧所在地图未完成IMU初始化（第一阶段）
                 if(!mpCurrentKeyFrame->GetMap()->isImuInitialized() && mbInertial)
@@ -249,13 +195,6 @@ void LocalMapping::Run()
                 // Step 8 检测并剔除当前帧相邻的关键帧中冗余的关键帧
                 // 冗余的判定：该关键帧的90%的地图点可以被其它关键帧观测到
                 KeyFrameCulling();
-
-#ifdef REGISTER_TIMES
-                std::chrono::steady_clock::time_point time_EndKFCulling = std::chrono::steady_clock::now();
-
-                timeKFCulling_ms = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndKFCulling - time_EndLBA).count();
-                vdKFCulling_ms.push_back(timeKFCulling_ms);
-#endif
                 // Step 9 如果距离IMU第一阶段初始化成功累计时间差小于100s，进行VIBA
                 if ((mTinit<50.0f) && mbInertial)
                 {
@@ -310,19 +249,9 @@ void LocalMapping::Run()
                 }
             }
 
-#ifdef REGISTER_TIMES
-            vdLBASync_ms.push_back(timeKFCulling_ms);
-            vdKFCullingSync_ms.push_back(timeKFCulling_ms);
-#endif
             // Step 10 将当前帧加入到闭环检测队列中
             mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
 
-#ifdef REGISTER_TIMES
-            std::chrono::steady_clock::time_point time_EndLocalMap = std::chrono::steady_clock::now();
-
-            double timeLocalMap = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndLocalMap - time_StartProcessKF).count();
-            vdLMTotal_ms.push_back(timeLocalMap);
-#endif
         }
         else if(Stop() && !mbBadImu) // 当要终止当前线程的时候
         {

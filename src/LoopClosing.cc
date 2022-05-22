@@ -52,36 +52,6 @@ namespace ORB_SLAM3 {
         mnCovisibilityConsistencyTh = 3;
         mpLastCurrentKF = static_cast<KeyFrame *>(NULL);
 
-#ifdef REGISTER_TIMES
-
-                                                                                                                                vdDataQuery_ms.clear();
-    vdEstSim3_ms.clear();
-    vdPRTotal_ms.clear();
-
-    vdMergeMaps_ms.clear();
-    vdWeldingBA_ms.clear();
-    vdMergeOptEss_ms.clear();
-    vdMergeTotal_ms.clear();
-    vnMergeKFs.clear();
-    vnMergeMPs.clear();
-    nMerges = 0;
-
-    vdLoopFusion_ms.clear();
-    vdLoopOptEss_ms.clear();
-    vdLoopTotal_ms.clear();
-    vnLoopKFs.clear();
-    nLoop = 0;
-
-    vdGBA_ms.clear();
-    vdUpdateMap_ms.clear();
-    vdFGBATotal_ms.clear();
-    vnGBAKFs.clear();
-    vnGBAMPs.clear();
-    nFGBA_exec = 0;
-    nFGBA_abort = 0;
-
-#endif
-
         mstrFolderSubTraj = "SubTrajectories/";
         mnNumCorrection = 0;
         mnCorrectionGBA = 0;
@@ -116,18 +86,8 @@ namespace ORB_SLAM3 {
                     mpLastCurrentKF->mvpLoopCandKFs.clear();
                     mpLastCurrentKF->mvpMergeCandKFs.clear();
                 }
-#ifdef REGISTER_TIMES
-                std::chrono::steady_clock::time_point time_StartPR = std::chrono::steady_clock::now();
-#endif
                 // Step 2 检测有没有共视的区域
                 bool bFindedRegion = NewDetectCommonRegions();
-
-#ifdef REGISTER_TIMES
-                                                                                                                                        std::chrono::steady_clock::time_point time_EndPR = std::chrono::steady_clock::now();
-
-            double timePRTotal = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndPR - time_StartPR).count();
-            vdPRTotal_ms.push_back(timePRTotal);
-#endif
                 if (bFindedRegion) {
                     // Step 3 如果检测到融合（当前关键帧与其他地图有关联）, 则合并地图
                     if (mbMergeDetected) {
@@ -185,26 +145,15 @@ namespace ORB_SLAM3 {
                             mg2oMergeScw = mg2oMergeSlw;
 
                             //mpTracker->SetStepByStep(true);
-
                             Verbose::PrintMess("*Merge detected", Verbose::VERBOSITY_QUIET);
 
-#ifdef REGISTER_TIMES
-                                                                                                                                                    std::chrono::steady_clock::time_point time_StartMerge = std::chrono::steady_clock::now();
-
-                        nMerges += 1;
-#endif
                             // TODO UNCOMMENT
                             // 如果是imu模式,则开启 Visual-Inertial Map Merging
                             // 如果纯视觉模式,则开启 Visual-Welding Map Merging
                             MergeLocal2();
 
 
-#ifdef REGISTER_TIMES
-                                                                                                                                                    std::chrono::steady_clock::time_point time_EndMerge = std::chrono::steady_clock::now();
 
-                        double timeMergeTotal = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndMerge - time_StartMerge).count();
-                        vdMergeTotal_ms.push_back(timeMergeTotal);
-#endif
 
                             Verbose::PrintMess("Merge finished!", Verbose::VERBOSITY_QUIET);
                         }
@@ -287,20 +236,9 @@ namespace ORB_SLAM3 {
 
                             mvpLoopMapPoints = mvpLoopMPs;
 
-#ifdef REGISTER_TIMES
-                                                                                                                                                    std::chrono::steady_clock::time_point time_StartLoop = std::chrono::steady_clock::now();
 
-                        nLoop += 1;
-
-#endif
                             // 开启回环矫正
                             CorrectLoop();
-#ifdef REGISTER_TIMES
-                                                                                                                                                    std::chrono::steady_clock::time_point time_EndLoop = std::chrono::steady_clock::now();
-
-                        double timeLoopTotal = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndLoop - time_StartLoop).count();
-                        vdLoopTotal_ms.push_back(timeLoopTotal);
-#endif
 
                             mnNumCorrection += 1;
                         }
@@ -402,9 +340,7 @@ namespace ORB_SLAM3 {
         bool bLoopDetectedInKF = false;  // 某次时序验证是否成功
         bool bCheckSpatial = false;
 
-#ifdef REGISTER_TIMES
-        std::chrono::steady_clock::time_point time_StartEstSim3_1 = std::chrono::steady_clock::now();
-#endif
+
         // Step 3.1 回环的时序几何校验。注意初始化时mnLoopNumCoincidences=0, 所以可以先跳过看后面
         // 如果成功验证总次数大于0
         if (mnLoopNumCoincidences > 0) {
@@ -522,17 +458,10 @@ namespace ORB_SLAM3 {
 
             }
         }
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_EndEstSim3_1 = std::chrono::steady_clock::now();
 
-        double timeEstSim3 = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndEstSim3_1 - time_StartEstSim3_1).count();
-#endif
         // Step 3.3 若校验成功则把当前帧添加进数据库,且返回true表示找到共同区域
         // 注意初始化时mbMergeDetected=mbLoopDetected=false
         if (mbMergeDetected || mbLoopDetected) {
-#ifdef REGISTER_TIMES
-            vdEstSim3_ms.push_back(timeEstSim3);
-#endif
             mpKeyFrameDB->add(mpCurrentKF);
             return true;
         }
@@ -546,22 +475,12 @@ namespace ORB_SLAM3 {
         vector<KeyFrame *> vpMergeBowCand, vpLoopBowCand;
         if (!bMergeDetectedInKF || !bLoopDetectedInKF) {
             // Search in BoW
-#ifdef REGISTER_TIMES
-            std::chrono::steady_clock::time_point time_StartQuery = std::chrono::steady_clock::now();
-#endif
+
             // 分别找到3个最好的候选帧, 回环候选帧放在vpLoopBowCand中,融合候选帧放在vpMergeBowCand中
             mpKeyFrameDB->DetectNBestCandidates(mpCurrentKF, vpLoopBowCand, vpMergeBowCand, 3);
-#ifdef REGISTER_TIMES
-                                                                                                                                    std::chrono::steady_clock::time_point time_EndQuery = std::chrono::steady_clock::now();
 
-        double timeDataQuery = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndQuery - time_StartQuery).count();
-        vdDataQuery_ms.push_back(timeDataQuery);
-#endif
         }
 
-#ifdef REGISTER_TIMES
-        std::chrono::steady_clock::time_point time_StartEstSim3_2 = std::chrono::steady_clock::now();
-#endif
         // Check the BoW candidates if the geometric candidate list is empty
         //Loop candidates
         // Step 4.1 若当前关键帧没有被检测到回环,并且候选帧数量不为0,则对回环候选帧进行论文中第8页的2-5步
@@ -580,13 +499,6 @@ namespace ORB_SLAM3 {
                                                          mg2oMergeSlw, mnMergeNumCoincidences, mvpMergeMPs,
                                                          mvpMergeMatchedMPs);
         }
-
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_EndEstSim3_2 = std::chrono::steady_clock::now();
-
-        timeEstSim3 += std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndEstSim3_2 - time_StartEstSim3_2).count();
-        vdEstSim3_ms.push_back(timeEstSim3);
-#endif
         // Step 5 根据结果确定有没有检测到共同区域
         // 把当前帧添加到关键帧数据库中
         mpKeyFrameDB->add(mpCurrentKF);
@@ -1248,21 +1160,8 @@ namespace ORB_SLAM3 {
         // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
         Sophus::SE3d correctedTcw(mg2oLoopScw.rotation(), mg2oLoopScw.translation() / mg2oLoopScw.scale());
         mpCurrentKF->SetPose(correctedTcw.cast<float>());
-
         Map *pLoopMap = mpCurrentKF->GetMap();
 
-#ifdef REGISTER_TIMES
-                                                                                                                                /*KeyFrame* pKF = mpCurrentKF;
-    int numKFinLoop = 0;
-    while(pKF && pKF->mnId > mpLoopMatchedKF->mnId)
-    {
-        pKF = pKF->GetParent();
-        numKFinLoop += 1;
-    }
-    vnLoopKFs.push_back(numKFinLoop);*/
-
-    std::chrono::steady_clock::time_point time_StartFusion = std::chrono::steady_clock::now();
-#endif
         // 对地图点操作
         {
             // Get Map Mutex
@@ -1431,13 +1330,6 @@ namespace ORB_SLAM3 {
         // Optimize graph
         bool bFixedScale = mbFixScale;
         // TODO CHECK; Solo para el monocular inertial
-
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_EndFusion = std::chrono::steady_clock::now();
-
-        double timeFusion = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndFusion - time_StartFusion).count();
-        vdLoopFusion_ms.push_back(timeFusion);
-#endif
         //cout << "Optimize essential graph" << endl;
         if (pLoopMap->IsInertial() && pLoopMap->isImuInitialized()) {
             Optimizer::OptimizeEssentialGraph4DoF(pLoopMap, mpLoopMatchedKF, mpCurrentKF, NonCorrectedSim3,
@@ -1448,12 +1340,7 @@ namespace ORB_SLAM3 {
             Optimizer::OptimizeEssentialGraph(pLoopMap, mpLoopMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3,
                                               LoopConnections, bFixedScale);
         }
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_EndOpt = std::chrono::steady_clock::now();
 
-    double timeOptEss = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndOpt - time_EndFusion).count();
-    vdLoopOptEss_ms.push_back(timeOptEss);
-#endif
 
         mpAtlas->InformNewBigChange();
 
@@ -1547,10 +1434,6 @@ namespace ORB_SLAM3 {
 
         //std::cout << "Merge local, Active map: " << pCurrentMap->GetId() << std::endl;
         //std::cout << "Merge local, Non-Active map: " << pMergeMap->GetId() << std::endl;
-
-#ifdef REGISTER_TIMES
-        std::chrono::steady_clock::time_point time_StartMerge = std::chrono::steady_clock::now();
-#endif
 
         // Ensure current keyframe is updated
         // 先保证当前关键帧的链接关系是最新的
@@ -1727,12 +1610,6 @@ namespace ORB_SLAM3 {
         // g2oCorrectedScw 是融合关键帧所在的世界坐标系下的
         vCorrectedSim3[mpCurrentKF] = g2oCorrectedScw;
         vNonCorrectedSim3[mpCurrentKF] = g2oNonCorrectedScw;
-
-
-#ifdef REGISTER_TIMES
-                                                                                                                                vnMergeKFs.push_back(spLocalWindowKFs.size() + spMergeConnectedKFs.size());
-    vnMergeMPs.push_back(spLocalWindowMPs.size() + spMapPointMerge.size());
-#endif
 
         // Step 2.2 通过当前关键帧融合矫正前后的位姿,把当前关键帧的共视窗口里面剩余的关键帧矫正前后的位姿都给填写上
         // 对于每个当前关键帧共视窗口里的关键帧
@@ -1976,13 +1853,6 @@ namespace ORB_SLAM3 {
 
         //std::cout << "[Merge]: Start welding bundle adjustment" << std::endl;
 
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_StartWeldingBA = std::chrono::steady_clock::now();
-
-    double timeMergeMaps = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_StartWeldingBA - time_StartMerge).count();
-    vdMergeMaps_ms.push_back(timeMergeMaps);
-#endif
-
         bool bStop = false;
         // 为Local BA的接口, 把set转为vector
         // Step 7 在缝合(Welding)区域进行local BA
@@ -1992,13 +1862,6 @@ namespace ORB_SLAM3 {
         std::copy(spMergeConnectedKFs.begin(), spMergeConnectedKFs.end(), std::back_inserter(vpMergeConnectedKFs));
         Optimizer::MergeInertialBA(mpCurrentKF, mpMergeMatchedKF, &bStop, pCurrentMap, vCorrectedSim3);
 
-
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_EndWeldingBA = std::chrono::steady_clock::now();
-
-    double timeWeldingBA = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndWeldingBA - time_StartWeldingBA).count();
-    vdWeldingBA_ms.push_back(timeWeldingBA);
-#endif
         //std::cout << "[Merge]: Welding bundle adjustment finished" << std::endl;
 
         // Loop closed. Release Local Mapping.
@@ -2061,12 +1924,6 @@ namespace ORB_SLAM3 {
             }
         }
 
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_EndOptEss = std::chrono::steady_clock::now();
-
-    double timeOptEss = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndOptEss - time_EndWeldingBA).count();
-    vdMergeOptEss_ms.push_back(timeOptEss);
-#endif
 
         // Essential graph 优化后可以重新开始局部建图了
         mpLocalMapper->Release();
@@ -2621,15 +2478,6 @@ namespace ORB_SLAM3 {
     void LoopClosing::RunGlobalBundleAdjustment(Map *pActiveMap, unsigned long nLoopKF) {
         Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
 
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_StartFGBA = std::chrono::steady_clock::now();
-
-    nFGBA_exec += 1;
-
-    vnGBAKFs.push_back(pActiveMap->GetAllKeyFrames().size());
-    vnGBAMPs.push_back(pActiveMap->GetAllMapPoints().size());
-#endif
-
         // imu 初始化成功才返回true，只要一阶段成功就为true
         const bool bImuInit = pActiveMap->isImuInitialized();
 
@@ -2638,18 +2486,6 @@ namespace ORB_SLAM3 {
         else
             // 仅有一个地图且内部关键帧<200，并且IMU完成了第一阶段初始化后才会进行下面
             Optimizer::FullInertialBA(pActiveMap, 7, false, nLoopKF, &mbStopGBA);
-
-#ifdef REGISTER_TIMES
-                                                                                                                                std::chrono::steady_clock::time_point time_EndGBA = std::chrono::steady_clock::now();
-
-    double timeGBA = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndGBA - time_StartFGBA).count();
-    vdGBA_ms.push_back(timeGBA);
-
-    if(mbStopGBA)
-    {
-        nFGBA_abort += 1;
-    }
-#endif
         // 记录GBA已经迭代次数,用来检查全局BA过程是否是因为意外结束的
         int idx = mnFullBAIdx;
         // Optimizer::GlobalBundleAdjustemnt(mpMap,10,&mbStopGBA,nLoopKF,false);
@@ -2845,18 +2681,7 @@ namespace ORB_SLAM3 {
 
                 // TODO Check this update
                 // mpTracker->UpdateFrameIMU(1.0f, mpTracker->GetLastKeyFrame()->GetImuBias(), mpTracker->GetLastKeyFrame());
-
                 mpLocalMapper->Release();
-
-#ifdef REGISTER_TIMES
-                                                                                                                                        std::chrono::steady_clock::time_point time_EndUpdateMap = std::chrono::steady_clock::now();
-
-            double timeUpdateMap = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndUpdateMap - time_EndGBA).count();
-            vdUpdateMap_ms.push_back(timeUpdateMap);
-
-            double timeFGBA = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndUpdateMap - time_StartFGBA).count();
-            vdFGBATotal_ms.push_back(timeFGBA);
-#endif
                 Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
             }
 

@@ -48,10 +48,7 @@ cv::BFMatcher Frame::BFmatcher = cv::BFMatcher(cv::NORM_HAMMING);
 
 Frame::Frame(): mpcpi(NULL), mpImuPreintegrated(NULL), mpPrevFrame(NULL), mpImuPreintegratedFrame(NULL), mpReferenceKF(static_cast<KeyFrame*>(NULL)), mbIsSet(false), mbImuPreintegrated(false), mbHasPose(false), mbHasVelocity(false)
 {
-#ifdef REGISTER_TIMES
-    mTimeStereoMatch = 0;
-    mTimeORB_Ext = 0;
-#endif
+
 }
 
 
@@ -95,10 +92,6 @@ Frame::Frame(const Frame &frame)
     mmProjectPoints = frame.mmProjectPoints;
     mmMatchedInImage = frame.mmMatchedInImage;
 
-#ifdef REGISTER_TIMES
-    mTimeStereoMatch = frame.mTimeStereoMatch;
-    mTimeORB_Ext = frame.mTimeORB_Ext;
-#endif
 }
 
 // 立体匹配模式下的双目
@@ -128,10 +121,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     // 获取sigma^2的倒数
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
-    // ORB extraction
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_StartExtORB = std::chrono::steady_clock::now();
-#endif
+
     // Step 3 对左目右目图像提取ORB特征点, 第一个参数0-左图， 1-右图。为加速计算，同时开了两个线程计算
     thread threadLeft(&Frame::ExtractORB,this,0,imLeft,0,0);
     // 对右目图像提取orb特征
@@ -139,11 +129,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     // 等待两张图像特征点提取过程完成
     threadLeft.join();
     threadRight.join();
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_EndExtORB = std::chrono::steady_clock::now();
 
-    mTimeORB_Ext = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndExtORB - time_StartExtORB).count();
-#endif
 
     // mvKeys中保存的是左图像中的特征点，这里是获取左侧图像中特征点的个数
     N = mvKeys.size();
@@ -155,19 +141,11 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     // Step 4 用OpenCV的矫正函数、内参对提取到的特征点进行矫正
     UndistortKeyPoints();
 
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_StartStereoMatches = std::chrono::steady_clock::now();
-#endif
 
     // Step 5 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvDepth 
 	// mvuRight中存储的应该是左图像中的点所匹配的在右图像中的点的横坐标（纵坐标相同）
     ComputeStereoMatches();
 
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_EndStereoMatches = std::chrono::steady_clock::now();
-
-    mTimeStereoMatch = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndStereoMatches - time_StartStereoMatches).count();
-#endif
 
     // 初始化本帧的地图点
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
@@ -260,15 +238,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
     // ORB extraction
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_StartExtORB = std::chrono::steady_clock::now();
-#endif
     ExtractORB(0,imGray,0,0);
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_EndExtORB = std::chrono::steady_clock::now();
-
-    mTimeORB_Ext = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndExtORB - time_StartExtORB).count();
-#endif
 
     // 获取特征点的个数
     N = mvKeys.size();
@@ -372,18 +342,8 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
     // ORB extraction
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_StartExtORB = std::chrono::steady_clock::now();
-#endif
-
     // Step 3 对这个单目图像进行提取特征点, 第一个参数0-左图， 1-右图
     ExtractORB(0,imGray,0,1000);
-
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_EndExtORB = std::chrono::steady_clock::now();
-
-    mTimeORB_Ext = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndExtORB - time_StartExtORB).count();
-#endif
 
     // 提取特征点的个数
     N = mvKeys.size();
@@ -1451,18 +1411,10 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
     // ORB extraction
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_StartExtORB = std::chrono::steady_clock::now();
-#endif
     thread threadLeft(&Frame::ExtractORB,this,0,imLeft,static_cast<KannalaBrandt8*>(mpCamera)->mvLappingArea[0],static_cast<KannalaBrandt8*>(mpCamera)->mvLappingArea[1]);
     thread threadRight(&Frame::ExtractORB,this,1,imRight,static_cast<KannalaBrandt8*>(mpCamera2)->mvLappingArea[0],static_cast<KannalaBrandt8*>(mpCamera2)->mvLappingArea[1]);
     threadLeft.join();
     threadRight.join();
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_EndExtORB = std::chrono::steady_clock::now();
-
-    mTimeORB_Ext = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndExtORB - time_StartExtORB).count();
-#endif
 
     // 左图中提取的特征点数目
     Nleft = mvKeys.size();
@@ -1500,15 +1452,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     mRlr = mTlr.rotationMatrix();
     mtlr = mTlr.translation();
 
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_StartStereoMatches = std::chrono::steady_clock::now();
-#endif
     ComputeStereoFishEyeMatches();
-#ifdef REGISTER_TIMES
-    std::chrono::steady_clock::time_point time_EndStereoMatches = std::chrono::steady_clock::now();
-
-    mTimeStereoMatch = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndStereoMatches - time_StartStereoMatches).count();
-#endif
 
     //Put all descriptors in the same matrix
     cv::vconcat(mDescriptors,mDescriptorsRight,mDescriptors);

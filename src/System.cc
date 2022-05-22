@@ -392,10 +392,6 @@ namespace ORB_SLAM3 {
         /*if(mpViewer)
             pangolin::BindToContext("ORB-SLAM2: Map Viewer");*/
 
-#ifdef REGISTER_TIMES
-        mpTracker->PrintTimeStats();
-#endif
-
 
     }
 
@@ -453,11 +449,8 @@ namespace ORB_SLAM3 {
 
         for (auto lit = mpTracker->mlRelativeFramePoses.begin(),
                      lend = mpTracker->mlRelativeFramePoses.end(); lit != lend; lit++, lRit++, lT++, lbL++) {
-            //cout << "1" << endl;
             if (*lbL)
                 continue;
-
-
             KeyFrame *pKF = *lRit;
             //cout << "KF: " << pKF->mnId << endl;
 
@@ -467,37 +460,24 @@ namespace ORB_SLAM3 {
             if (!pKF)
                 continue;
 
-            //cout << "2.5" << endl;
-
             while (pKF->isBad()) {
-                //cout << " 2.bad" << endl;
                 Trw = Trw * pKF->mTcp;
                 pKF = pKF->GetParent();
-                //cout << "--Parent KF: " << pKF->mnId << endl;
+//                cout << "--Parent KF: " << pKF->mnId << endl;
             }
 
             if (!pKF || pKF->GetMap() != pBiggerMap) {
-                //cout << "--Parent KF is from another map" << endl;
+//                cout << "--Parent KF is from another map" << endl;
                 continue;
             }
-
-            //cout << "3" << endl;
-
             Trw = Trw * pKF->GetPose() * Twb; // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
-
-            // cout << "4" << endl;
 
             Sophus::SE3f Twb = (pKF->mImuCalib.mTbc * (*lit) * Trw).inverse();
             Eigen::Quaternionf q = Twb.unit_quaternion();
             Eigen::Vector3f twb = Twb.translation();
             f << setprecision(6) << 1e9 * (*lT) << " " << setprecision(9) << twb(0) << " " << twb(1) << " " << twb(2)
               << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
-
-
-
-            // cout << "5" << endl;
         }
-        //cout << "end saving trajectory" << endl;
         f.close();
         cout << endl << "End of saving trajectory to " << filename << " ..." << endl;
     }
@@ -763,30 +743,12 @@ namespace ORB_SLAM3 {
         } else {
             mpTracker->CreateMapInAtlas();
         }
-
         mpTracker->NewDataset();
     }
 
     float System::GetImageScale() {
         return mpTracker->GetImageScale();
     }
-
-#ifdef REGISTER_TIMES
-    void System::InsertRectTime(double& time)
-    {
-        mpTracker->vdRectStereo_ms.push_back(time);
-    }
-
-    void System::InsertResizeTime(double& time)
-    {
-        mpTracker->vdResizeImage_ms.push_back(time);
-    }
-
-    void System::InsertTrackTime(double& time)
-    {
-        mpTracker->vdTrackTotal_ms.push_back(time);
-    }
-#endif
 
 /**
  * @brief 保存地图
