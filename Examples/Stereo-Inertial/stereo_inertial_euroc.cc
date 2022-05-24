@@ -17,19 +17,14 @@
 */
 
 #include<iostream>
-#include<algorithm>
-#include<fstream>
-#include<iomanip>
 #include<chrono>
 #include <ctime>
-#include <sstream>
 
 #include <opencv2/core/core.hpp>
 
 
 #include <System.h>
 #include "ImuTypes.h"
-#include "Optimizer.h"
 
 using namespace std;
 

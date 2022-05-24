@@ -142,11 +142,11 @@ namespace ORB_SLAM3 {
  */
     void Tracking::newParameterLoader(Settings *settings) {
         // 1. 读取相机1
-        mpCamera = settings->camera1();
+        mpCamera = settings->mCalibration1;
         mpCamera = mpAtlas->AddCamera(mpCamera);
 
-        if (settings->needToUndistort()) {
-            mDistCoef = settings->camera1DistortionCoef();
+        if (settings->mbNeedToUndistort) {
+            mDistCoef = settings->GetCamera1DistoCoef();
         } else {
             mDistCoef = cv::Mat::zeros(4, 1, CV_32F);
         }
@@ -155,55 +155,48 @@ namespace ORB_SLAM3 {
         mImageScale = 1.0f;
 
         mK = cv::Mat::eye(3, 3, CV_32F);
-        mK.at<float>(0, 0) = mpCamera->getParameter(0);
-        mK.at<float>(1, 1) = mpCamera->getParameter(1);
-        mK.at<float>(0, 2) = mpCamera->getParameter(2);
-        mK.at<float>(1, 2) = mpCamera->getParameter(3);
+        mK.at<float>(0, 0) = mpCamera->GetParameter(0);
+        mK.at<float>(1, 1) = mpCamera->GetParameter(1);
+        mK.at<float>(0, 2) = mpCamera->GetParameter(2);
+        mK.at<float>(1, 2) = mpCamera->GetParameter(3);
 
         mK_.setIdentity();
-        mK_(0, 0) = mpCamera->getParameter(0);
-        mK_(1, 1) = mpCamera->getParameter(1);
-        mK_(0, 2) = mpCamera->getParameter(2);
-        mK_(1, 2) = mpCamera->getParameter(3);
+        mK_(0, 0) = mpCamera->GetParameter(0);
+        mK_(1, 1) = mpCamera->GetParameter(1);
+        mK_(0, 2) = mpCamera->GetParameter(2);
+        mK_(1, 2) = mpCamera->GetParameter(3);
 
-        // 读取相机2
-        if (settings->cameraType() == Settings::KannalaBrandt) {
-            mpCamera2 = settings->camera2();
-            mpCamera2 = mpAtlas->AddCamera(mpCamera2);
-            mTlr = settings->Tlr();
-            mpFrameDrawer->both = true;
-        }
 
         // 读取双目
-        mbf = settings->bf();
-        mThDepth = settings->b() * settings->thDepth();
+        mbf = settings->mBaselineFocal;
+        mThDepth = settings->mBaseline * settings->mThDepth;
 
 
         mMinFrames = 0;
-        mMaxFrames = settings->fps();
-        mbRGB = settings->rgb();
+        mMaxFrames = settings->mfImgFps;
+        mbRGB = settings->mbRGB;
 
         //ORB parameters
         // 2. 读取特征点参数
-        int nFeatures = settings->nFeatures();
-        int nLevels = settings->nLevels();
-        int fIniThFAST = settings->initThFAST();
-        int fMinThFAST = settings->minThFAST();
-        float fScaleFactor = settings->scaleFactor();
+        int nFeatures = settings->mnFeatures;
+        int nLevels = settings->mnLevels;
+        int fIniThFAST = settings->mnInitThFAST;
+        int fMinThFAST = settings->mnMinThFAST;
+        float fScaleFactor = settings->mfScaleFactor;
 
         mpORBextractorLeft = new ORBextractor(nFeatures, fScaleFactor, nLevels, fIniThFAST, fMinThFAST);
         mpORBextractorRight = new ORBextractor(nFeatures, fScaleFactor, nLevels, fIniThFAST, fMinThFAST);
 
         //IMU parameters
         // 3. 读取imu参数
-        Sophus::SE3f Tbc = settings->Tbc();
-        mInsertKFsLost = settings->insertKFsWhenLost();
-        mImuFreq = settings->imuFrequency();
-        mImuPer = 0.001; //1.0 / (double) mImuFreq;     //TODO: ESTO ESTA BIEN?
-        float Ng = settings->noiseGyro();
-        float Na = settings->noiseAcc();
-        float Ngw = settings->gyroWalk();
-        float Naw = settings->accWalk();
+        Sophus::SE3f Tbc = settings->mTbc;
+        mInsertKFsLost = settings->mbInsertKFsWhenLost;
+        mImuFreq = settings->mImuFreq;
+        mImuPer = 1.0 / (double) mImuFreq;
+        float Ng = settings->mGyrNoise;
+        float Na = settings->mAccNoise;
+        float Ngw = settings->mGyrWalk;
+        float Naw = settings->mAccWalk;
 
         const float sf = sqrt(mImuFreq);
         mpImuCalib = new IMU::Calib(Tbc, Ng * sf, Na * sf, Ngw / sf, Naw / sf);
@@ -659,7 +652,7 @@ namespace ORB_SLAM3 {
             cout << "- color order: BGR (ignored if grayscale)" << endl;
 
         {
-            float fx = mpCamera->getParameter(0);
+            float fx = mpCamera->GetParameter(0);
             cv::FileNode node = fSettings["ThDepth"];
             if (!node.empty() && node.isReal()) {
                 mThDepth = node.real();
@@ -2641,7 +2634,7 @@ namespace ORB_SLAM3 {
                 th = 15; // 15
             // 投影匹配得到更多的匹配关系
             int matches = matcher.SearchByProjection(mCurrentFrame, mvpLocalMapPoints, th, mpLocalMapper->mbFarPoints,
-                                                     mpLocalMapper->mThFarPoints);
+                                                     mpLocalMapper->mfThFarPoints);
         }
     }
 

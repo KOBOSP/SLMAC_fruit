@@ -39,224 +39,113 @@ namespace ORB_SLAM3 {
 
 /**
  * @brief 系统的构造函数，将会启动其他的线程
- * @param strVocFile 词袋文件所在路径
- * @param strSettingsFile 配置文件所在路径
- * @param sensor 传感器类型
+ * @param sVocFile 词袋文件所在路径
+ * @param sSettingFile 配置文件所在路径
+ * @param Sensor 传感器类型
  * @param bUseViewer 是否使用可视化界面
- * @param initFr initFr表示初始化帧的id,开始设置为0
- * @param strSequence 序列名,在跟踪线程和局部建图线程用得到
+ * @param nFrameIdInit initFr表示初始化帧的id,开始设置为0
+ * @param sSeqName 序列名,在跟踪线程和局部建图线程用得到
  */
-    System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
-                   const bool bUseViewer, const int initFr, const string &strSequence) :
-            mSensor(sensor), mpViewer(static_cast<Viewer *>(NULL)), mbReset(false), mbResetActiveMap(false),
+    System::System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor,
+                   const bool bUseViewer, const int nFrameIdInit, const string &sSeqName) :
+            mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbReset(false), mbResetActiveMap(false),
             mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDown(false) {
-        // Output welcome message
-        cout << endl <<
-             "ORB-SLAM3 Copyright (C) 2017-2020 Carlos Campos, Richard Elvira, Juan J. Gómez, José M.M. Montiel and Juan D. Tardós, University of Zaragoza."
-             << endl <<
-             "ORB-SLAM2 Copyright (C) 2014-2016 Raúl Mur-Artal, José M.M. Montiel and Juan D. Tardós, University of Zaragoza."
-             << endl <<
-             "This program comes with ABSOLUTELY NO WARRANTY;" << endl <<
-             "This is free software, and you are welcome to redistribute it" << endl <<
-             "under certain conditions. See LICENSE.txt." << endl << endl;
-
-        cout << "Input sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
+        cout << "Input Sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
 
         //Check settings file
         // Step 2 读取配置文件
-        cv::FileStorage fsSettings(strSettingsFile.c_str(), cv::FileStorage::READ);
+        cv::FileStorage fsSettings(sSettingFile.c_str(), cv::FileStorage::READ);
         // 如果打开失败，就输出错误信息
         if (!fsSettings.isOpened()) {
-            cerr << "Failed to open settings file at: " << strSettingsFile << endl;
+            cerr << "Failed to open settings file at: " << sSettingFile << endl;
             exit(-1);
         }
+        mSetting = new Settings(sSettingFile, mSensor);
+        // 保存及加载地图的名字
+        msLoadAtlasFromFile = mSetting->msLoadFrom;
+        msSaveAtlasToFile = mSetting->msSaveTo;
+        cout << (*mSetting) << endl;
 
-        // 查看配置文件版本，不同版本有不同处理方法
-        cv::FileNode node = fsSettings["File.version"];
-        if (!node.empty() && node.isString() && node.string() == "1.0") {
-            settings_ = new Settings(strSettingsFile, mSensor);
-
-            // 保存及加载地图的名字
-            mStrLoadAtlasFromFile = settings_->atlasLoadFile();
-            mStrSaveAtlasToFile = settings_->atlasSaveFile();
-
-            cout << (*settings_) << endl;
-        } else {
-            settings_ = nullptr;
-            cv::FileNode node = fsSettings["System.LoadAtlasFromFile"];
-            if (!node.empty() && node.isString()) {
-                mStrLoadAtlasFromFile = (string) node;
-            }
-
-            node = fsSettings["System.SaveAtlasToFile"];
-            if (!node.empty() && node.isString()) {
-                mStrSaveAtlasToFile = (string) node;
-            }
+        msVocabularyFilePath = sVocFile;
+        cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
+        mpVocabulary = new ORBVocabulary();
+        bool bVocLoad = mpVocabulary->loadFromTextFile(sVocFile);
+        if (!bVocLoad) {
+            cerr << "Wrong path to vocabulary. " << endl;
+            cerr << "Falied to open at: " << sVocFile << endl;
+            exit(-1);
         }
+        cout << "Vocabulary loaded!" << endl << endl;
+        mpKeyFrameDatabase = new KeyFrameDatabase(*mpVocabulary);
 
-        // 是否激活回环，默认是开着的
-        node = fsSettings["loopClosing"];
-        bool activeLC = true;
-        if (!node.empty()) {
-            activeLC = static_cast<int>(fsSettings["loopClosing"]) != 0;
-        }
 
-        mStrVocabularyFilePath = strVocFile;
-
-        // ORBSLAM3新加的多地图管理功能，这里加载Atlas标识符
-        bool loadedAtlas = false;
-
-        if (mStrLoadAtlasFromFile.empty()) {
-            //Load ORB Vocabulary
-            cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
-
-            // 建立一个新的ORB字典
-            mpVocabulary = new ORBVocabulary();
-            // 读取预训练好的ORB字典并返回成功/失败标志
-            bool bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
-            // 如果加载失败，就输出错误信息
-            if (!bVocLoad) {
-                cerr << "Wrong path to vocabulary. " << endl;
-                cerr << "Falied to open at: " << strVocFile << endl;
-                exit(-1);
-            }
-            cout << "Vocabulary loaded!" << endl << endl;
-
-            //Create KeyFrame Database
-            // Step 4 创建关键帧数据库
-            mpKeyFrameDatabase = new KeyFrameDatabase(*mpVocabulary);
-
-            //Create the Atlas
-            // Step 5 创建多地图，参数0表示初始化关键帧id为0
+        if (msLoadAtlasFromFile.empty()) {
             cout << "Initialization of Atlas from scratch " << endl;
             mpAtlas = new Atlas(0);
         } else {
-            //Load ORB Vocabulary
-            cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
-
-            mpVocabulary = new ORBVocabulary();
-            bool bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
-            if (!bVocLoad) {
-                cerr << "Wrong path to vocabulary. " << endl;
-                cerr << "Falied to open at: " << strVocFile << endl;
-                exit(-1);
-            }
-            cout << "Vocabulary loaded!" << endl << endl;
-
-            //Create KeyFrame Database
-            mpKeyFrameDatabase = new KeyFrameDatabase(*mpVocabulary);
-
-            cout << "Load File" << endl;
-
-            // Load the file with an earlier session
-            //clock_t start = clock();
-            cout << "Initialization of Atlas from file: " << mStrLoadAtlasFromFile << endl;
+            cout << "Initialization of Atlas from file: " << msLoadAtlasFromFile << endl;
             bool isRead = LoadAtlas(FileType::BINARY_FILE);
-
             if (!isRead) {
                 cout << "Error to load the file, please try with other session file or vocabulary file" << endl;
                 exit(-1);
             }
-            //mpKeyFrameDatabase = new KeyFrameDatabase(*mpVocabulary);
-
-
-            //cout << "KF in DB: " << mpKeyFrameDatabase->mnNumKFs << "; words: " << mpKeyFrameDatabase->mnNumWords << endl;
-
-            loadedAtlas = true;
-
             mpAtlas->CreateNewMap();
-
-            //clock_t timeElapsed = clock() - start;
-            //unsigned msElapsed = timeElapsed / (CLOCKS_PER_SEC / 1000);
-            //cout << "Binary file read in " << msElapsed << " ms" << endl;
-
-            //usleep(10*1000*1000);
         }
-
         // 如果是有imu的传感器类型，设置mbIsInertial = true;以后的跟踪和预积分将和这个标志有关
         mpAtlas->SetInertialSensor();
 
-        // Step 6 依次创建跟踪、局部建图、闭环、显示线程
-        //Create Drawers. These are used by the Viewer
-        // 创建用于显示帧和地图的类，由Viewer调用
         mpFrameDrawer = new FrameDrawer(mpAtlas);
-        mpMapDrawer = new MapDrawer(mpAtlas, strSettingsFile, settings_);
+        mpMapDrawer = new MapDrawer(mpAtlas, sSettingFile, mSetting);
 
-        //Initialize the Tracking thread
         //(it will live in the main thread of execution, the one that called this constructor)
-        // 创建跟踪线程（主线程）,不会立刻开启,会在对图像和imu预处理后在main主线程种执行
-        cout << "Seq. Name: " << strSequence << endl;
+        cout << "Seq. Name: " << sSeqName << endl;
         mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
-                                 mpAtlas, mpKeyFrameDatabase, strSettingsFile, mSensor, settings_, strSequence);
+                                 mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSetting, sSeqName);
 
-        //Initialize the Local Mapping thread and launch
-        //创建并开启local mapping线程
-        mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, strSequence);
+
+        mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, sSeqName);
         mptLocalMapping = new thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
-        mpLocalMapper->mInitFr = initFr;
+        mpLocalMapper->mnInitFr = nFrameIdInit;
+        mpLocalMapper->mfThFarPoints = mSetting->mfThFarPoints;
+        cout << "Discard points further than " << mpLocalMapper->mfThFarPoints << " m from current camera" << endl;
+        mpLocalMapper->mbFarPoints = true;
 
-        // 设置最远3D地图点的深度值，如果超过阈值，说明可能三角化不太准确，丢弃
-        if (settings_)
-            mpLocalMapper->mThFarPoints = settings_->thFarPoints();
-        else
-            mpLocalMapper->mThFarPoints = fsSettings["thFarPoints"];
-        // ? 这里有个疑问,C++中浮点型跟0比较是否用精确?
-        if (mpLocalMapper->mThFarPoints != 0) {
-            cout << "Discard points further than " << mpLocalMapper->mThFarPoints << " m from current camera" << endl;
-            mpLocalMapper->mbFarPoints = true;
-        } else
-            mpLocalMapper->mbFarPoints = false;
 
-        //Initialize the Loop Closing thread and launch
-        // 创建并开启闭环线程
-        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, activeLC);
+        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSetting->mbOpenLoop);
         mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
-        //Set pointers between threads
-        // 设置线程间的指针
         mpTracker->SetLocalMapper(mpLocalMapper);
         mpTracker->SetLoopClosing(mpLoopCloser);
-
         mpLocalMapper->SetTracker(mpTracker);
         mpLocalMapper->SetLoopCloser(mpLoopCloser);
-
         mpLoopCloser->SetTracker(mpTracker);
         mpLoopCloser->SetLocalMapper(mpLocalMapper);
 
-        //usleep(10*1000*1000);
 
-        //Initialize the Viewer thread and launch
-        // 创建并开启显示线程
-        if (bUseViewer)
-            //if(false) // TODO
-        {
-            mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, strSettingsFile, settings_);
+        if (bUseViewer){
+            mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, sSettingFile, mSetting);
             mptViewer = new thread(&Viewer::Run, mpViewer);
             mpTracker->SetViewer(mpViewer);
             mpLoopCloser->mpViewer = mpViewer;
             mpViewer->both = mpFrameDrawer->both;
         }
-
         // Fix verbosity
-        // 打印输出中间的信息，设置为安静模式
         Verbose::SetTh(Verbose::VERBOSITY_QUIET);
-
     }
 
     Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp,
                                      const vector<IMU::Point> &vImuMeas, string filename) {
         cv::Mat imLeftToFeed, imRightToFeed;
-        if (settings_ && settings_->needToRectify()) {
-            cv::Mat M1l = settings_->M1l();
-            cv::Mat M2l = settings_->M2l();
-            cv::Mat M1r = settings_->M1r();
-            cv::Mat M2r = settings_->M2r();
-
+        if (mSetting && mSetting->mbNeedToRectify) {
+            cv::Mat M1l = mSetting->Map1X;
+            cv::Mat M2l = mSetting->Map1Y;
+            cv::Mat M1r = mSetting->Map2X;
+            cv::Mat M2r = mSetting->Map2Y;
             cv::remap(imLeft, imLeftToFeed, M1l, M2l, cv::INTER_LINEAR);
             cv::remap(imRight, imRightToFeed, M1r, M2r, cv::INTER_LINEAR);
-        } else if (settings_ && settings_->needToResize()) {
-            cv::resize(imLeft, imLeftToFeed, settings_->newImSize());
-            cv::resize(imRight, imRightToFeed, settings_->newImSize());
+        } else if (mSetting && mSetting->mbNeedToResize) {
+            cv::resize(imLeft, imLeftToFeed, mSetting->mImgSize);
+            cv::resize(imRight, imRightToFeed, mSetting->mImgSize);
         } else {
             imLeftToFeed = imLeft.clone();
             imRightToFeed = imRight.clone();
@@ -383,9 +272,9 @@ namespace ORB_SLAM3 {
         }
 
 
-        if (!mStrSaveAtlasToFile.empty()) {
+        if (!msSaveAtlasToFile.empty()) {
             std::cout << "开始保存地图" << std::endl;
-            Verbose::PrintMess("Atlas saving to file " + mStrSaveAtlasToFile, Verbose::VERBOSITY_NORMAL);
+            Verbose::PrintMess("Atlas saving to file " + msSaveAtlasToFile, Verbose::VERBOSITY_NORMAL);
             SaveAtlas(FileType::BINARY_FILE);
         }
 
@@ -755,46 +644,40 @@ namespace ORB_SLAM3 {
  * @param type 保存类型
  */
     void System::SaveAtlas(int type) {
-        // mStrSaveAtlasToFile 如果配置文件里面没有指定，则不会保存地图
-        if (!mStrSaveAtlasToFile.empty()) {
-            //clock_t start = clock();
+        if (msSaveAtlasToFile.empty()) {
+            return;
+        }
+        // 1. 预保存想要保存的数据
+        mpAtlas->PreSave();
+        // 2. 确定文件名字
+        string pathSaveFileName = "./";
+        pathSaveFileName = pathSaveFileName.append(msSaveAtlasToFile);
+        pathSaveFileName = pathSaveFileName.append(".osa");
 
-            // Save the current session
-            // 1. 预保存想要保存的数据
-            mpAtlas->PreSave();
+        // 3. 保存词典的校验结果及名字
+        string strVocabularyChecksum = CalculateCheckSum(msVocabularyFilePath, TEXT_FILE);
+        std::size_t found = msVocabularyFilePath.find_last_of("/\\");
+        string strVocabularyName = msVocabularyFilePath.substr(found + 1);
 
-            // 2. 确定文件名字
-            string pathSaveFileName = "./";
-            pathSaveFileName = pathSaveFileName.append(mStrSaveAtlasToFile);
-            pathSaveFileName = pathSaveFileName.append(".osa");
+        if (type == TEXT_FILE){
+            cout << "Starting to write the save text file " << endl;
+            std::remove(pathSaveFileName.c_str());
+            std::ofstream ofs(pathSaveFileName, std::ios::binary);
+            boost::archive::text_oarchive oa(ofs);
 
-            // 3. 保存词典的校验结果及名字
-            string strVocabularyChecksum = CalculateCheckSum(mStrVocabularyFilePath, TEXT_FILE);
-            std::size_t found = mStrVocabularyFilePath.find_last_of("/\\");
-            string strVocabularyName = mStrVocabularyFilePath.substr(found + 1);
-
-            if (type == TEXT_FILE) // File text
-            {
-                cout << "Starting to write the save text file " << endl;
-                std::remove(pathSaveFileName.c_str());
-                std::ofstream ofs(pathSaveFileName, std::ios::binary);
-                boost::archive::text_oarchive oa(ofs);
-
-                oa << strVocabularyName;
-                oa << strVocabularyChecksum;
-                oa << mpAtlas;
-                cout << "End to write the save text file" << endl;
-            } else if (type == BINARY_FILE) // File binary
-            {
-                cout << "Starting to write the save binary file" << endl;
-                std::remove(pathSaveFileName.c_str());
-                std::ofstream ofs(pathSaveFileName, std::ios::binary);
-                boost::archive::binary_oarchive oa(ofs);
-                oa << strVocabularyName;
-                oa << strVocabularyChecksum;
-                oa << mpAtlas;
-                cout << "End to write save binary file" << endl;
-            }
+            oa << strVocabularyName;
+            oa << strVocabularyChecksum;
+            oa << mpAtlas;
+            cout << "End to write the save text file" << endl;
+        } else if (type == BINARY_FILE){
+            cout << "Starting to write the save binary file" << endl;
+            std::remove(pathSaveFileName.c_str());
+            std::ofstream ofs(pathSaveFileName, std::ios::binary);
+            boost::archive::binary_oarchive oa(ofs);
+            oa << strVocabularyName;
+            oa << strVocabularyChecksum;
+            oa << mpAtlas;
+            cout << "End to write save binary file" << endl;
         }
     }
 
@@ -804,38 +687,37 @@ namespace ORB_SLAM3 {
  */
     bool System::LoadAtlas(int type) {
         // 1. 加载地图文件
-        string strFileVoc, strVocChecksum;
+        string sFileVoc, sVocChecksum;
         bool isRead = false;
 
-        string pathLoadFileName = "./";
-        pathLoadFileName = pathLoadFileName.append(mStrLoadAtlasFromFile);
-        pathLoadFileName = pathLoadFileName.append(".osa");
+        string sPathLoadFileName = "./";
+        sPathLoadFileName = sPathLoadFileName.append(msLoadAtlasFromFile);
+        sPathLoadFileName = sPathLoadFileName.append(".osa");
 
-        if (type == TEXT_FILE) // File text
-        {
+        if (type == TEXT_FILE){
             cout << "Starting to read the save text file " << endl;
-            std::ifstream ifs(pathLoadFileName, std::ios::binary);
+            std::ifstream ifs(sPathLoadFileName, std::ios::binary);
             if (!ifs.good()) {
                 cout << "Load file not found" << endl;
                 return false;
             }
             boost::archive::text_iarchive ia(ifs);
-            ia >> strFileVoc;
-            ia >> strVocChecksum;
+            ia >> sFileVoc;
+            ia >> sVocChecksum;
             ia >> mpAtlas;
             cout << "End to load the save text file " << endl;
             isRead = true;
         } else if (type == BINARY_FILE) // File binary
         {
             cout << "Starting to read the save binary file" << endl;
-            std::ifstream ifs(pathLoadFileName, std::ios::binary);
+            std::ifstream ifs(sPathLoadFileName, std::ios::binary);
             if (!ifs.good()) {
                 cout << "Load file not found" << endl;
                 return false;
             }
             boost::archive::binary_iarchive ia(ifs);
-            ia >> strFileVoc;
-            ia >> strVocChecksum;
+            ia >> sFileVoc;
+            ia >> sVocChecksum;
             ia >> mpAtlas;
             cout << "End to load the save binary file" << endl;
             isRead = true;
@@ -844,20 +726,15 @@ namespace ORB_SLAM3 {
         // 2. 如果加载成功
         if (isRead) {
             //Check if the vocabulary is the same
-            // 校验词典是否一样
-            string strInputVocabularyChecksum = CalculateCheckSum(mStrVocabularyFilePath, TEXT_FILE);
-
-            if (strInputVocabularyChecksum.compare(strVocChecksum) != 0) {
+            string sInputVocabularyChecksum = CalculateCheckSum(msVocabularyFilePath, TEXT_FILE);
+            if (sInputVocabularyChecksum.compare(sVocChecksum) != 0) {
                 cout << "The vocabulary load isn't the same which the load session was created " << endl;
-                cout << "-Vocabulary name: " << strFileVoc << endl;
+                cout << "-Vocabulary name: " << sFileVoc << endl;
                 return false; // Both are differents
             }
-
-            // 加载对应数据
             mpAtlas->SetKeyFrameDababase(mpKeyFrameDatabase);
             mpAtlas->SetORBVocabulary(mpVocabulary);
             mpAtlas->PostLoad();
-
             return true;
         }
         return false;
@@ -866,9 +743,7 @@ namespace ORB_SLAM3 {
 // 校验词典文件，哈希出一个值，两个哈希值一样表示是同一文件
     string System::CalculateCheckSum(string filename, int type) {
         string checksum = "";
-
         unsigned char c[MD5_DIGEST_LENGTH];
-
         std::ios_base::openmode flags = std::ios::in;
         if (type == BINARY_FILE) // Binary file
             flags = std::ios::in | std::ios::binary;
@@ -878,25 +753,19 @@ namespace ORB_SLAM3 {
             cout << "[E] Unable to open the in file " << filename << " for Md5 hash." << endl;
             return checksum;
         }
-
         MD5_CTX md5Context;
         char buffer[1024];
-
         MD5_Init(&md5Context);
         while (int count = f.readsome(buffer, sizeof(buffer))) {
             MD5_Update(&md5Context, buffer, count);
         }
-
         f.close();
-
         MD5_Final(c, &md5Context);
-
         for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
             char aux[10];
             sprintf(aux, "%02x", c[i]);
             checksum = checksum + aux;
         }
-
         return checksum;
     }
 

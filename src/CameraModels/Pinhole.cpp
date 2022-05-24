@@ -245,7 +245,7 @@ bool Pinhole::IsEqual(GeometricCamera *pCam)
     bool is_same_camera = true;
     for (size_t i = 0; i < size(); ++i)
     {
-        if (abs(mvParameters[i] - pPinholeCam->getParameter(i)) > 1e-6)
+        if (abs(mvParameters[i] - pPinholeCam->GetParameter(i)) > 1e-6)
         {
             is_same_camera = false;
             break;

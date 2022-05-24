@@ -57,21 +57,16 @@ Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer
 
 void Viewer::newParameterLoader(Settings *settings) {
     mImageViewerScale = 1.f;
-
-    float fps = settings->fps();
-    if(fps<1)
-        fps=30;
+    float fps = settings->mfImgFps;
     mT = 1e3/fps;
-
-    cv::Size imSize = settings->newImSize();
+    cv::Size imSize = settings->mImgSize;
     mImageHeight = imSize.height;
     mImageWidth = imSize.width;
-
-    mImageViewerScale = settings->imageViewerScale();
-    mViewpointX = settings->viewPointX();
-    mViewpointY = settings->viewPointY();
-    mViewpointZ = settings->viewPointZ();
-    mViewpointF = settings->viewPointF();
+    mImageViewerScale = settings->mfImageViewerScale;
+    mViewpointX = settings->mfViewPointX;
+    mViewpointY = settings->mfViewPointY;
+    mViewpointZ = settings->mfViewPointZ;
+    mViewpointF = settings->mfViewPointF;
 }
 
 bool Viewer::ParseViewerParamFile(cv::FileStorage &fSettings)

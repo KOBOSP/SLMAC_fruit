@@ -372,7 +372,7 @@ bool VertexPose::write(std::ostream& os) const
         }
 
         for(size_t i = 0; i < _estimate.pCamera[idx]->size(); i++){
-            os << _estimate.pCamera[idx]->getParameter(i) << " ";
+            os << _estimate.pCamera[idx]->GetParameter(i) << " ";
         }
     }
 

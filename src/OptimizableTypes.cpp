@@ -307,12 +307,12 @@ bool VertexSim3Expmap::write(std::ostream &os) const
 
     for (size_t i = 0; i < pCamera1->size(); i++)
     {
-        os << pCamera1->getParameter(i) << " ";
+        os << pCamera1->GetParameter(i) << " ";
     }
 
     for (size_t i = 0; i < pCamera2->size(); i++)
     {
-        os << pCamera2->getParameter(i) << " ";
+        os << pCamera2->GetParameter(i) << " ";
     }
 
     return os.good();

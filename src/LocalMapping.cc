@@ -801,7 +801,7 @@ void LocalMapping::CreateNewMapPoints()
             if(dist1==0 || dist2==0)
                 continue;
 
-            if(mbFarPoints && (dist1>=mThFarPoints||dist2>=mThFarPoints)) // MODIFICATION
+            if(mbFarPoints && (dist1 >= mfThFarPoints || dist2 >= mfThFarPoints)) // MODIFICATION
                 continue;
             // ratioDist是不考虑金字塔尺度下的距离比例
             const float ratioDist = dist2/dist1;

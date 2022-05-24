@@ -51,12 +51,12 @@ MapDrawer::MapDrawer(Atlas* pAtlas, const string &strSettingPath, Settings* sett
 }
 
 void MapDrawer::newParameterLoader(Settings *settings) {
-    mKeyFrameSize = settings->keyFrameSize();
-    mKeyFrameLineWidth = settings->keyFrameLineWidth();
-    mGraphLineWidth = settings->graphLineWidth();
-    mPointSize = settings->pointSize();
-    mCameraSize = settings->cameraSize();
-    mCameraLineWidth  = settings->cameraLineWidth();
+    mKeyFrameSize = settings->mfKeyFrameSize;
+    mKeyFrameLineWidth = settings->mfKeyFrameLineWidth;
+    mGraphLineWidth = settings->mfGraphLineWidth;
+    mPointSize = settings->mfPointSize;
+    mCameraSize = settings->mfCameraSize;
+    mCameraLineWidth  = settings->mfCameraLineWidth;
 }
 
 bool MapDrawer::ParseViewerParamFile(cv::FileStorage &fSettings)
