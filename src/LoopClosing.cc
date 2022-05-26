@@ -39,7 +39,7 @@ namespace ORB_SLAM3 {
  * @param bActiveLC 开启回环，默认是开启的
  */
     LoopClosing::LoopClosing(Atlas *pAtlas, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale,
-                             const bool bActiveLC) :
+                             const bool bActiveLC, Settings *settings) :
             mbResetRequested(false), mbResetActiveMapRequested(false), mbFinishRequested(false), mbFinished(true),
             mpAtlas(pAtlas),
             mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false),
@@ -1298,7 +1298,7 @@ namespace ORB_SLAM3 {
         // CorrectedSim3：存放矫正后当前关键帧的共视关键帧，及其世界坐标系下Sim3 变换
         SearchAndFuse(CorrectedSim3, mvpLoopMapPoints);
 
-        // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
+        // After the MapPoint fusion, new links in the covisibility graph will appear attaching mbFrameBoth sides of the loop
         // Step 6. 更新当前关键帧之间的共视相连关系，得到因闭环时MapPoints融合而新得到的连接关系
         // LoopConnections：存储因为闭环地图点调整而新生成的连接关系
         map<KeyFrame *, set<KeyFrame *> > LoopConnections;
@@ -2611,8 +2611,8 @@ namespace ORB_SLAM3 {
                         }
                         num_MPs += 1;
                         string strNumOBs = to_string(vpMapPointsKF[i]->Observations());
-                        cv::circle(imLeft, pKF->mvKeys[i].pt, 2, cv::Scalar(0, 255, 0));
-                        cv::putText(imLeft, strNumOBs, pKF->mvKeys[i].pt, CV_FONT_HERSHEY_DUPLEX, 1, cv::Scalar(255, 0, 0));
+                        cv::circle(imLeft, pKF->mvKPsLeft[i].pt, 2, cv::Scalar(0, 255, 0));
+                        cv::putText(imLeft, strNumOBs, pKF->mvKPsLeft[i].pt, CV_FONT_HERSHEY_DUPLEX, 1, cv::Scalar(255, 0, 0));
                     }
                     cout << "--It has " << num_MPs << " MPs matched in the map" << endl;
 

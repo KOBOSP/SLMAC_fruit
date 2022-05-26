@@ -41,9 +41,7 @@ class Viewer
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Viewer(System* pSystem, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Tracking *pTracking, const string &strSettingPath, Settings* settings);
-
-    void newParameterLoader(Settings* settings);
+    Viewer(System* pSystem, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Tracking *pTracking, const string &sSettingPath, Settings* settings);
 
     // Main thread function. Draw points, keyframes, the current camera pose and the last processed
     // frame. Drawing is refreshed according to the camera fps. We use Pangolin.
@@ -57,16 +55,10 @@ public:
 
     bool isStopped();
 
-    bool isStepByStep();
-
     void Release();
 
-    //void SetTrackingPause();
-
-    bool both;
+    bool mbFrameBoth;
 private:
-
-    bool ParseViewerParamFile(cv::FileStorage &fSettings);
 
     bool Stop();
 
@@ -76,11 +68,10 @@ private:
     Tracking* mpTracker;
 
     // 1/fps in ms
-    double mT;
-    float mImageWidth, mImageHeight;
-    float mImageViewerScale;
+    double mfImgFreq;
+    float mfImageFrameScale;
 
-    float mViewpointX, mViewpointY, mViewpointZ, mViewpointF;
+    float mfViewpointX, mfViewpointY, mfViewpointZ, mfViewpointF, mfMapWidth, mfMapHeight;
 
     bool CheckFinish();
     void SetFinish();

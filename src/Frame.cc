@@ -54,24 +54,24 @@ Frame::Frame(): mpcpi(NULL), mpImuPreintegrated(NULL), mpPrevFrame(NULL), mpImuP
 
 //Copy Constructor
 Frame::Frame(const Frame &frame)
-    :mpcpi(frame.mpcpi),mpORBvocabulary(frame.mpORBvocabulary), mpORBextractorLeft(frame.mpORBextractorLeft), mpORBextractorRight(frame.mpORBextractorRight),
-     mTimeStamp(frame.mTimeStamp), mK(frame.mK.clone()), mK_(Converter::toMatrix3f(frame.mK)), mDistCoef(frame.mDistCoef.clone()),
-     mbf(frame.mbf), mb(frame.mb), mThDepth(frame.mThDepth), N(frame.N), mvKeys(frame.mvKeys),
-     mvKeysRight(frame.mvKeysRight), mvKeysUn(frame.mvKeysUn), mvuRight(frame.mvuRight),
-     mvDepth(frame.mvDepth), mBowVec(frame.mBowVec), mFeatVec(frame.mFeatVec),
-     mDescriptors(frame.mDescriptors.clone()), mDescriptorsRight(frame.mDescriptorsRight.clone()),
-     mvpMapPoints(frame.mvpMapPoints), mvbOutlier(frame.mvbOutlier), mImuCalib(frame.mImuCalib), mnCloseMPs(frame.mnCloseMPs),
-     mpImuPreintegrated(frame.mpImuPreintegrated), mpImuPreintegratedFrame(frame.mpImuPreintegratedFrame), mImuBias(frame.mImuBias),
-     mnId(frame.mnId), mpReferenceKF(frame.mpReferenceKF), mnScaleLevels(frame.mnScaleLevels),
-     mfScaleFactor(frame.mfScaleFactor), mfLogScaleFactor(frame.mfLogScaleFactor),
-     mvScaleFactors(frame.mvScaleFactors), mvInvScaleFactors(frame.mvInvScaleFactors), mNameFile(frame.mNameFile), mnDataset(frame.mnDataset),
-     mvLevelSigma2(frame.mvLevelSigma2), mvInvLevelSigma2(frame.mvInvLevelSigma2), mpPrevFrame(frame.mpPrevFrame), mpLastKeyFrame(frame.mpLastKeyFrame),
-     mbIsSet(frame.mbIsSet), mbImuPreintegrated(frame.mbImuPreintegrated), mpMutexImu(frame.mpMutexImu),
-     mpCamera(frame.mpCamera), mpCamera2(frame.mpCamera2), Nleft(frame.Nleft), Nright(frame.Nright),
-     monoLeft(frame.monoLeft), monoRight(frame.monoRight), mvLeftToRightMatch(frame.mvLeftToRightMatch),
-     mvRightToLeftMatch(frame.mvRightToLeftMatch), mvStereo3Dpoints(frame.mvStereo3Dpoints),
-     mTlr(frame.mTlr), mRlr(frame.mRlr), mtlr(frame.mtlr), mTrl(frame.mTrl),
-     mTcw(frame.mTcw), mbHasPose(false), mbHasVelocity(false)
+    : mpcpi(frame.mpcpi), mpORBvocabulary(frame.mpORBvocabulary), mpORBextractorLeft(frame.mpORBextractorLeft), mpORBextractorRight(frame.mpORBextractorRight),
+      mTimeStamp(frame.mTimeStamp), mK(frame.mK.clone()), mK_(Converter::toMatrix3f(frame.mK)), mDistCoef(frame.mDistCoef.clone()),
+      mbf(frame.mbf), mb(frame.mb), mThDepth(frame.mThDepth), N(frame.N), mvKPsLeft(frame.mvKPsLeft),
+      mvKPsRight(frame.mvKPsRight), mvKeysUn(frame.mvKeysUn), mvuRight(frame.mvuRight),
+      mvDepth(frame.mvDepth), mBowVec(frame.mBowVec), mFeatVec(frame.mFeatVec),
+      mDescriptors(frame.mDescriptors.clone()), mDescriptorsRight(frame.mDescriptorsRight.clone()),
+      mvpMapPoints(frame.mvpMapPoints), mvbOutlier(frame.mvbOutlier), mImuCalib(frame.mImuCalib), mnCloseMPs(frame.mnCloseMPs),
+      mpImuPreintegrated(frame.mpImuPreintegrated), mpImuPreintegratedFrame(frame.mpImuPreintegratedFrame), mImuBias(frame.mImuBias),
+      mnId(frame.mnId), mpReferenceKF(frame.mpReferenceKF), mnScaleLevels(frame.mnScaleLevels),
+      mfScaleFactor(frame.mfScaleFactor), mfLogScaleFactor(frame.mfLogScaleFactor),
+      mvScaleFactors(frame.mvScaleFactors), mvInvScaleFactors(frame.mvInvScaleFactors), mNameFile(frame.mNameFile), mnDataset(frame.mnDataset),
+      mvLevelSigma2(frame.mvLevelSigma2), mvInvLevelSigma2(frame.mvInvLevelSigma2), mpPrevFrame(frame.mpPrevFrame), mpLastKeyFrame(frame.mpLastKeyFrame),
+      mbIsSet(frame.mbIsSet), mbImuPreintegrated(frame.mbImuPreintegrated), mpMutexImu(frame.mpMutexImu),
+      mpCamera(frame.mpCamera), mpCamera2(frame.mpCamera2), Nleft(frame.Nleft), Nright(frame.Nright),
+      monoLeft(frame.monoLeft), monoRight(frame.monoRight), mvLeftToRightMatch(frame.mvLeftToRightMatch),
+      mvRightToLeftMatch(frame.mvRightToLeftMatch), mvStereo3Dpoints(frame.mvStereo3Dpoints),
+      mTlr(frame.mTlr), mRlr(frame.mRlr), mtlr(frame.mtlr), mTrl(frame.mTrl),
+      mTcw(frame.mTcw), mbHasPose(false), mbHasVelocity(false)
 {
     for(int i=0;i<FRAME_GRID_COLS;i++)
         for(int j=0; j<FRAME_GRID_ROWS; j++){
@@ -132,10 +132,10 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 
 
     // mvKeys中保存的是左图像中的特征点，这里是获取左侧图像中特征点的个数
-    N = mvKeys.size();
+    N = mvKPsLeft.size();
 
     // 如果左图像中没有成功提取到特征点那么就返回，也意味这这一帧的图像无法使用
-    if(mvKeys.empty())
+    if(mvKPsLeft.empty())
         return;
 
     // Step 4 用OpenCV的矫正函数、内参对提取到的特征点进行矫正
@@ -241,10 +241,10 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     ExtractORB(0,imGray,0,0);
 
     // 获取特征点的个数
-    N = mvKeys.size();
+    N = mvKPsLeft.size();
 
     // 如果这一帧没有能够提取出特征点，那么就直接返回了
-    if(mvKeys.empty())
+    if(mvKPsLeft.empty())
         return;
 
     // Step 4 用OpenCV的矫正函数、内参对提取到的特征点进行矫正
@@ -346,9 +346,9 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
     ExtractORB(0,imGray,0,1000);
 
     // 提取特征点的个数
-    N = mvKeys.size();
+    N = mvKPsLeft.size();
     // 如果没有能够成功提取出特征点，那么就直接返回了
-    if(mvKeys.empty())
+    if(mvKPsLeft.empty())
         return;
 
     // Step 4 用OpenCV的矫正函数、内参对提取到的特征点进行矫正 
@@ -363,7 +363,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
     // 初始化本帧的地图点
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
 
-    mmProjectPoints.clear();// = map<long unsigned int, cv::Point2f>(N, static_cast<cv::Point2f>(NULL));
+    mmProjectPoints.clear();// = map<long unsigned int, cv::Point2f>(mnCurKPsLeft, static_cast<cv::Point2f>(NULL));
     mmMatchedInImage.clear();
 
     // 记录地图点是否为外点，初始化均为外点false
@@ -448,8 +448,8 @@ void Frame::AssignFeaturesToGrid()
     for(int i=0;i<N;i++)
     {
         const cv::KeyPoint &kp = (Nleft == -1) ? mvKeysUn[i]
-                                                 : (i < Nleft) ? mvKeys[i]
-                                                                 : mvKeysRight[i - Nleft];
+                                                 : (i < Nleft) ? mvKPsLeft[i]
+                                                                 : mvKPsRight[i - Nleft];
         // 存储某个特征点所在网格的网格坐标，nGridPosX范围：[0,FRAME_GRID_COLS], nGridPosY范围：[0,FRAME_GRID_ROWS]
         int nGridPosX, nGridPosY;
         // 计算某个特征点所在网格的网格坐标，如果找到特征点所在的网格坐标，记录在nGridPosX,nGridPosY里，返回true，没找到返回false
@@ -476,10 +476,10 @@ void Frame::ExtractORB(int flag, const cv::Mat &im, const int x0, const int x1)
     // 判断是左图还是右图
     if(flag==0)
         // 左图的话就套使用左图指定的特征点提取器，并将提取结果保存到对应的变量中 
-        monoLeft = (*mpORBextractorLeft)(im,cv::Mat(),mvKeys,mDescriptors,vLapping);
+        monoLeft = (*mpORBextractorLeft)(im, cv::Mat(), mvKPsLeft, mDescriptors, vLapping);
     else
         // 右图的话就需要使用右图指定的特征点提取器，并将提取结果保存到对应的变量中 
-        monoRight = (*mpORBextractorRight)(im,cv::Mat(),mvKeysRight,mDescriptorsRight,vLapping);
+        monoRight = (*mpORBextractorRight)(im, cv::Mat(), mvKPsRight, mDescriptorsRight, vLapping);
 }
 
 bool Frame::isSet() const {
@@ -883,8 +883,8 @@ vector<size_t> Frame::GetFeaturesInArea(
             {
                 // 根据索引先读取这个特征点 
                 const cv::KeyPoint &kpUn = (Nleft == -1) ? mvKeysUn[vCell[j]]
-                                                         : (!bRight) ? mvKeys[vCell[j]]
-                                                                     : mvKeysRight[vCell[j]];
+                                                         : (!bRight) ? mvKPsLeft[vCell[j]]
+                                                                     : mvKPsRight[vCell[j]];
                 if(bCheckLevels)
                 {
                     // cv::KeyPoint::octave中表示的是从金字塔的哪一层提取的数据
@@ -966,7 +966,7 @@ void Frame::UndistortKeyPoints()
 	// 变量mDistCoef中存储了opencv指定格式的去畸变参数，格式为：(k1,k2,p1,p2,k3)
     if(mDistCoef.at<float>(0)==0.0)
     {
-        mvKeysUn=mvKeys;
+        mvKeysUn=mvKPsLeft;
         return;
     }
 
@@ -980,8 +980,8 @@ void Frame::UndistortKeyPoints()
     for(int i=0; i<N; i++)
     {
         // 然后将这个特征点的横纵坐标分别保存
-        mat.at<float>(i,0)=mvKeys[i].pt.x;
-        mat.at<float>(i,1)=mvKeys[i].pt.y;
+        mat.at<float>(i,0)=mvKPsLeft[i].pt.x;
+        mat.at<float>(i,1)=mvKPsLeft[i].pt.y;
     }
 
     // Undistort points
@@ -1001,7 +1001,7 @@ void Frame::UndistortKeyPoints()
     {
         // 根据索引获取这个特征点
 		// 注意之所以这样做而不是直接重新声明一个特征点对象的目的是，能够得到源特征点对象的其他属性
-        cv::KeyPoint kp = mvKeys[i];
+        cv::KeyPoint kp = mvKPsLeft[i];
         // 读取校正后的坐标并覆盖老坐标
         kp.pt.x=mat.at<float>(i,0);
         kp.pt.y=mat.at<float>(i,1);
@@ -1095,17 +1095,17 @@ void Frame::ComputeStereoMatches()
         vRowIndices[i].reserve(200);
 
     // 右图特征点数量，N表示数量 r表示右图，且不能被修改
-    const int Nr = mvKeysRight.size();
+    const int Nr = mvKPsRight.size();
 
     // Step 1. 行特征点统计. 考虑到尺度金字塔特征，一个特征点可能存在于多行，而非唯一的一行
     for(int iR=0; iR<Nr; iR++)
     {
         // 获取特征点ir的y坐标，即行号
-        const cv::KeyPoint &kp = mvKeysRight[iR];
+        const cv::KeyPoint &kp = mvKPsRight[iR];
         const float &kpY = kp.pt.y;
         // 计算特征点ir在行方向上，可能的偏移范围r，即可能的行号为[kpY + r, kpY -r]
         // 2 表示在全尺寸(scale = 1)的情况下，假设有2个像素的偏移，随着尺度变化，r也跟着变化
-        const float r = 2.0f*mvScaleFactors[mvKeysRight[iR].octave];
+        const float r = 2.0f*mvScaleFactors[mvKPsRight[iR].octave];
         const int maxr = ceil(kpY+r);
         const int minr = floor(kpY-r);
 
@@ -1132,7 +1132,7 @@ void Frame::ComputeStereoMatches()
     // 为左图每一个特征点il，在右图搜索最相似的特征点ir
     for(int iL=0; iL<N; iL++)
     {
-        const cv::KeyPoint &kpL = mvKeys[iL];
+        const cv::KeyPoint &kpL = mvKPsLeft[iL];
         const int &levelL = kpL.octave;
         const float &vL = kpL.pt.y;
         const float &uL = kpL.pt.x;
@@ -1162,7 +1162,7 @@ void Frame::ComputeStereoMatches()
         for(size_t iC=0; iC<vCandidates.size(); iC++)
         {
             const size_t iR = vCandidates[iC];
-            const cv::KeyPoint &kpR = mvKeysRight[iR];
+            const cv::KeyPoint &kpR = mvKPsRight[iR];
 
             // 左图特征点il与带匹配点ic的空间尺度差超过2，放弃
             if(kpR.octave<levelL-1 || kpR.octave>levelL+1)
@@ -1194,7 +1194,7 @@ void Frame::ComputeStereoMatches()
         {
             // coordinates in image pyramid at keypoint scale
             // 计算右图特征点x坐标和对应的金字塔尺度
-            const float uR0 = mvKeysRight[bestIdxR].pt.x;
+            const float uR0 = mvKPsRight[bestIdxR].pt.x;
             const float scaleFactor = mvInvScaleFactors[kpL.octave];
             // 尺度缩放后的左右图特征点坐标
             const float scaleduL = round(kpL.pt.x*scaleFactor);
@@ -1330,7 +1330,7 @@ void Frame::ComputeStereoFromRGBD(const cv::Mat &imDepth)
     {
         /** <li> 从<b>未矫正的特征点</b>提供的坐标来读取深度图像拿到这个点的深度数据 </li> */
 		// 获取校正前和校正后的特征点
-        const cv::KeyPoint &kp = mvKeys[i];
+        const cv::KeyPoint &kp = mvKPsLeft[i];
         const cv::KeyPoint &kpU = mvKeysUn[i];
 
         // 获取其横纵坐标，注意 NOTICE 是校正前的特征点的
@@ -1417,9 +1417,9 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     threadRight.join();
 
     // 左图中提取的特征点数目
-    Nleft = mvKeys.size();
+    Nleft = mvKPsLeft.size();
     // 右图中提取的特征点数目
-    Nright = mvKeysRight.size();
+    Nright = mvKPsRight.size();
     // 特征点总数
     N = Nleft + Nright;
 
@@ -1475,8 +1475,8 @@ void Frame::ComputeStereoFishEyeMatches()
 {
     // 1. 分别取出特征点
     //Speed it up by matching keypoints in the lapping area
-    vector<cv::KeyPoint> stereoLeft(mvKeys.begin() + monoLeft, mvKeys.end());
-    vector<cv::KeyPoint> stereoRight(mvKeysRight.begin() + monoRight, mvKeysRight.end());
+    vector<cv::KeyPoint> stereoLeft(mvKPsLeft.begin() + monoLeft, mvKPsLeft.end());
+    vector<cv::KeyPoint> stereoRight(mvKPsRight.begin() + monoRight, mvKPsRight.end());
 
     // 2. 分别取出描述子
     cv::Mat stereoDescLeft = mDescriptors.rowRange(monoLeft, mDescriptors.rows);
@@ -1509,14 +1509,14 @@ void Frame::ComputeStereoFishEyeMatches()
             // 对于好的匹配，做三角化，且深度值有效的放入结果
             Eigen::Vector3f p3D;
             descMatches++;
-            float sigma1 = mvLevelSigma2[mvKeys[(*it)[0].queryIdx + monoLeft].octave],
-                  sigma2 = mvLevelSigma2[mvKeysRight[(*it)[0].trainIdx + monoRight].octave];
+            float sigma1 = mvLevelSigma2[mvKPsLeft[(*it)[0].queryIdx + monoLeft].octave],
+                  sigma2 = mvLevelSigma2[mvKPsRight[(*it)[0].trainIdx + monoRight].octave];
             // 三角化
             float depth =
                 static_cast<KannalaBrandt8*>(mpCamera)->TriangulateMatches(
-                    mpCamera2,mvKeys[(*it)[0].queryIdx + monoLeft],
-                    mvKeysRight[(*it)[0].trainIdx + monoRight],
-                    mRlr, mtlr, sigma1, sigma2, p3D);
+                        mpCamera2, mvKPsLeft[(*it)[0].queryIdx + monoLeft],
+                        mvKPsRight[(*it)[0].trainIdx + monoRight],
+                        mRlr, mtlr, sigma1, sigma2, p3D);
             // 填充数据
             if(depth > 0.0001f)
             {

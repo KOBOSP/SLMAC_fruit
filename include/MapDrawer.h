@@ -39,12 +39,10 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     MapDrawer(Atlas* pAtlas, const string &strSettingPath, Settings* settings);
 
-    void newParameterLoader(Settings* settings);
-
     Atlas* mpAtlas;
 
     void DrawMapPoints();
-    void DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const bool bDrawInertialGraph, const bool bDrawOptLba);
+    void DrawKeyFramesGraphs(const bool bDrawKF, const bool bDrawCovisGraph, const bool bDrawInertialGraph, const bool bDrawOptFixKF, const bool bHisoryMapKF);
     void DrawCurrentCamera(pangolin::OpenGlMatrix &Twc);
     void SetCurrentCameraPose(const Sophus::SE3f &Tcw);
     void SetReferenceKeyFrame(KeyFrame *pKF);

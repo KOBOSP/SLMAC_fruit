@@ -177,7 +177,7 @@ class KeyFrame
         ar & const_cast<int&>(NLeft);
         ar & const_cast<int&>(NRight);
         serializeSophusSE3<Archive>(ar, mTlr, version);
-        serializeVectorKeyPoints<Archive>(ar, mvKeysRight, version);
+        serializeVectorKeyPoints<Archive>(ar, mvKPsRight, version);
         ar & mGridRight;
 
         // Inertial variables
@@ -511,7 +511,7 @@ public:
     Sophus::SE3f GetRelativePoseTlr();
 
     //KeyPoints in the right image (for stereo fisheye, coordinates are needed)
-    const std::vector<cv::KeyPoint> mvKeysRight;
+    const std::vector<cv::KeyPoint> mvKPsRight;
 
     const int NLeft, NRight;
 

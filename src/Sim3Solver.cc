@@ -327,7 +327,7 @@ void Sim3Solver::ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2)
 
     Eigen::Matrix3f M = Pr2 * Pr1.transpose();
 
-    // Step 3: Compute N matrix
+    // Step 3: Compute mnCurKPsLeft matrix
     double N11, N12, N13, N14, N22, N23, N24, N33, N34, N44;
 
     Eigen::Matrix4f N;

@@ -148,7 +148,8 @@ namespace ORB_SLAM3 {
         float mfCameraSize;
         float mfCameraLineWidth;
         float mfViewPointX, mfViewPointY, mfViewPointZ, mfViewPointF;
-        float mfImageViewerScale;
+        float mfImageFrameScale;
+        float mfMapWidth, mfMapHeight;
 
         /*
          * Save & load maps

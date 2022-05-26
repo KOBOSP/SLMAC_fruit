@@ -244,7 +244,9 @@ namespace ORB_SLAM3 {
         mfViewPointY = ReadParameter<float>(fSettings, "Viewer.ViewpointY", found);
         mfViewPointZ = ReadParameter<float>(fSettings, "Viewer.ViewpointZ", found);
         mfViewPointF = ReadParameter<float>(fSettings, "Viewer.ViewpointF", found);
-        mfImageViewerScale = ReadParameter<float>(fSettings, "Viewer.imageViewScale", found);
+        mfImageFrameScale = ReadParameter<float>(fSettings, "Viewer.imageViewScale", found);
+        mfMapWidth = ReadParameter<float>(fSettings, "Viewer.MapWidth", found);
+        mfMapHeight = ReadParameter<float>(fSettings, "Viewer.MapHeight", found);
     }
 
     void Settings::ReadSystem(cv::FileStorage &fSettings) {
@@ -272,7 +274,7 @@ namespace ORB_SLAM3 {
         cv::Mat R_r1_u1, R_r2_u2;
         cv::Mat P1, P2, Q;
         //https://docs.opencv.org/3.2.0/d9/d0c/group__calib3d.html#ga617b1685d4059c6040827800e72ad2b6
-        //The function computes the rotation matrices for each camera that (virtually) make both camera image planes the same plane.
+        //The function computes the rotation matrices for each camera that (virtually) make mbFrameBoth camera image planes the same plane.
         // Consequently, this makes all the epipolar lines parallel and thus simplifies the dense stereo correspondence problem.
         // The function takes the matrices computed by stereoCalibrate as input.
         // As output, it provides two rotation matrices and also two projection matrices in the new coordinates.

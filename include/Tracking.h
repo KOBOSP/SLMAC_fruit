@@ -63,15 +63,11 @@ public:
 
     ~Tracking();
 
-    // Parse the config file
-    bool ParseCamParamFile(cv::FileStorage &fSettings);
-    bool ParseORBParamFile(cv::FileStorage &fSettings);
-    bool ParseIMUParamFile(cv::FileStorage &fSettings);
+
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename);
-    Sophus::SE3f GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename);
-    Sophus::SE3f GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename);
+
 
     void GrabImuData(const IMU::Point &imuMeasurement);
 
@@ -131,7 +127,7 @@ public:
     Frame mCurrentFrame;
     Frame mLastFrame;
 
-    cv::Mat mImGray;
+    cv::Mat mImgLeft;
 
     // Initialization Variables (Monocular)
     std::vector<int> mvIniLastMatches;
@@ -149,7 +145,7 @@ public:
 
     // frames with estimated pose
     int mTrackedFr;
-    bool mbStep;
+    bool mbDoNext;
 
     // True if local mapping is deactivated and we are performing only localization
     bool mbOnlyTracking;
@@ -165,7 +161,7 @@ public:
     bool mFastInit = false;
 
 
-    vector<MapPoint*> GetLocalMapMPS();
+    vector<MapPoint*> GetLocalMapMPs();
 
     bool mbWriteStats;
 
@@ -298,7 +294,7 @@ protected:
     unsigned int mnLastKeyFrameId;
     unsigned int mnLastRelocFrameId;
     double mTimeStampLost;
-    double time_recently_lost;
+    double mdTimeRecentLost;
 
     unsigned int mnFirstFrameId;
     unsigned int mnInitialFrameId;
@@ -333,10 +329,10 @@ protected:
 
     Sophus::SE3f mTlr;
 
-    void newParameterLoader(Settings* settings);
+    void LoadParameter(Settings* settings);
 
 public:
-    cv::Mat mImRight;
+    cv::Mat mImgRight;
 };
 
 } //namespace ORB_SLAM

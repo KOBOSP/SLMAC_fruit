@@ -128,15 +128,15 @@ namespace ORB_SLAM3
                             bestDist=dist;
                             bestLevel2 = bestLevel;
                             bestLevel = (F.Nleft == -1) ? F.mvKeysUn[idx].octave
-                                                        : (idx < F.Nleft) ? F.mvKeys[idx].octave
-                                                                        : F.mvKeysRight[idx - F.Nleft].octave;
+                                                        : (idx < F.Nleft) ? F.mvKPsLeft[idx].octave
+                                                                        : F.mvKPsRight[idx - F.Nleft].octave;
                             bestIdx=idx;
                         }
                         else if(dist<bestDist2)
                         {
                             bestLevel2 = (F.Nleft == -1) ? F.mvKeysUn[idx].octave
-                                                        : (idx < F.Nleft) ? F.mvKeys[idx].octave
-                                                                        : F.mvKeysRight[idx - F.Nleft].octave;
+                                                        : (idx < F.Nleft) ? F.mvKPsLeft[idx].octave
+                                                                        : F.mvKPsRight[idx - F.Nleft].octave;
                             bestDist2=dist;
                         }
                     }
@@ -205,12 +205,12 @@ namespace ORB_SLAM3
                             bestDist2=bestDist;
                             bestDist=dist;
                             bestLevel2 = bestLevel;
-                            bestLevel = F.mvKeysRight[idx].octave;
+                            bestLevel = F.mvKPsRight[idx].octave;
                             bestIdx=idx;
                         }
                         else if(dist<bestDist2)
                         {
-                            bestLevel2 = F.mvKeysRight[idx].octave;
+                            bestLevel2 = F.mvKPsRight[idx].octave;
                             bestDist2=dist;
                         }
                     }
@@ -392,15 +392,15 @@ namespace ORB_SLAM3
                             // 这里的realIdxKF是当前遍历到的关键帧的特征点id
                             const cv::KeyPoint &kp =
                                     (!pKF->mpCamera2) ? pKF->mvKeysUn[realIdxKF] :
-                                    (realIdxKF >= pKF -> NLeft) ? pKF -> mvKeysRight[realIdxKF - pKF -> NLeft]
+                                    (realIdxKF >= pKF -> NLeft) ? pKF -> mvKPsRight[realIdxKF - pKF -> NLeft]
                                                                 : pKF -> mvKeys[realIdxKF];
                             // Step 4.4：计算匹配点旋转角度差所在的直方图
                             if(mbCheckOrientation)
                             {
                                 cv::KeyPoint &Fkp =
-                                        (!pKF->mpCamera2 || F.Nleft == -1) ? F.mvKeys[bestIdxF] :
-                                        (bestIdxF >= F.Nleft) ? F.mvKeysRight[bestIdxF - F.Nleft]
-                                                            : F.mvKeys[bestIdxF];
+                                        (!pKF->mpCamera2 || F.Nleft == -1) ? F.mvKPsLeft[bestIdxF] :
+                                        (bestIdxF >= F.Nleft) ? F.mvKPsRight[bestIdxF - F.Nleft]
+                                                            : F.mvKPsLeft[bestIdxF];
                                 // 所有的特征点的角度变化应该是一致的，通过直方图统计得到最准确的角度变化值
                                 float rot = kp.angle-Fkp.angle;
                                 if(rot<0.0)
@@ -422,15 +422,15 @@ namespace ORB_SLAM3
 
                                 const cv::KeyPoint &kp =
                                         (!pKF->mpCamera2) ? pKF->mvKeysUn[realIdxKF] :
-                                        (realIdxKF >= pKF -> NLeft) ? pKF -> mvKeysRight[realIdxKF - pKF -> NLeft]
+                                        (realIdxKF >= pKF -> NLeft) ? pKF -> mvKPsRight[realIdxKF - pKF -> NLeft]
                                                                     : pKF -> mvKeys[realIdxKF];
 
                                 if(mbCheckOrientation)
                                 {
                                     cv::KeyPoint &Fkp =
-                                            (!F.mpCamera2) ? F.mvKeys[bestIdxFR] :
-                                            (bestIdxFR >= F.Nleft) ? F.mvKeysRight[bestIdxFR - F.Nleft]
-                                                                : F.mvKeys[bestIdxFR];
+                                            (!F.mpCamera2) ? F.mvKPsLeft[bestIdxFR] :
+                                            (bestIdxFR >= F.Nleft) ? F.mvKPsRight[bestIdxFR - F.Nleft]
+                                                                : F.mvKPsLeft[bestIdxFR];
 
                                     float rot = kp.angle-Fkp.angle;
                                     if(rot<0.0)
@@ -1138,7 +1138,7 @@ namespace ORB_SLAM3
                     // Step 2.4：通过特征点索引idx1在pKF1中取出对应的特征点
                     const cv::KeyPoint &kp1 = (pKF1 -> NLeft == -1) ? pKF1->mvKeysUn[idx1]
                                                                     : (idx1 < pKF1 -> NLeft) ? pKF1 -> mvKeys[idx1]
-                                                                                            : pKF1 -> mvKeysRight[idx1 - pKF1 -> NLeft];
+                                                                                            : pKF1 -> mvKPsRight[idx1 - pKF1 -> NLeft];
 
                     const bool bRight1 = (pKF1 -> NLeft == -1 || idx1 < pKF1 -> NLeft) ? false
                                                                                     : true;
@@ -1181,7 +1181,7 @@ namespace ORB_SLAM3
                         // 通过特征点索引idx2在pKF2中取出对应的特征点
                         const cv::KeyPoint &kp2 = (pKF2 -> NLeft == -1) ? pKF2->mvKeysUn[idx2]
                                                                         : (idx2 < pKF2 -> NLeft) ? pKF2 -> mvKeys[idx2]
-                                                                                                : pKF2 -> mvKeysRight[idx2 - pKF2 -> NLeft];
+                                                                                                : pKF2 -> mvKPsRight[idx2 - pKF2 -> NLeft];
                         const bool bRight2 = (pKF2 -> NLeft == -1 || idx2 < pKF2 -> NLeft) ? false
                                                                                         : true;
                         //? 为什么双目就不需要判断像素点到极点的距离的判断？
@@ -1249,7 +1249,7 @@ namespace ORB_SLAM3
                     {
                         const cv::KeyPoint &kp2 = (pKF2 -> NLeft == -1) ? pKF2->mvKeysUn[bestIdx2]
                                                                         : (bestIdx2 < pKF2 -> NLeft) ? pKF2 -> mvKeys[bestIdx2]
-                                                                                        : pKF2 -> mvKeysRight[bestIdx2 - pKF2 -> NLeft];
+                                                                                        : pKF2 -> mvKPsRight[bestIdx2 - pKF2 -> NLeft];
                         // 记录匹配结果 
                         vMatches12[idx1]=bestIdx2;
                         // !记录已经匹配，避免重复匹配。原作者漏掉！可以添加下面代码
@@ -1447,7 +1447,7 @@ namespace ORB_SLAM3
                 size_t idx = *vit;
                 const cv::KeyPoint &kp = (pKF -> NLeft == -1) ? pKF->mvKeysUn[idx]
                                                             : (!bRight) ? pKF -> mvKeys[idx]
-                                                                        : pKF -> mvKeysRight[idx];
+                                                                        : pKF -> mvKPsRight[idx];
 
                 const int &kpLevel= kp.octave;
                 // 金字塔层级要接近（同一层或小一层），否则跳过
@@ -2001,8 +2001,8 @@ namespace ORB_SLAM3
                     if(uv(1)<CurrentFrame.mnMinY || uv(1)>CurrentFrame.mnMaxY)
                         continue;
                     // 认为投影前后地图点的尺度信息不变
-                    int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ? LastFrame.mvKeys[i].octave
-                                                                                    : LastFrame.mvKeysRight[i - LastFrame.Nleft].octave;
+                    int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ? LastFrame.mvKPsLeft[i].octave
+                                                                                    : LastFrame.mvKPsRight[i - LastFrame.Nleft].octave;
 
                     // Search in a window. Size depends on scale
                     // 单目：th = 7，双目：th = 15
@@ -2070,12 +2070,12 @@ namespace ORB_SLAM3
                         if(mbCheckOrientation)
                         {
                             cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKeysUn[i]
-                                                                        : (i < LastFrame.Nleft) ? LastFrame.mvKeys[i]
-                                                                                                : LastFrame.mvKeysRight[i - LastFrame.Nleft];
+                                                                        : (i < LastFrame.Nleft) ? LastFrame.mvKPsLeft[i]
+                                                                                                : LastFrame.mvKPsRight[i - LastFrame.Nleft];
 
                             cv::KeyPoint kpCF = (CurrentFrame.Nleft == -1) ? CurrentFrame.mvKeysUn[bestIdx2]
-                                                                        : (bestIdx2 < CurrentFrame.Nleft) ? CurrentFrame.mvKeys[bestIdx2]
-                                                                                                            : CurrentFrame.mvKeysRight[bestIdx2 - CurrentFrame.Nleft];
+                                                                        : (bestIdx2 < CurrentFrame.Nleft) ? CurrentFrame.mvKPsLeft[bestIdx2]
+                                                                                                            : CurrentFrame.mvKPsRight[bestIdx2 - CurrentFrame.Nleft];
                             float rot = kpLF.angle-kpCF.angle;
                             if(rot<0.0)
                                 rot+=360.0f;
@@ -2090,8 +2090,8 @@ namespace ORB_SLAM3
                         Eigen::Vector3f x3Dr = CurrentFrame.GetRelativePoseTrl() * x3Dc;
                         Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dr);
 
-                        int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ? LastFrame.mvKeys[i].octave
-                                                                                        : LastFrame.mvKeysRight[i - LastFrame.Nleft].octave;
+                        int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ? LastFrame.mvKPsLeft[i].octave
+                                                                                        : LastFrame.mvKPsRight[i - LastFrame.Nleft].octave;
 
                         // Search in a window. Size depends on scale
                         float radius = th*CurrentFrame.mvScaleFactors[nLastOctave];
@@ -2135,10 +2135,10 @@ namespace ORB_SLAM3
                             if(mbCheckOrientation)
                             {
                                 cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKeysUn[i]
-                                                                            : (i < LastFrame.Nleft) ? LastFrame.mvKeys[i]
-                                                                                                    : LastFrame.mvKeysRight[i - LastFrame.Nleft];
+                                                                            : (i < LastFrame.Nleft) ? LastFrame.mvKPsLeft[i]
+                                                                                                    : LastFrame.mvKPsRight[i - LastFrame.Nleft];
 
-                                cv::KeyPoint kpCF = CurrentFrame.mvKeysRight[bestIdx2];
+                                cv::KeyPoint kpCF = CurrentFrame.mvKPsRight[bestIdx2];
 
                                 float rot = kpLF.angle-kpCF.angle;
                                 if(rot<0.0)

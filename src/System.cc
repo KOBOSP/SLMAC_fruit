@@ -53,13 +53,6 @@ namespace ORB_SLAM3 {
         cout << "Input Sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
 
         //Check settings file
-        // Step 2 读取配置文件
-        cv::FileStorage fsSettings(sSettingFile.c_str(), cv::FileStorage::READ);
-        // 如果打开失败，就输出错误信息
-        if (!fsSettings.isOpened()) {
-            cerr << "Failed to open settings file at: " << sSettingFile << endl;
-            exit(-1);
-        }
         mSetting = new Settings(sSettingFile, mSensor);
         // 保存及加载地图的名字
         msLoadAtlasFromFile = mSetting->msLoadFrom;
@@ -103,15 +96,13 @@ namespace ORB_SLAM3 {
                                  mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSetting, sSeqName);
 
 
-        mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, sSeqName);
+        mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, mSetting);
         mptLocalMapping = new thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
-        mpLocalMapper->mnInitFr = nFrameIdInit;
-        mpLocalMapper->mfThFarPoints = mSetting->mfThFarPoints;
-        cout << "Discard points further than " << mpLocalMapper->mfThFarPoints << " m from current camera" << endl;
-        mpLocalMapper->mbFarPoints = true;
 
 
-        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSetting->mbOpenLoop);
+
+
+        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSetting->mbOpenLoop, mSetting);
         mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
         mpTracker->SetLocalMapper(mpLocalMapper);
@@ -122,12 +113,12 @@ namespace ORB_SLAM3 {
         mpLoopCloser->SetLocalMapper(mpLocalMapper);
 
 
-        if (bUseViewer){
+        if (bUseViewer) {
             mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, sSettingFile, mSetting);
             mptViewer = new thread(&Viewer::Run, mpViewer);
             mpTracker->SetViewer(mpViewer);
             mpLoopCloser->mpViewer = mpViewer;
-            mpViewer->both = mpFrameDrawer->both;
+            mpViewer->mbFrameBoth = true;
         }
         // Fix verbosity
         Verbose::SetTh(Verbose::VERBOSITY_QUIET);
@@ -659,7 +650,7 @@ namespace ORB_SLAM3 {
         std::size_t found = msVocabularyFilePath.find_last_of("/\\");
         string strVocabularyName = msVocabularyFilePath.substr(found + 1);
 
-        if (type == TEXT_FILE){
+        if (type == TEXT_FILE) {
             cout << "Starting to write the save text file " << endl;
             std::remove(pathSaveFileName.c_str());
             std::ofstream ofs(pathSaveFileName, std::ios::binary);
@@ -669,7 +660,7 @@ namespace ORB_SLAM3 {
             oa << strVocabularyChecksum;
             oa << mpAtlas;
             cout << "End to write the save text file" << endl;
-        } else if (type == BINARY_FILE){
+        } else if (type == BINARY_FILE) {
             cout << "Starting to write the save binary file" << endl;
             std::remove(pathSaveFileName.c_str());
             std::ofstream ofs(pathSaveFileName, std::ios::binary);
@@ -694,7 +685,7 @@ namespace ORB_SLAM3 {
         sPathLoadFileName = sPathLoadFileName.append(msLoadAtlasFromFile);
         sPathLoadFileName = sPathLoadFileName.append(".osa");
 
-        if (type == TEXT_FILE){
+        if (type == TEXT_FILE) {
             cout << "Starting to read the save text file " << endl;
             std::ifstream ifs(sPathLoadFileName, std::ios::binary);
             if (!ifs.good()) {

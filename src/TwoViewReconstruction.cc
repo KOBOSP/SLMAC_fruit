@@ -124,7 +124,7 @@ bool TwoViewReconstruction::Reconstruct(
     thread threadH(&TwoViewReconstruction::FindHomography, this, ref(vbMatchesInliersH), ref(SH), ref(H));
     thread threadF(&TwoViewReconstruction::FindFundamental, this, ref(vbMatchesInliersF), ref(SF), ref(F));
 
-    // Wait until both threads have finished
+    // Wait until mbFrameBoth threads have finished
     threadH.join();
     threadF.join();
 

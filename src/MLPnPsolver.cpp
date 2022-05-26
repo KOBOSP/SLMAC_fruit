@@ -50,7 +50,7 @@
 #include <Eigen/Sparse>
 
 // MLPnP算法，极大似然PnP算法，解决PnP问题，用在重定位中，不用运动的先验知识来估计相机位姿
-// 基于论文《MLPNP - A REAL-TIME MAXIMUM LIKELIHOOD SOLUTION TO THE PERSPECTIVE-N-POINT PROBLEM》
+// 基于论文《MLPNP - A REAL-TIME MAXIMUM LIKELIHOOD SOLUTION TO THE PERSPECTIVE-mnCurKPsLeft-POINT PROBLEM》
 
 namespace ORB_SLAM3
 {
@@ -735,10 +735,10 @@ void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, cons
     // 求解方程的最小二乘解
     Eigen::MatrixXd AtPA;
     if (use_cov)
-        // 有协方差信息的情况下，一般方程是 A^T*P*A*u = N*u = 0
+        // 有协方差信息的情况下，一般方程是 A^T*P*A*u = mnCurKPsLeft*u = 0
         AtPA = A.transpose() * P * A; // setting up the full normal equations seems to be unstable
     else
-        // 无协方差信息的情况下，一般方程是 A^T*A*u = N*u = 0
+        // 无协方差信息的情况下，一般方程是 A^T*A*u = mnCurKPsLeft*u = 0
         AtPA = A.transpose() * A;
 
     // SVD分解，满秩求解V

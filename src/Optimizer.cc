@@ -221,11 +221,11 @@ namespace ORB_SLAM3 {
                 if (pKF->mpCamera2) {
                     int rightIndex = get<1>(mit->second);
 
-                    if (rightIndex != -1 && rightIndex < pKF->mvKeysRight.size()) {
+                    if (rightIndex != -1 && rightIndex < pKF->mvKPsRight.size()) {
                         rightIndex -= pKF->NLeft;
 
                         Eigen::Matrix<double, 2, 1> obs;
-                        cv::KeyPoint kp = pKF->mvKeysRight[rightIndex];
+                        cv::KeyPoint kp = pKF->mvKPsRight[rightIndex];
                         obs << kp.pt.x, kp.pt.y;
 
                         ORB_SLAM3::EdgeSE3ProjectXYZToBody *e = new ORB_SLAM3::EdgeSE3ProjectXYZToBody();
@@ -633,11 +633,11 @@ namespace ORB_SLAM3 {
                     if (pKFi->mpCamera2) { // Monocular right observation
                         int rightIndex = get<1>(mit->second);
 
-                        if (rightIndex != -1 && rightIndex < pKFi->mvKeysRight.size()) {
+                        if (rightIndex != -1 && rightIndex < pKFi->mvKPsRight.size()) {
                             rightIndex -= pKFi->NLeft;
 
                             Eigen::Matrix<double, 2, 1> obs;
-                            kpUn = pKFi->mvKeysRight[rightIndex];
+                            kpUn = pKFi->mvKPsRight[rightIndex];
                             obs << kpUn.pt.x, kpUn.pt.y;
 
                             EdgeMono *e = new EdgeMono(1);
@@ -863,7 +863,7 @@ namespace ORB_SLAM3 {
                         cv::KeyPoint kpUn;
 
                         if (i < pFrame->Nleft) {    //Left camera observation
-                            kpUn = pFrame->mvKeys[i];
+                            kpUn = pFrame->mvKPsLeft[i];
 
                             pFrame->mvbOutlier[i] = false;
 
@@ -889,7 +889,7 @@ namespace ORB_SLAM3 {
                             vpEdgesMono.push_back(e);
                             vnIndexEdgeMono.push_back(i);
                         } else {
-                            kpUn = pFrame->mvKeysRight[i - pFrame->Nleft];
+                            kpUn = pFrame->mvKPsRight[i - pFrame->Nleft];
 
                             Eigen::Matrix<double, 2, 1> obs;
                             obs << kpUn.pt.x, kpUn.pt.y;
@@ -1274,7 +1274,7 @@ namespace ORB_SLAM3 {
                             rightIndex -= pKFi->NLeft;
 
                             Eigen::Matrix<double, 2, 1> obs;
-                            cv::KeyPoint kp = pKFi->mvKeysRight[rightIndex];
+                            cv::KeyPoint kp = pKFi->mvKPsRight[rightIndex];
                             obs << kp.pt.x, kp.pt.y;
 
                             ORB_SLAM3::EdgeSE3ProjectXYZToBody *e = new ORB_SLAM3::EdgeSE3ProjectXYZToBody();
@@ -2620,7 +2620,7 @@ namespace ORB_SLAM3 {
                             mVisEdges[pKFi->mnId]++;
 
                             Eigen::Matrix<double, 2, 1> obs;
-                            cv::KeyPoint kp = pKFi->mvKeysRight[rightIndex];
+                            cv::KeyPoint kp = pKFi->mvKPsRight[rightIndex];
                             obs << kp.pt.x, kp.pt.y;
 
                             EdgeMono *e = new EdgeMono(1);
@@ -4273,7 +4273,7 @@ namespace ORB_SLAM3 {
                     if ((!bRight && pFrame->mvuRight[i] < 0) || i < Nleft) {
                         //如果是两个相机情况下的相机1
                         if (i < Nleft) // pair left-right
-                            kpUn = pFrame->mvKeys[i];
+                            kpUn = pFrame->mvKPsLeft[i];
                         else
                             kpUn = pFrame->mvKeysUn[i];
 
@@ -4339,7 +4339,7 @@ namespace ORB_SLAM3 {
                         nInitialMonoCorrespondences++;
                         pFrame->mvbOutlier[i] = false;
 
-                        kpUn = pFrame->mvKeysRight[i - Nleft];
+                        kpUn = pFrame->mvKPsRight[i - Nleft];
                         Eigen::Matrix<double, 2, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y;
 
@@ -4633,7 +4633,7 @@ namespace ORB_SLAM3 {
                     if ((!bRight && pFrame->mvuRight[i] < 0) || i < Nleft) {
                         //如果是两个相机情况下的相机1
                         if (i < Nleft) // pair left-right
-                            kpUn = pFrame->mvKeys[i];
+                            kpUn = pFrame->mvKPsLeft[i];
                         else
                             kpUn = pFrame->mvKeysUn[i];
 
@@ -4699,7 +4699,7 @@ namespace ORB_SLAM3 {
                         nInitialMonoCorrespondences++;
                         pFrame->mvbOutlier[i] = false;
 
-                        kpUn = pFrame->mvKeysRight[i - Nleft];
+                        kpUn = pFrame->mvKPsRight[i - Nleft];
                         Eigen::Matrix<double, 2, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y;
 

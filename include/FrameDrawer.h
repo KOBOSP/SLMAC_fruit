@@ -44,45 +44,29 @@ public:
     FrameDrawer(Atlas* pAtlas);
 
     // Update info from the last processed frame.
-    void Update(Tracking *pTracker);
+    void Update(Tracking *pTracker, bool bFrameBoth);
 
     // Draw last processed frame.
-    cv::Mat DrawFrame(float imageScale=1.f);
-    cv::Mat DrawRightFrame(float imageScale=1.f);
+    cv::Mat DrawKeyFrame(float imageScale, bool bFrameBoth);
 
-    bool both;
 
 protected:
 
-    void DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText);
+    void DrawTextInfo(cv::Mat &ImgOri, int nState, cv::Mat &ImgWithText);
 
     // Info of the frame to be drawn
-    cv::Mat mIm, mImRight;
-    int N;
-    vector<cv::KeyPoint> mvCurrentKeys,mvCurrentKeysRight;
+    cv::Mat mImgLeft, mImgRight;
+    int mnCurKPsLeft;
+    vector<cv::KeyPoint> mvCurKPsLeft, mvCurKPsRight, mvIniKPsLeft;
     vector<bool> mvbMap, mvbVO;
     bool mbOnlyTracking;
-    int mnTracked, mnTrackedVO;
-    vector<cv::KeyPoint> mvIniKeys;
+    int mnTrackedMap, mnTrackedVO;
     vector<int> mvIniMatches;
     int mState;
-    std::vector<float> mvCurrentDepth;
-    float mThDepth;
 
     Atlas* mpAtlas;
 
     std::mutex mMutex;
-    vector<pair<cv::Point2f, cv::Point2f> > mvTracks;
-
-    Frame mCurrentFrame;
-    vector<MapPoint*> mvpLocalMap;
-    vector<cv::KeyPoint> mvMatchedKeys;
-    vector<MapPoint*> mvpMatchedMPs;
-    vector<cv::KeyPoint> mvOutlierKeys;
-    vector<MapPoint*> mvpOutlierMPs;
-
-    map<long unsigned int, cv::Point2f> mmProjectPoints;
-    map<long unsigned int, cv::Point2f> mmMatchedInImage;
 
 };
 

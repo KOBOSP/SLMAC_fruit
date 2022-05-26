@@ -104,6 +104,8 @@ Viewer.ViewpointY: -0.7
 Viewer.ViewpointZ: -1.8
 Viewer.ViewpointF: 500.0
 Viewer.imageViewScale: 1.0
+Viewer.MapWidth: 1024.0
+Viewer.MapHeight: 768.0
 
 LoopClosing.OpenLoop: 1
 System.thFarPoints: 100.0

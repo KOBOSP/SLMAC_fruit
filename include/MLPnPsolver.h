@@ -222,7 +222,7 @@ namespace ORB_SLAM3{
         // Number of Correspondences
         int N;
 
-        // Indices for random selection [0 .. N-1]
+        // Indices for random selection [0 .. mnCurKPsLeft-1]
         vector<size_t> mvAllIndices;
 
         // RANSAC probability
