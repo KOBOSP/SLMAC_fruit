@@ -150,11 +150,11 @@ namespace ORB_SLAM3 {
     void FrameDrawer::Update(Tracking *pTracker, bool bFrameBoth) {
         unique_lock<mutex> lock(mMutex);
         pTracker->mImgLeft.copyTo(mImgLeft);
-        mvCurKPsLeft = pTracker->mCurrentFrame.mvKPsLeft;
+        mvCurKPsLeft = pTracker->mCurFrame.mvKPsLeft;
         mvIniKPsLeft = pTracker->mInitialFrame.mvKPsLeft;
         mnCurKPsLeft = mvCurKPsLeft.size();
         if (bFrameBoth) {
-            mvCurKPsRight = pTracker->mCurrentFrame.mvKPsRight;
+            mvCurKPsRight = pTracker->mCurFrame.mvKPsRight;
             pTracker->mImgRight.copyTo(mImgRight);
         }
 
@@ -166,9 +166,9 @@ namespace ORB_SLAM3 {
             mvIniMatches = pTracker->mvIniMatches;
         } else if (pTracker->mLastProcessedState == Tracking::OK) {
             for (int i = 0; i < mnCurKPsLeft; i++) {
-                MapPoint *pMP = pTracker->mCurrentFrame.mvpMapPoints[i];
+                MapPoint *pMP = pTracker->mCurFrame.mvpMPs[i];
                 if (pMP) {
-                    if (!pTracker->mCurrentFrame.mvbOutlier[i]) {
+                    if (!pTracker->mCurFrame.mvbOutlier[i]) {
                         if (pMP->Observations() > 0)
                             mvbMap[i] = true;
                         else

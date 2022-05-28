@@ -102,23 +102,14 @@ public:
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
-    System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor, const bool bUseViewer = true, const int nFrameIdInit = 0, const string &sSeqName = std::string());
+    System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor,
+           const bool bUseViewer = true, const int nFrameIdInit = 0, const string &sSeqName = std::string());
 
     // Proccess the given stereo frame. Images must be synchronized and rectified.
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
-    Sophus::SE3f TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
-
-    // Process the given rgbd frame. Depthmap must be registered to the RGB frame.
-    // Input image: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
-    // Input depthmap: Float (CV_32F).
-    // Returns the camera pose (empty if tracking fails).
-    Sophus::SE3f TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
-
-    // Proccess the given monocular frame and optionally imu data
-    // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
-    // Returns the camera pose (empty if tracking fails).
-    Sophus::SE3f TrackMonocular(const cv::Mat &im, const double &timestamp, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
+    Sophus::SE3f CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp,
+                               const vector<IMU::Point>& vImuMeas = vector<IMU::Point>());
 
 
     // This stops local mapping thread (map building) and performs only camera tracking.
@@ -130,25 +121,26 @@ public:
     // since last call to this function
     bool MapChanged();
 
-    // Reset the system (clear Atlas or the active map)
-    void Reset();
+    // CheckResetRequest the system (clear Atlas or the active map)
+    void ResetThread();
     void ResetActiveMap();
+    void ShutDownRequest();
 
     // All threads will be requested to finish.
     // It waits until all threads have finished.
     // This function must be called before saving the trajectory.
-    void Shutdown();
-    bool isShutDown();
+    void ShutDown();
+    bool CheckShutDown();
 
     // Save camera trajectory in the TUM RGB-D dataset format.
     // Only for stereo and RGB-D. This method does not work for monocular.
-    // Call first Shutdown()
+    // Call first ShutDown()
     // See format details at: http://vision.in.tum.de/data/datasets/rgbd-dataset
     void SaveTrajectoryTUM(const string &filename);
 
     // Save keyframe poses in the TUM RGB-D dataset format.
     // This method works for all sensor input.
-    // Call first Shutdown()
+    // Call first ShutDown()
     // See format details at: http://vision.in.tum.de/data/datasets/rgbd-dataset
     void SaveKeyFrameTrajectoryTUM(const string &filename);
 
@@ -163,7 +155,7 @@ public:
 
     // Save camera trajectory in the KITTI dataset format.
     // Only for stereo and RGB-D. This method does not work for monocular.
-    // Call first Shutdown()
+    // Call first ShutDown()
     // See format details at: http://www.cvlibs.net/datasets/kitti/eval_odometry.php
     void SaveTrajectoryKITTI(const string &filename);
 
@@ -185,7 +177,8 @@ public:
     void ChangeDataset();
 
     float GetImageScale();
-
+    cv::Mat mImgLeftToViewer;
+    cv::Mat mImgRightToViewer;
 
 
 private:
@@ -232,23 +225,28 @@ private:
     std::thread* mptLoopClosing;
     std::thread* mptViewer;
 
-    // Reset flag
+    // CheckResetRequest flag
     std::mutex mMutexReset;
-    bool mbReset;
+    bool mbResetThread;
     bool mbResetActiveMap;
+    bool mbShutDownRequest;
+    bool mbShutDown;
+
+
 
     // Change mode flags
     std::mutex mMutexMode;
     bool mbActivateLocalizationMode;
     bool mbDeactivateLocalizationMode;
 
-    // Shutdown flag
-    bool mbShutDown;
+
 
     // Tracking state
     int mTrackingState;
-    std::vector<MapPoint*> mTrackedMapPoints;
-    std::vector<cv::KeyPoint> mTrackedKeyPointsUn;
+    bool mbRGB;
+
+    std::vector<MapPoint*> mTrackedMPs;
+    std::vector<cv::KeyPoint> mTrackedKPsUn;
     std::mutex mMutexState;
 
     //
@@ -257,7 +255,7 @@ private:
 
     string msVocabularyFilePath;
 
-    Settings* mSetting;
+    Settings* mSettings;
 };
 
 }// namespace ORB_SLAM

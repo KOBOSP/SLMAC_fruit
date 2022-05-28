@@ -66,10 +66,10 @@ public:
 
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
-    Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename);
+    Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &dTimestamp);
 
 
-    void GrabImuData(const IMU::Point &imuMeasurement);
+    void GrabImuData(const IMU::Point &ImuMeasure);
 
     void SetLocalMapper(LocalMapping* pLocalMapper);
     void SetLoopClosing(LoopClosing* pLoopClosing);
@@ -124,10 +124,10 @@ public:
     int mSensor;
 
     // Current Frame
-    Frame mCurrentFrame;
+    Frame mCurFrame;
     Frame mLastFrame;
 
-    cv::Mat mImgLeft;
+
 
     // Initialization Variables (Monocular)
     std::vector<int> mvIniLastMatches;
@@ -150,7 +150,7 @@ public:
     // True if local mapping is deactivated and we are performing only localization
     bool mbOnlyTracking;
 
-    void Reset(bool bLocMap = false);
+    void ResetThread(bool bLocMap = false);
     void ResetActiveMap(bool bLocMap = false);
 
     float mMeanTrack;
@@ -200,7 +200,7 @@ protected:
     // Perform preintegration from last frame
     void PreintegrateIMU();
 
-    // Reset IMU biases and compute frame velocity
+    // CheckResetRequest IMU biases and compute frame velocity
     void ResetFrameIMU();
 
     bool mbMapUpdated;
@@ -306,8 +306,6 @@ protected:
     bool mbVelocity{false};
     Sophus::SE3f mVelocity;
 
-    //Color order (true RGB, false BGR, ignored if grayscale)
-    bool mbRGB;
 
     list<MapPoint*> mlpTemporalPoints;
 
@@ -332,6 +330,7 @@ protected:
     void LoadParameter(Settings* settings);
 
 public:
+    cv::Mat mImgLeft;
     cv::Mat mImgRight;
 };
 

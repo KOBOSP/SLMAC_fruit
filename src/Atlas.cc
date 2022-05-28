@@ -229,7 +229,7 @@ namespace ORB_SLAM3 {
         if (!mpCurrentMap)
             CreateNewMap();
         while (mpCurrentMap->IsBad())
-            usleep(3000);
+            usleep(500);
 
         return mpCurrentMap;
     }

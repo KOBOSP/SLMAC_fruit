@@ -49,18 +49,18 @@ public:
 
     void RequestFinish();
 
-    void RequestStop();
+    void RequestReset();
 
-    bool isFinished();
+    bool IsFinished();
 
-    bool isStopped();
+    bool IsReseted();
 
     void Release();
 
     bool mbFrameBoth;
 private:
 
-    bool Stop();
+    bool CheckResetRequest();
 
     System* mpSystem;
     FrameDrawer* mpFrameDrawer;
@@ -73,15 +73,15 @@ private:
 
     float mfViewpointX, mfViewpointY, mfViewpointZ, mfViewpointF, mfMapWidth, mfMapHeight;
 
-    bool CheckFinish();
+    bool CheckFinishReqest();
     void SetFinish();
     bool mbFinishRequested;
     bool mbFinished;
     std::mutex mMutexFinish;
 
-    bool mbStopped;
-    bool mbStopRequested;
-    std::mutex mMutexStop;
+    bool mbReseted;
+    bool mbResetRequested;
+    std::mutex mMutexReset;
 
     bool mbStopTrack;
 

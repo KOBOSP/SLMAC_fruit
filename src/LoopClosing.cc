@@ -163,7 +163,7 @@ namespace ORB_SLAM3 {
                         // 标记Place recognition结果为地图融合
                         vnPR_TypeRecogn.push_back(1);
 
-                        // Reset all variables
+                        // CheckResetRequest all variables
                         // 重置所有融合相关变量
                         mpMergeLastCurrentKF->SetErase();
                         mpMergeMatchedKF->SetErase();
@@ -175,7 +175,7 @@ namespace ORB_SLAM3 {
 
                         // 重置所有回环相关变量, 说明对与当前帧同时有回环和融合的情况只进行融合
                         if (mbLoopDetected) {
-                            // Reset Loop variables
+                            // CheckResetRequest Loop variables
                             mpLoopLastCurrentKF->SetErase();
                             mpLoopMatchedKF->SetErase();
                             mnLoopNumCoincidences = 0;
@@ -243,7 +243,7 @@ namespace ORB_SLAM3 {
                             mnNumCorrection += 1;
                         }
 
-                        // Reset all variables
+                        // CheckResetRequest all variables
                         // 重置所有的回环变量
                         mpLoopLastCurrentKF->SetErase();
                         mpLoopMatchedKF->SetErase();
@@ -265,7 +265,7 @@ namespace ORB_SLAM3 {
                 break;
             }
 
-            usleep(5000);
+            usleep(500);
         }
 
         SetFinish();
@@ -869,14 +869,14 @@ namespace ORB_SLAM3 {
                                     tuple<size_t, size_t> indexes = pMPi->GetIndexInKeyFrame(pKFi);
                                     int index = get<0>(indexes);
                                     if (index >= 0) {
-                                        int coord_x = pKFi->mvKeysUn[index].pt.x;
+                                        int coord_x = pKFi->mvKPsUn[index].pt.x;
                                         if (coord_x < min_x) {
                                             min_x = coord_x;
                                         }
                                         if (coord_x > max_x) {
                                             max_x = coord_x;
                                         }
-                                        int coord_y = pKFi->mvKeysUn[index].pt.y;
+                                        int coord_y = pKFi->mvKPsUn[index].pt.y;
                                         if (coord_y < min_y) {
                                             min_y = coord_y;
                                         }
@@ -1103,12 +1103,12 @@ namespace ORB_SLAM3 {
         // Avoid new keyframes are inserted while correcting the loop
         // Step1. 结束局部地图线程、全局BA，为闭环矫正做准备
         // 请求局部地图停止，防止在回环矫正时局部地图线程中InsertKeyFrame函数插入新的关键帧
-        mpLocalMapper->RequestStop();
+        mpLocalMapper->RequestStopFromLoopClose();
         mpLocalMapper->EmptyQueue(); // Proccess keyframes in the queue
 
         // 如果正在进行全局BA，丢弃它
         // If a Global Bundle Adjustment is running, abort it
-        if (isRunningGBA()) {
+        if (CheckRunningGBA()) {
             cout << "Stoping Global Bundle Adjustment...";
             unique_lock<mutex> lock(mMutexGBA);
             mbStopGBA = true;
@@ -1124,8 +1124,8 @@ namespace ORB_SLAM3 {
 
         // Wait until Local Mapping has effectively stopped
         // 一直等到局部地图线程结束再继续
-        while (!mpLocalMapper->isStopped()) {
-            usleep(1000);
+        while (!mpLocalMapper->CheckStopped()) {
+            usleep(500);
         }
 
         // Ensure current keyframe is updated
@@ -1396,7 +1396,7 @@ namespace ORB_SLAM3 {
 
         //Verbose::PrintMess("MERGE-VISUAL: Check Full Bundle Adjustment", Verbose::VERBOSITY_DEBUG);
         // If a Global Bundle Adjustment is running, abort it
-        if (isRunningGBA()) {
+        if (CheckRunningGBA()) {
             unique_lock<mutex> lock(mMutexGBA);
             mbStopGBA = true;
 
@@ -1409,14 +1409,14 @@ namespace ORB_SLAM3 {
             bRelaunchBA = true;  // 以后还会重新开启
         }
 
-        //Verbose::PrintMess("MERGE-VISUAL: Request Stop Local Mapping", Verbose::VERBOSITY_DEBUG);
-        //cout << "Request Stop Local Mapping" << endl;
+        //Verbose::PrintMess("MERGE-VISUAL: Request CheckResetRequest Local Mapping", Verbose::VERBOSITY_DEBUG);
+        //cout << "Request CheckResetRequest Local Mapping" << endl;
         // 请求局部建图线程停止
-        mpLocalMapper->RequestStop();
+        mpLocalMapper->RequestStopFromLoopClose();
         // Wait until Local Mapping has effectively stopped
         // 等待局部建图工作停止
-        while (!mpLocalMapper->isStopped()) {
-            usleep(1000);
+        while (!mpLocalMapper->CheckStopped()) {
+            usleep(500);
         }
         //cout << "Local Map stopped" << endl;
 
@@ -1877,10 +1877,10 @@ namespace ORB_SLAM3 {
         if (vpCurrentMapKFs.size() == 0) {
 
         } else {
-            mpLocalMapper->RequestStop();
+            mpLocalMapper->RequestStopFromLoopClose();
             // Wait until Local Mapping has effectively stopped
-            while (!mpLocalMapper->isStopped()) {
-                usleep(1000);
+            while (!mpLocalMapper->CheckStopped()) {
+                usleep(500);
             }
 
             // Optimize graph (and update the loop position for each element form the begining to the end)
@@ -1981,7 +1981,7 @@ namespace ORB_SLAM3 {
         //cout << "Check Full Bundle Adjustment" << endl;
         // If a Global Bundle Adjustment is running, abort it
         // Step 1 如果正在进行全局BA，停掉它
-        if (isRunningGBA()) {
+        if (CheckRunningGBA()) {
             unique_lock<mutex> lock(mMutexGBA);
             mbStopGBA = true;
 
@@ -1995,13 +1995,13 @@ namespace ORB_SLAM3 {
         }
 
 
-        //cout << "Request Stop Local Mapping" << endl;
+        //cout << "Request CheckResetRequest Local Mapping" << endl;
         // Step 2 暂停局部建图线程
-        mpLocalMapper->RequestStop();
+        mpLocalMapper->RequestStopFromLoopClose();
         // Wait until Local Mapping has effectively stopped
         // 等待直到完全停掉
-        while (!mpLocalMapper->isStopped()) {
-            usleep(1000);
+        while (!mpLocalMapper->CheckStopped()) {
+            usleep(500);
         }
         //cout << "Local Map stopped" << endl;
 
@@ -2417,7 +2417,7 @@ namespace ORB_SLAM3 {
                 if (!mbResetRequested)
                     break;
             }
-            usleep(5000);
+            usleep(500);
         }
     }
 
@@ -2434,7 +2434,7 @@ namespace ORB_SLAM3 {
                 if (!mbResetActiveMapRequested)
                     break;
             }
-            usleep(3000);
+            usleep(500);
         }
     }
 
@@ -2506,11 +2506,11 @@ namespace ORB_SLAM3 {
                 Verbose::PrintMess("Global Bundle Adjustment finished", Verbose::VERBOSITY_NORMAL);
                 Verbose::PrintMess("Updating map ...", Verbose::VERBOSITY_NORMAL);
 
-                mpLocalMapper->RequestStop();
+                mpLocalMapper->RequestStopFromLoopClose();
                 // Wait until Local Mapping has effectively stopped
 
-                while (!mpLocalMapper->isStopped() && !mpLocalMapper->isFinished()) {
-                    usleep(1000);
+                while (!mpLocalMapper->CheckStopped() && !mpLocalMapper->CheckFinished()) {
+                    usleep(500);
                 }
 
                 // Get Map Mutex
@@ -2710,7 +2710,7 @@ namespace ORB_SLAM3 {
     }
 
 // 由外部线程调用,判断当前回环检测线程是否已经正确终止了
-    bool LoopClosing::isFinished() {
+    bool LoopClosing::CheckFinished() {
         unique_lock <mutex> lock(mMutexFinish);
         return mbFinished;
     }

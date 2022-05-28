@@ -111,7 +111,7 @@ MapPoint::MapPoint(const Eigen::Vector3f &Pos, Map* pMap, Frame* pFrame, const i
 
     Eigen::Vector3f PC = mWorldPos - Ow;
     const float dist = PC.norm();
-    const int level = (pFrame -> Nleft == -1) ? pFrame->mvKeysUn[idxF].octave
+    const int level = (pFrame -> Nleft == -1) ? pFrame->mvKPsUn[idxF].octave
                                               : (idxF < pFrame -> Nleft) ? pFrame->mvKPsLeft[idxF].octave
                                                                          : pFrame -> mvKPsRight[idxF].octave;
     const float levelScaleFactor =  pFrame->mvScaleFactors[level];
@@ -618,17 +618,17 @@ void MapPoint::UpdateNormalAndDepth()
     int level;
     if(pRefKF -> NLeft == -1)
     {
-        level = pRefKF->mvKeysUn[leftIndex].octave;
+        level = pRefKF->mvKPsUn[leftIndex].octave;
     }
     else if(leftIndex != -1)
     {
-        level = pRefKF -> mvKeys[leftIndex].octave;
+        level = pRefKF -> mvKPs[leftIndex].octave;
     }
     else{
         level = pRefKF -> mvKPsRight[rightIndex - pRefKF -> NLeft].octave;
     }
 
-    //const int level = pRefKF->mvKeysUn[observations[pRefKF]].octave;
+    //const int level = pRefKF->mvKPsUn[observations[pRefKF]].octave;
     const float levelScaleFactor =  pRefKF->mvScaleFactors[level];  // 当前金字塔层对应的缩放倍数
     const int nLevels = pRefKF->mnScaleLevels;  // 金字塔层数
 

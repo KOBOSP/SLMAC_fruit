@@ -69,7 +69,7 @@ public:
     // This function will run in a separate thread
     void RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoopKF);
 
-    bool isRunningGBA(){
+    bool CheckRunningGBA(){
         unique_lock<std::mutex> lock(mMutexGBA);
         return mbRunningGBA;
     }
@@ -80,7 +80,7 @@ public:
 
     void RequestFinish();
 
-    bool isFinished();
+    bool CheckFinished();
 
     Viewer* mpViewer;
 

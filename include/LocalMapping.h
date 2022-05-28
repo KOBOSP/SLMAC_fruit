@@ -55,21 +55,20 @@ public:
     void EmptyQueue();
 
     // Thread Synch
-    void RequestStop();
+    void RequestStopFromLoopClose();
     void RequestReset();
     void RequestResetActiveMap(Map* pMap);
-    bool Stop();
     void Release();
-    bool isStopped();
-    bool stopRequested();
+    bool CheckStopped();
+    bool CheckStopRequestFromLC();
     bool AcceptKeyFrames();
     void SetAcceptKeyFrames(bool flag);
-    bool SetNotStop(bool flag);
+    bool RequestNotStopFromTrack(bool flag);
 
     void InterruptBA();
 
     void RequestFinish();
-    bool isFinished();
+    bool CheckFinished();
 
     int KeyframesInQueue(){
         unique_lock<std::mutex> lock(mMutexNewKFs);
@@ -102,7 +101,7 @@ public:
 
 protected:
 
-    bool CheckNewKeyFrames();
+    bool HaveNewKeyFrames();
     void ProcessNewKeyFrame();
     void CreateNewMapPoints();
 
@@ -121,9 +120,9 @@ protected:
     Map* mpMapToReset;
     std::mutex mMutexReset;
 
-    bool CheckFinish();
+    bool CheckFinishRequest();
     void SetFinish();
-    bool mbFinishRequested;
+    bool mbFinishRequest;
     bool mbFinished;
     std::mutex mMutexFinish;
 
@@ -140,10 +139,10 @@ protected:
 
     std::mutex mMutexNewKFs;
 
-    bool mbAbortBA;
+    bool mbAbortBAFromLC;
 
     bool mbStopped;
-    bool mbStopRequested;
+    bool mbStopRequestFromLC;
     bool mbNotStop;
     std::mutex mMutexStop;
 

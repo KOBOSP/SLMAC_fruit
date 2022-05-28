@@ -121,8 +121,8 @@ class KeyFrame
         // Number of Keypoints
         ar & const_cast<int&>(N);
         // KeyPoints
-        serializeVectorKeyPoints<Archive>(ar, mvKeys, version);
-        serializeVectorKeyPoints<Archive>(ar, mvKeysUn, version);
+        serializeVectorKeyPoints<Archive>(ar, mvKPs, version);
+        serializeVectorKeyPoints<Archive>(ar, mvKPsUn, version);
         ar & const_cast<vector<float>& >(mvuRight);
         ar & const_cast<vector<float>& >(mvDepth);
         serializeMatrix<Archive>(ar,mDescriptors,version);
@@ -378,8 +378,8 @@ public:
     const int N;
 
     // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    const std::vector<cv::KeyPoint> mvKeys;
-    const std::vector<cv::KeyPoint> mvKeysUn;
+    const std::vector<cv::KeyPoint> mvKPs;
+    const std::vector<cv::KeyPoint> mvKPsUn;
     const std::vector<float> mvuRight; // negative value for monocular points
     const std::vector<float> mvDepth; // negative value for monocular points
     const cv::Mat mDescriptors;

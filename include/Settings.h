@@ -99,7 +99,7 @@ namespace ORB_SLAM3 {
         /*
          * Visual stuff
          */
-        GeometricCamera* mCalibration1, *mCalibration2;   //Camera calibration
+        GeometricCamera *mCalibration1, *mCalibration2;   //Camera calibration
         std::vector<float> mvfPinHoleDistorsion1, mvfPinHoleDistorsion2;
 
         cv::Size mOriginalImSize, mImgSize;

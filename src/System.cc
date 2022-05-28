@@ -48,16 +48,17 @@ namespace ORB_SLAM3 {
  */
     System::System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor,
                    const bool bUseViewer, const int nFrameIdInit, const string &sSeqName) :
-            mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbReset(false), mbResetActiveMap(false),
+            mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbResetThread(false), mbResetActiveMap(false),
             mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDown(false) {
         cout << "Input Sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
 
         //Check settings file
-        mSetting = new Settings(sSettingFile, mSensor);
+        mSettings = new Settings(sSettingFile, mSensor);
         // 保存及加载地图的名字
-        msLoadAtlasFromFile = mSetting->msLoadFrom;
-        msSaveAtlasToFile = mSetting->msSaveTo;
-        cout << (*mSetting) << endl;
+        msLoadAtlasFromFile = mSettings->msLoadFrom;
+        msSaveAtlasToFile = mSettings->msSaveTo;
+        mbRGB = mSettings->mbRGB;
+        cout << (*mSettings) << endl;
 
         msVocabularyFilePath = sVocFile;
         cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
@@ -88,21 +89,21 @@ namespace ORB_SLAM3 {
         mpAtlas->SetInertialSensor();
 
         mpFrameDrawer = new FrameDrawer(mpAtlas);
-        mpMapDrawer = new MapDrawer(mpAtlas, sSettingFile, mSetting);
+        mpMapDrawer = new MapDrawer(mpAtlas, sSettingFile, mSettings);
 
         //(it will live in the main thread of execution, the one that called this constructor)
         cout << "Seq. Name: " << sSeqName << endl;
         mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
-                                 mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSetting, sSeqName);
+                                 mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSettings, sSeqName);
 
 
-        mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, mSetting);
+        mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, mSettings);
         mptLocalMapping = new thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
 
 
 
 
-        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSetting->mbOpenLoop, mSetting);
+        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSettings->mbOpenLoop, mSettings);
         mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
         mpTracker->SetLocalMapper(mpLocalMapper);
@@ -114,7 +115,7 @@ namespace ORB_SLAM3 {
 
 
         if (bUseViewer) {
-            mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, sSettingFile, mSetting);
+            mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, sSettingFile, mSettings);
             mptViewer = new thread(&Viewer::Run, mpViewer);
             mpTracker->SetViewer(mpViewer);
             mpLoopCloser->mpViewer = mpViewer;
@@ -124,33 +125,17 @@ namespace ORB_SLAM3 {
         Verbose::SetTh(Verbose::VERBOSITY_QUIET);
     }
 
-    Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp,
-                                     const vector<IMU::Point> &vImuMeas, string filename) {
-        cv::Mat imLeftToFeed, imRightToFeed;
-        if (mSetting && mSetting->mbNeedToRectify) {
-            cv::Mat M1l = mSetting->Map1X;
-            cv::Mat M2l = mSetting->Map1Y;
-            cv::Mat M1r = mSetting->Map2X;
-            cv::Mat M2r = mSetting->Map2Y;
-            cv::remap(imLeft, imLeftToFeed, M1l, M2l, cv::INTER_LINEAR);
-            cv::remap(imRight, imRightToFeed, M1r, M2r, cv::INTER_LINEAR);
-        } else if (mSetting && mSetting->mbNeedToResize) {
-            cv::resize(imLeft, imLeftToFeed, mSetting->mImgSize);
-            cv::resize(imRight, imRightToFeed, mSetting->mImgSize);
-        } else {
-            imLeftToFeed = imLeft.clone();
-            imRightToFeed = imRight.clone();
-        }
-
+    Sophus::SE3f System::CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp,
+                                       const vector<IMU::Point> &vImuMeas) {
         // Check mode change
         {
             unique_lock<mutex> lock(mMutexMode);
             if (mbActivateLocalizationMode) {
-                mpLocalMapper->RequestStop();
+                mpLocalMapper->RequestStopFromLoopClose();
 
                 // Wait until Local Mapping has effectively stopped
-                while (!mpLocalMapper->isStopped()) {
-                    usleep(1000);
+                while (!mpLocalMapper->CheckStopped()) {
+                    usleep(500);
                 }
 
                 mpTracker->InformOnlyTracking(true);
@@ -166,29 +151,59 @@ namespace ORB_SLAM3 {
         // Check reset
         {
             unique_lock<mutex> lock(mMutexReset);
-            if (mbReset) {
-                mpTracker->Reset();
-                mbReset = false;
+            if (mbResetThread) {
+                mpTracker->ResetThread();
+                mbResetThread = false;
                 mbResetActiveMap = false;
             } else if (mbResetActiveMap) {
                 mpTracker->ResetActiveMap();
                 mbResetActiveMap = false;
+            } else if(mbShutDownRequest){
+                ShutDown();
             }
         }
 
+        cv::Mat ImgLeftToTrack, ImgRightToTrack;
+        if (mSettings && mSettings->mbNeedToRectify) {
+            cv::Mat M1l = mSettings->Map1X;
+            cv::Mat M2l = mSettings->Map1Y;
+            cv::Mat M1r = mSettings->Map2X;
+            cv::Mat M2r = mSettings->Map2Y;
+            cv::remap(ImgLeft, ImgLeftToTrack, M1l, M2l, cv::INTER_LINEAR);
+            cv::remap(ImgRight, ImgRightToTrack, M1r, M2r, cv::INTER_LINEAR);
+        } else if (mSettings && mSettings->mbNeedToResize) {
+            cv::resize(ImgLeft, ImgLeftToTrack, mSettings->mImgSize);
+            cv::resize(ImgRight, ImgRightToTrack, mSettings->mImgSize);
+        } else {
+            ImgLeftToTrack = ImgLeft.clone();
+            ImgRightToTrack = ImgRight.clone();
+        }
 
-        for (size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
-            mpTracker->GrabImuData(vImuMeas[i_imu]);
-
+        ImgLeftToTrack.copyTo(mpTracker->mImgLeft);
+        ImgRightToTrack.copyTo(mpTracker->mImgRight);
+        if (mImgLeftToViewer.channels() == 3) {
+            if (mbRGB) {
+                cvtColor(ImgLeftToTrack, ImgLeftToTrack, cv::COLOR_RGB2GRAY);
+                cvtColor(ImgRightToTrack, ImgRightToTrack, cv::COLOR_RGB2GRAY);
+            }
+        }else if (mImgLeftToViewer.channels() == 4) {
+            if (mbRGB) {
+                cvtColor(ImgLeftToTrack, ImgLeftToTrack, cv::COLOR_RGBA2GRAY);
+                cvtColor(ImgRightToTrack, ImgRightToTrack, cv::COLOR_RGBA2GRAY);
+            }
+        }
+        for (size_t nImu = 0; nImu < vImuMeas.size(); nImu++){
+            mpTracker->GrabImuData(vImuMeas[nImu]);
+        }
         // std::cout << "start GrabImageStereo" << std::endl;
-        Sophus::SE3f Tcw = mpTracker->GrabImageStereo(imLeftToFeed, imRightToFeed, timestamp, filename);
-
+        Sophus::SE3f Tcw = mpTracker->GrabImageStereo(ImgLeftToTrack, ImgRightToTrack, dTimestamp);
         // std::cout << "out grabber" << std::endl;
-
-        unique_lock<mutex> lock2(mMutexState);
-        mTrackingState = mpTracker->mState;
-        mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
-        mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
+        {
+            unique_lock<mutex> lock2(mMutexState);
+            mTrackingState = mpTracker->mState;
+            mTrackedMPs = mpTracker->mCurFrame.mvpMPs;
+            mTrackedKPsUn = mpTracker->mCurFrame.mvKPsUn;
+        }
 
         return Tcw;
     }
@@ -214,9 +229,9 @@ namespace ORB_SLAM3 {
             return false;
     }
 
-    void System::Reset() {
+    void System::ResetThread() {
         unique_lock<mutex> lock(mMutexReset);
-        mbReset = true;
+        mbResetThread = true;
     }
 
     void System::ResetActiveMap() {
@@ -224,58 +239,59 @@ namespace ORB_SLAM3 {
         mbResetActiveMap = true;
     }
 
-    void System::Shutdown() {
+    void System::ShutDownRequest() {
+        unique_lock<mutex> lock(mMutexReset);
+        mbShutDownRequest = true;
+    }
+
+
+
+    void System::ShutDown() {
+        cout << "ShutDown" << endl;
+        cout << "mpLocalMapper" << endl;
+        mpLocalMapper->RequestFinish();
+        cout << "mpLoopCloser" << endl;
+        mpLoopCloser->RequestFinish();
+        cout << "mpLocalMapper mpLoopCloser" << endl;
+        if (mpViewer) {
+            mpViewer->RequestFinish();
+            cout << "mpViewer" << endl;
+            while (!mpViewer->IsFinished()){
+                usleep(500);
+                cout<<mpViewer->IsFinished()<<endl;
+            }
+            cout << "mpViewer mpViewer" << endl;
+        }
+        cout << "333" << endl;
+        // Wait until all thread have effectively stopped
+        while (!mpLocalMapper->CheckFinished() || !mpLoopCloser->CheckFinished() || mpLoopCloser->CheckRunningGBA()) {
+            cout << "-444-";
+            if(!mpLocalMapper->CheckFinished()){
+                cout << "mpLocalMapper is not finished" << endl;
+            }
+            if(!mpLoopCloser->CheckFinished()){
+                cout << "mpLoopCloser is not finished" << endl;
+            }
+            if(mpLoopCloser->CheckRunningGBA()){
+                cout << "mpLoopCloser is running GBA" << endl;
+                cout << "break anyway..." << endl;
+                break;
+            }
+            usleep(500);
+        }
+
         {
             unique_lock<mutex> lock(mMutexReset);
             mbShutDown = true;
         }
-
-        cout << "Shutdown" << endl;
-
-        if (mpViewer) {
-            mpViewer->RequestFinish();
-            while (!mpViewer->isFinished())
-                usleep(5000);
-        }
-
-        mpLocalMapper->RequestFinish();
-        mpLoopCloser->RequestFinish();
-        /*if(mpViewer)
-        {
-            mpViewer->RequestFinish();
-            while(!mpViewer->isFinished())
-                usleep(5000);
-        }*/
-
-        // Wait until all thread have effectively stopped
-        // 源代码这里注释掉了，但是不执行会有锁报错
-        while (!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA()) {
-            // if(!mpLocalMapper->isFinished())
-            //     cout << "mpLocalMapper is not finished" << endl;
-            // if(!mpLoopCloser->isFinished())
-            //     cout << "mpLoopCloser is not finished" << endl;
-            // if(mpLoopCloser->isRunningGBA()){
-            //     cout << "mpLoopCloser is running GBA" << endl;
-            //     cout << "break anyway..." << endl;
-            //     break;
-            // }
-            usleep(5000);
-        }
-
-
         if (!msSaveAtlasToFile.empty()) {
             std::cout << "开始保存地图" << std::endl;
             Verbose::PrintMess("Atlas saving to file " + msSaveAtlasToFile, Verbose::VERBOSITY_NORMAL);
             SaveAtlas(FileType::BINARY_FILE);
         }
-
-        /*if(mpViewer)
-            pangolin::BindToContext("ORB-SLAM2: Map Viewer");*/
-
-
     }
 
-    bool System::isShutDown() {
+    bool System::CheckShutDown() {
         unique_lock<mutex> lock(mMutexReset);
         return mbShutDown;
     }
@@ -585,12 +601,12 @@ namespace ORB_SLAM3 {
 
     vector<MapPoint *> System::GetTrackedMapPoints() {
         unique_lock<mutex> lock(mMutexState);
-        return mTrackedMapPoints;
+        return mTrackedMPs;
     }
 
     vector<cv::KeyPoint> System::GetTrackedKeyPointsUn() {
         unique_lock<mutex> lock(mMutexState);
-        return mTrackedKeyPointsUn;
+        return mTrackedKPsUn;
     }
 
     double System::GetTimeFromIMUInit() {

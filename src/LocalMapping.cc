@@ -40,18 +40,18 @@ namespace ORB_SLAM3 {
     LocalMapping::LocalMapping(System *pSys, Atlas *pAtlas, const float bMonocular, bool bInertial, Settings *settings)
             :
             mpSystem(pSys), mbMonocular(bMonocular), mbInertial(bInertial), mbResetRequested(false),
-            mbResetRequestedActiveMap(false), mbFinishRequested(false), mbFinished(true), mpAtlas(pAtlas),
+            mbResetRequestedActiveMap(false), mbFinishRequest(false), mbFinished(true), mpAtlas(pAtlas),
             bInitializing(false),
-            mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
+            mbAbortBAFromLC(false), mbStopped(false), mbStopRequestFromLC(false), mbNotStop(false), mbAcceptKeyFrames(true),
             mIdxInit(0), mScale(1.0), mInitSect(0), infoInertial(Eigen::MatrixXd::Zero(9, 9)) {
 
         /*
-         * mbStopRequested:    外部线程调用，为true，表示外部线程请求停止 local mapping
-         * mbStopped:          为true表示可以并终止localmapping 线程
-         * mbNotStop:          true，表示不要停止 localmapping 线程，因为要插入关键帧了。需要和 mbStopped 结合使用
+         * mbResetRequested:    外部线程调用，为true，表示外部线程请求停止 local mapping
+         * mbReseted:          为true表示可以并终止localmapping 线程
+         * mbNotStopFinal:          true，表示不要停止 localmapping 线程，因为要插入关键帧了。需要和 mbReseted 结合使用
          * mbAcceptKeyFrames:  true，允许接受关键帧。tracking 和local mapping 之间的关键帧调度
-         * mbAbortBA:          是否流产BA优化的标志位
-         * mbFinishRequested:  请求终止当前线程的标志。注意只是请求，不一定终止。终止要看 mbFinished
+         * mbAbortBAFromLC:          是否流产BA优化的标志位
+         * mbFinishRequest:  请求终止当前线程的标志。注意只是请求，不一定终止。终止要看 mbFinished
          * mbResetRequested:   请求当前线程复位的标志。true，表示一直请求复位，但复位还未完成；表示复位完成为false
          * mbFinished:         判断最终LocalMapping::Run() 是否完成的标志。
          */
@@ -98,7 +98,7 @@ namespace ORB_SLAM3 {
 
             // Check if there are keyframes in the queue
             // 等待处理的关键帧列表不为空 并且imu正常
-            if (CheckNewKeyFrames() && !mbBadImu) {
+            if (HaveNewKeyFrames() && !mbBadImu) {
                 // BoW conversion and insertion in Map
                 // Step 2 处理列表中的关键帧，包括计算BoW、更新观测、描述子、共视图，插入到地图等
                 ProcessNewKeyFrame();
@@ -112,10 +112,10 @@ namespace ORB_SLAM3 {
                 CreateNewMapPoints();
 
                 // 注意orbslam2中放在了函数SearchInNeighbors（用到了mbAbortBA）后面，应该放这里更合适
-                mbAbortBA = false;
+                mbAbortBAFromLC = false;
 
                 // 已经处理完队列中的最后的一个关键帧
-                if (!CheckNewKeyFrames()) {
+                if (!HaveNewKeyFrames()) {
                     // Find more matches in neighbor keyframes and fuse point duplications
                     //  Step 5 检查并融合当前关键帧与相邻关键帧帧（两级相邻）中重复的地图点
                     // 先完成相邻关键帧与当前关键帧的地图点的融合（在相邻关键帧中查找当前关键帧的地图点），
@@ -130,7 +130,7 @@ namespace ORB_SLAM3 {
                 int num_edges_BA = 0;
 
                 // 已经处理完队列中的最后的一个关键帧，并且闭环检测没有请求停止LocalMapping
-                if (!CheckNewKeyFrames() && !stopRequested()) {
+                if (!HaveNewKeyFrames() && !CheckStopRequestFromLC()) {
                     // 当前地图中关键帧数目大于2个
                     if (mpAtlas->KeyFramesInMap() > 2) {
                         // Step 6.1 处于IMU模式并且当前关键帧所在的地图已经完成IMU初始化
@@ -159,16 +159,16 @@ namespace ORB_SLAM3 {
                             bool bLarge = ((mpTracker->GetMatchesInliers() > 75) && mbMonocular) ||
                                           ((mpTracker->GetMatchesInliers() > 100) && !mbMonocular);
                             // 局部地图+IMU一起优化，优化关键帧位姿、地图点、IMU参数
-                            Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
+                            Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBAFromLC, mpCurrentKeyFrame->GetMap(),
                                                        num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA, bLarge,
                                                        !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                             b_doneLBA = true;
                         } else {
                             // Step 6.2 不是IMU模式或者当前关键帧所在的地图还未完成IMU初始化
                             // 局部地图BA，不包括IMU数据
-                            // 注意这里的第二个参数是按地址传递的,当这里的 mbAbortBA 状态发生变化时，能够及时执行/停止BA
+                            // 注意这里的第二个参数是按地址传递的,当这里的 mbAbortBAFromLC 状态发生变化时，能够及时执行/停止BA
                             // 局部地图优化，不包括IMU信息。优化关键帧位姿、地图点
-                            Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
+                            Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame, &mbAbortBAFromLC, mpCurrentKeyFrame->GetMap(),
                                                              num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA);
                             b_doneLBA = true;
                         }
@@ -246,31 +246,17 @@ namespace ORB_SLAM3 {
                 // Step 10 将当前帧加入到闭环检测队列中
                 mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
 
-            } else if (Stop() && !mbBadImu) // 当要终止当前线程的时候
-            {
-                // Safe area to stop
-                while (isStopped() && !CheckFinish()) {
-                    // 如果还没有结束利索,那么等等它
-                    usleep(3000);
-                }
-                // 然后确定终止了就跳出这个线程的主循环
-                if (CheckFinish())
-                    break;
             }
             // 查看是否有复位线程的请求
             ResetIfRequested();
-
             // Tracking will see that Local Mapping is busy
             // 开始接收关键帧
             SetAcceptKeyFrames(true);
-
-            // 如果当前线程已经结束了就跳出主循环
-            if (CheckFinish())
+            if (CheckFinishRequest() && CheckStopped()){
                 break;
-
-            usleep(3000);
+            }
+            usleep(500);
         }
-
         // 设置线程已经终止
         SetFinish();
     }
@@ -283,13 +269,13 @@ namespace ORB_SLAM3 {
         unique_lock<mutex> lock(mMutexNewKFs);
         // 将关键帧插入到列表中
         mlNewKeyFrames.push_back(pKF);
-        mbAbortBA = true;
+        mbAbortBAFromLC = true;
     }
 
 /**
  * @brief 查看列表中是否有等待被插入的关键帧
  */
-    bool LocalMapping::CheckNewKeyFrames() {
+    bool LocalMapping::HaveNewKeyFrames() {
         unique_lock<mutex> lock(mMutexNewKFs);
         return (!mlNewKeyFrames.empty());
     }
@@ -352,7 +338,7 @@ namespace ORB_SLAM3 {
  * @brief 处理新的关键帧，使队列为空，注意这里只是处理了关键帧，并没有生成MP
  */
     void LocalMapping::EmptyQueue() {
-        while (CheckNewKeyFrames())
+        while (HaveNewKeyFrames())
             ProcessNewKeyFrame();
     }
 
@@ -467,7 +453,7 @@ namespace ORB_SLAM3 {
         // Step 2：遍历相邻关键帧vpNeighKFs
         for (size_t i = 0; i < vpNeighKFs.size(); i++) {
             // 下面的过程会比较耗费时间,因此如果有新的关键帧需要处理的话,就先去处理新的关键帧吧
-            if (i > 0 && CheckNewKeyFrames())
+            if (i > 0 && HaveNewKeyFrames())
                 return;
 
             KeyFrame *pKF2 = vpNeighKFs[i];
@@ -536,9 +522,9 @@ namespace ORB_SLAM3 {
 
                 // 5.1
                 // 当前匹配在当前关键帧中的特征点
-                const cv::KeyPoint &kp1 = (mpCurrentKeyFrame->NLeft == -1) ? mpCurrentKeyFrame->mvKeysUn[idx1]
+                const cv::KeyPoint &kp1 = (mpCurrentKeyFrame->NLeft == -1) ? mpCurrentKeyFrame->mvKPsUn[idx1]
                                                                            : (idx1 < mpCurrentKeyFrame->NLeft)
-                                                                             ? mpCurrentKeyFrame->mvKeys[idx1]
+                                                                             ? mpCurrentKeyFrame->mvKPs[idx1]
                                                                              : mpCurrentKeyFrame->mvKPsRight[idx1 -
                                                                                                              mpCurrentKeyFrame->NLeft];
                 // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
@@ -551,8 +537,8 @@ namespace ORB_SLAM3 {
 
                 // 5.2
                 // 当前匹配在邻接关键帧中的特征点
-                const cv::KeyPoint &kp2 = (pKF2->NLeft == -1) ? pKF2->mvKeysUn[idx2]
-                                                              : (idx2 < pKF2->NLeft) ? pKF2->mvKeys[idx2]
+                const cv::KeyPoint &kp2 = (pKF2->NLeft == -1) ? pKF2->mvKPsUn[idx2]
+                                                              : (idx2 < pKF2->NLeft) ? pKF2->mvKPs[idx2]
                                                                                      : pKF2->mvKPsRight[idx2 -
                                                                                                         pKF2->NLeft];
                 // mvuRight中存放着双目的深度值，如果不是双目，其值将为-1
@@ -848,7 +834,7 @@ namespace ORB_SLAM3 {
                 vpTargetKFs.push_back(pKFi2);
                 pKFi2->mnFuseTargetForKF = mpCurrentKeyFrame->mnId;
             }
-            if (mbAbortBA)
+            if (mbAbortBAFromLC)
                 break;
         }
 
@@ -885,7 +871,7 @@ namespace ORB_SLAM3 {
         }
 
 
-        if (mbAbortBA)
+        if (mbAbortBAFromLC)
             return;
 
         // Search matches by projection from target KFs in current KF
@@ -949,32 +935,32 @@ namespace ORB_SLAM3 {
 /**
  * @brief 外部线程调用,请求停止当前线程的工作; 其实是回环检测线程调用,来避免在进行全局优化的过程中局部建图线程添加新的关键帧
  */
-    void LocalMapping::RequestStop() {
+    void LocalMapping::RequestStopFromLoopClose() {
         unique_lock<mutex> lock(mMutexStop);
-        mbStopRequested = true;
+        mbStopRequestFromLC = true;
         unique_lock<mutex> lock2(mMutexNewKFs);
-        mbAbortBA = true;
+        mbAbortBAFromLC = true;
     }
 
 /**
  * @brief 检查是否要把当前的局部建图线程停止工作,运行的时候要检查是否有终止请求,如果有就执行. 由run函数调用
  */
-    bool LocalMapping::Stop() {
-        unique_lock<mutex> lock(mMutexStop);
-        // 如果当前线程还没有准备停止,但是已经有终止请求了,那么就准备停止当前线程
-        if (mbStopRequested && !mbNotStop) {
-            mbStopped = true;
-            cout << "Local Mapping STOP" << endl;
-            return true;
-        }
-
-        return false;
-    }
+//    bool LocalMapping::Stop() {
+//        unique_lock<mutex> lock(mMutexStop);
+//        // 如果当前线程还没有准备停止,但是已经有终止请求了,那么就准备停止当前线程
+//        if (mbStopRequestFromLC && !mbNotStopFinal) {
+//            mbNotStopFromTrack = true;
+//            cout << "Local Mapping STOP" << endl;
+//            return true;
+//        }
+//
+//        return false;
+//    }
 
 /**
  * @brief 检查mbStopped是否为true，为true表示可以并终止localmapping 线程
  */
-    bool LocalMapping::isStopped() {
+    bool LocalMapping::CheckStopped() {
         unique_lock<mutex> lock(mMutexStop);
         return mbStopped;
     }
@@ -982,9 +968,9 @@ namespace ORB_SLAM3 {
 /**
  * @brief 求外部线程调用，为true，表示外部线程请求停止 local mapping
  */
-    bool LocalMapping::stopRequested() {
+    bool LocalMapping::CheckStopRequestFromLC() {
         unique_lock<mutex> lock(mMutexStop);
-        return mbStopRequested;
+        return mbStopRequestFromLC;
     }
 
 /**
@@ -996,7 +982,7 @@ namespace ORB_SLAM3 {
         if (mbFinished)
             return;
         mbStopped = false;
-        mbStopRequested = false;
+        mbStopRequestFromLC = false;
         for (list<KeyFrame *>::iterator lit = mlNewKeyFrames.begin(), lend = mlNewKeyFrames.end(); lit != lend; lit++)
             delete *lit;
         mlNewKeyFrames.clear();
@@ -1022,23 +1008,23 @@ namespace ORB_SLAM3 {
 
 /**
  * @brief 如果不让它暂停，即使发出了暂停信号也不暂停
+ * true: can stop
+ * false: dont stop
  */
-    bool LocalMapping::SetNotStop(bool flag) {
+    bool LocalMapping::RequestNotStopFromTrack(bool flag) {
         unique_lock<mutex> lock(mMutexStop);
-
-        if (flag && mbStopped)
+        if(flag && mbStopped)
             return false;
-
         mbNotStop = flag;
-
         return true;
     }
+
 
 /**
  * @brief 放弃这次操作，虽然叫BA但并不是只断优化
  */
     void LocalMapping::InterruptBA() {
-        mbAbortBA = true;
+        mbAbortBAFromLC = true;
     }
 
 /**
@@ -1127,8 +1113,8 @@ namespace ORB_SLAM3 {
                         nMPs++;
                         // pMP->Observations() 是观测到该地图点的相机总数目（单目1，双目2）
                         if (pMP->Observations() > thObs) {
-                            const int &scaleLevel = (pKF->NLeft == -1) ? pKF->mvKeysUn[i].octave
-                                                                       : (i < pKF->NLeft) ? pKF->mvKeys[i].octave
+                            const int &scaleLevel = (pKF->NLeft == -1) ? pKF->mvKPsUn[i].octave
+                                                                       : (i < pKF->NLeft) ? pKF->mvKPs[i].octave
                                                                                           : pKF->mvKPsRight[i].octave;
                             const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
                             int nObs = 0;
@@ -1142,10 +1128,10 @@ namespace ORB_SLAM3 {
                                 int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
                                 int scaleLeveli = -1;
                                 if (pKFi->NLeft == -1)
-                                    scaleLeveli = pKFi->mvKeysUn[leftIndex].octave;
+                                    scaleLeveli = pKFi->mvKPsUn[leftIndex].octave;
                                 else {
                                     if (leftIndex != -1) {
-                                        scaleLeveli = pKFi->mvKeys[leftIndex].octave;
+                                        scaleLeveli = pKFi->mvKPs[leftIndex].octave;
                                     }
                                     if (rightIndex != -1) {
                                         int rightLevel = pKFi->mvKPsRight[rightIndex - pKFi->NLeft].octave;
@@ -1215,7 +1201,7 @@ namespace ORB_SLAM3 {
                 }
             }
             // 遍历共视关键帧个数超过一定，就不弄了
-            if ((count > 20 && mbAbortBA) || count > 100) {
+            if ((count > 20 && mbAbortBAFromLC) || count > 100) {
                 break;
             }
         }
@@ -1239,7 +1225,7 @@ namespace ORB_SLAM3 {
                 if (!mbResetRequested)
                     break;
             }
-            usleep(3000);
+            usleep(500);
         }
         cout << "LM: Map reset, Done!!!" << endl;
     }
@@ -1262,7 +1248,7 @@ namespace ORB_SLAM3 {
                 if (!mbResetRequestedActiveMap)
                     break;
             }
-            usleep(3000);
+            usleep(500);
         }
         cout << "LM: Active map reset, Done!!!" << endl;
     }
@@ -1308,7 +1294,7 @@ namespace ORB_SLAM3 {
             }
         }
         if (executed_reset)
-            cout << "LM: Reset free the mutex" << endl;
+            cout << "LM: CheckResetRequest free the mutex" << endl;
 
     }
 
@@ -1317,15 +1303,15 @@ namespace ORB_SLAM3 {
  */
     void LocalMapping::RequestFinish() {
         unique_lock<mutex> lock(mMutexFinish);
-        mbFinishRequested = true;
+        mbFinishRequest = true;
     }
 
 /**
  * @brief 查看完成信号，跳出while循环
  */
-    bool LocalMapping::CheckFinish() {
+    bool LocalMapping::CheckFinishRequest() {
         unique_lock<mutex> lock(mMutexFinish);
-        return mbFinishRequested;
+        return mbFinishRequest;
     }
 
 /**
@@ -1341,7 +1327,7 @@ namespace ORB_SLAM3 {
 /**
  * @brief 当前线程的run函数是否已经终止
  */
-    bool LocalMapping::isFinished() {
+    bool LocalMapping::CheckFinished() {
         unique_lock<mutex> lock(mMutexFinish);
         return mbFinished;
     }
@@ -1394,7 +1380,7 @@ namespace ORB_SLAM3 {
         bInitializing = true;
 
         // 先处理新关键帧，防止堆积且保证数据量充足
-        while (CheckNewKeyFrames()) {
+        while (HaveNewKeyFrames()) {
             ProcessNewKeyFrame();
             vpKF.push_back(mpCurrentKeyFrame);
             lpKF.push_back(mpCurrentKeyFrame);
@@ -1510,7 +1496,7 @@ namespace ORB_SLAM3 {
         if (!mpAtlas->isImuInitialized()) {
             // ! 重要！标记初始化成功
             mpAtlas->SetImuInitialized();
-            mpTracker->t0IMU = mpTracker->mCurrentFrame.mTimeStamp;
+            mpTracker->t0IMU = mpTracker->mCurFrame.mTimeStamp;
             mpCurrentKeyFrame->bImu = true;
         }
 
@@ -1537,7 +1523,7 @@ namespace ORB_SLAM3 {
 
         // Process keyframes in the queue
         // 6. 处理一下新来的关键帧，这些关键帧没有参与优化
-        while (CheckNewKeyFrames()) {
+        while (HaveNewKeyFrames()) {
             ProcessNewKeyFrame();
             vpKF.push_back(mpCurrentKeyFrame);
             lpKF.push_back(mpCurrentKeyFrame);
@@ -1680,7 +1666,7 @@ namespace ORB_SLAM3 {
         vector<KeyFrame *> vpKF(lpKF.begin(), lpKF.end());
 
         // 加入新添加的帧
-        while (CheckNewKeyFrames()) {
+        while (HaveNewKeyFrames()) {
             ProcessNewKeyFrame();
             vpKF.push_back(mpCurrentKeyFrame);
             lpKF.push_back(mpCurrentKeyFrame);

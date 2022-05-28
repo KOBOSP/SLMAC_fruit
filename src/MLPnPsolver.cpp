@@ -74,12 +74,12 @@ MLPnPsolver::MLPnPsolver(const Frame &F,                                // 输�
                                 mpCamera(F.mpCamera)                    // 相机模型，利用该变量对3D点进行投影
 {
     mvpMapPointMatches = vpMapPointMatches;           // 待匹配的特征点，是当前帧和候选关键帧用BoW进行快速匹配的结果
-    mvBearingVecs.reserve(F.mvpMapPoints.size());     // 初始化3D点的单位向量
-    mvP2D.reserve(F.mvpMapPoints.size());             // 初始化3D点的投影点
-    mvSigma2.reserve(F.mvpMapPoints.size());          // 初始化卡方检验中的sigma值
-    mvP3Dw.reserve(F.mvpMapPoints.size());            // 初始化3D点坐标
-    mvKeyPointIndices.reserve(F.mvpMapPoints.size()); // 初始化3D点的索引值
-    mvAllIndices.reserve(F.mvpMapPoints.size());      // 初始化所有索引值
+    mvBearingVecs.reserve(F.mvpMPs.size());     // 初始化3D点的单位向量
+    mvP2D.reserve(F.mvpMPs.size());             // 初始化3D点的投影点
+    mvSigma2.reserve(F.mvpMPs.size());          // 初始化卡方检验中的sigma值
+    mvP3Dw.reserve(F.mvpMPs.size());            // 初始化3D点坐标
+    mvKeyPointIndices.reserve(F.mvpMPs.size()); // 初始化3D点的索引值
+    mvAllIndices.reserve(F.mvpMPs.size());      // 初始化所有索引值
 
     // 一些必要的初始化操作
     int idx = 0;
@@ -94,9 +94,9 @@ MLPnPsolver::MLPnPsolver(const Frame &F,                                // 输�
             if (!pMP->isBad())
             {
                 // 如果记录的点个数超过总数，则不做任何事情，否则继续记录
-                if (i >= F.mvKeysUn.size())
+                if (i >= F.mvKPsUn.size())
                     continue;
-                const cv::KeyPoint &kp = F.mvKeysUn[i];
+                const cv::KeyPoint &kp = F.mvKPsUn[i];
 
                 // 保存3D点的投影点
                 mvP2D.push_back(kp.pt);
