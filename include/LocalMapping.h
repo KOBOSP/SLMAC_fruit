@@ -55,16 +55,16 @@ public:
     void EmptyQueue();
 
     // Thread Synch
-    void RequestStopFromLoopClose();
+    void RequestPause();
     void RequestReset();
     void RequestResetActiveMap(Map* pMap);
-    void Release();
-    bool CheckStopped();
-    bool CheckStopRequestFromLC();
+    void CancelPause();
+    bool CheckPaused();
+    bool CheckRequestPause();
     bool AcceptKeyFrames();
     void SetAcceptKeyFrames(bool flag);
-    bool RequestNotStopFromTrack(bool flag);
-
+    bool RequestNotPauseOrFinish(bool flag);
+    bool CheckNotPauseOrFinish();
     void InterruptBA();
 
     void RequestFinish();
@@ -121,8 +121,8 @@ protected:
     std::mutex mMutexReset;
 
     bool CheckFinishRequest();
-    void SetFinish();
-    bool mbFinishRequest;
+    void SetFinished();
+    bool mbRequestFinish;
     bool mbFinished;
     std::mutex mMutexFinish;
 
@@ -139,11 +139,11 @@ protected:
 
     std::mutex mMutexNewKFs;
 
-    bool mbAbortBAFromLC;
+    bool mbAbortBA;
 
-    bool mbStopped;
-    bool mbStopRequestFromLC;
-    bool mbNotStop;
+    bool mbPaused;
+    bool mbRequestPause;
+    bool mbNotPauseOrFinish;
     std::mutex mMutexStop;
 
     bool mbAcceptKeyFrames;

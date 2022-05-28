@@ -150,25 +150,21 @@ int main(int argc, char **argv) {
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
             double dTrackTimePass = std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
             vTimesTrack[ni] = dTrackTimePass;
-
-//            // Wait to load the next frame
-//            double dImgTimePass = 0;
-//            if (ni < nImageNumInSeq[nSeqId] - 1)
-//                dImgTimePass = vvdImgTimestamp[nSeqId][ni + 1] - dImgTimestamp;
-//            else if (ni > 0){
-//                dImgTimePass = dImgTimestamp - vvdImgTimestamp[nSeqId][ni - 1];
-//                cout<< endl <<" go to the step never be execution ? "<<endl;
-//            }
-//            if (dTrackTimePass < dImgTimePass)
-//                usleep((dImgTimePass - dTrackTimePass) * 1e6); // 1e6
+            if(SLAM.CheckShutDowned()){
+                break;
+            }
+        }
+        if(SLAM.CheckShutDowned()){
+            break;
         }
         if (nSeqId < nSeqNum - 1) {
             cout << "Changing the dataset" << endl;
             SLAM.ChangeDataset();
         }
     }
-    // CheckResetRequest all threads
-    SLAM.ShutDown();
+    if(!SLAM.CheckShutDowned()){
+        SLAM.ShutDownSystem();
+    }
 
     // Save camera trajectory
     string sSaveFileName = string(argv[argc - 1]);

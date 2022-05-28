@@ -248,9 +248,7 @@ namespace ORB_SLAM3 {
         // 没有imu数据,不进行预积分
         if (mlQueueImuData.size() == 0) {
             Verbose::PrintMess("Not IMU data in mlQueueImuData!!", Verbose::VERBOSITY_NORMAL);
-            cout<<"25"<<endl;
             mCurFrame.setIntegrated();
-            cout<<"26"<<endl;
             return;
         }
 
@@ -458,7 +456,7 @@ namespace ORB_SLAM3 {
         }
         // Step 1 如局部建图里认为IMU有问题，重置当前活跃地图
         if (mpLocalMapper->mbBadImu) {
-            cout << "TRACK: CheckResetRequest map because local mapper set the bad imu flag " << endl;
+            cout << "TRACK: CheckRequestReset map because local mapper set the bad imu flag " << endl;
             mpSystem->ResetActiveMap();
             return;
         }
@@ -833,7 +831,7 @@ namespace ORB_SLAM3 {
                 }
             }
 
-            // CheckResetRequest if the camera get lost soon after initialization
+            // CheckRequestReset if the camera get lost soon after initialization
             // Step 10 如果第二阶段跟踪失败，跟踪状态为LOST
             if (mState == LOST) {
                 // 如果地图中关键帧小于10，重置当前地图，退出当前跟踪
@@ -1467,8 +1465,8 @@ namespace ORB_SLAM3 {
         }
 
         // If Local Mapping is freezed by a Loop Closure do not insert keyframes
-        // Step 2：如果局部地图线程被闭环检测使用，则不插入关键帧
-        if (mpLocalMapper->CheckStopped() || mpLocalMapper->CheckStopRequestFromLC()) {
+        // Step 2：have stop or 如果局部地图线程被闭环检测使用，则不插入关键帧
+        if (mpLocalMapper->CheckPaused() || mpLocalMapper->CheckRequestPause()) {
             return false;
         }
 
@@ -1607,7 +1605,7 @@ namespace ORB_SLAM3 {
         }
 
         ;
-        if (!mpLocalMapper->RequestNotStopFromTrack(true)){
+        if (!mpLocalMapper->RequestNotPauseOrFinish(true)){
             return;
         }
 
@@ -1629,7 +1627,7 @@ namespace ORB_SLAM3 {
         } else
             Verbose::PrintMess("No last KF in KF creation!!", Verbose::VERBOSITY_NORMAL);
 
-        // CheckResetRequest preintegration from last KF (Create new object)
+        // CheckRequestReset preintegration from last KF (Create new object)
         mpImuPreintegratedFromLastKF = new IMU::Preintegrated(pKF->GetImuBias(), pKF->mImuCalib);
 
         // 这段代码和 Tracking::UpdateLastFrame 中的那一部分代码功能相同
@@ -1726,7 +1724,7 @@ namespace ORB_SLAM3 {
         mpLocalMapper->InsertKeyFrame(pKF);
 
         // 插入好了，允许局部建图停止
-        mpLocalMapper->RequestNotStopFromTrack(false);
+        mpLocalMapper->RequestNotPauseOrFinish(false);
 
         // 当前帧成为新的关键帧，更新
         mnLastKeyFrameId = mCurFrame.mnId;
@@ -2256,11 +2254,11 @@ namespace ORB_SLAM3 {
         // 基本上是挨个请求各个线程终止
         if (mpViewer) {
             mpViewer->RequestReset();
-            while (!mpViewer->IsReseted())
+            while (!mpViewer->CheckReseted())
                 usleep(500);
         }
 
-        // CheckResetRequest Local Mapping
+        // CheckRequestReset Local Mapping
         if (!bLocMap) {
             Verbose::PrintMess("Reseting Local Mapper...", Verbose::VERBOSITY_NORMAL);
             mpLocalMapper->RequestReset();
@@ -2268,7 +2266,7 @@ namespace ORB_SLAM3 {
         }
 
 
-        // CheckResetRequest Loop Closing
+        // CheckRequestReset Loop Closing
         Verbose::PrintMess("Reseting Loop Closing...", Verbose::VERBOSITY_NORMAL);
         mpLoopClosing->RequestReset();
         Verbose::PrintMess("done", Verbose::VERBOSITY_NORMAL);
@@ -2304,7 +2302,7 @@ namespace ORB_SLAM3 {
         mvIniMatches.clear();
 
         if (mpViewer)
-            mpViewer->Release();
+            mpViewer->CancelReseted();
 
         Verbose::PrintMess("   End reseting! ", Verbose::VERBOSITY_NORMAL);
     }
@@ -2316,7 +2314,7 @@ namespace ORB_SLAM3 {
         Verbose::PrintMess("Active map Reseting", Verbose::VERBOSITY_NORMAL);
         if (mpViewer) {
             mpViewer->RequestReset();
-            while (!mpViewer->IsReseted())
+            while (!mpViewer->CheckReseted())
                 usleep(500);
         }
 
@@ -2328,7 +2326,7 @@ namespace ORB_SLAM3 {
             Verbose::PrintMess("done", Verbose::VERBOSITY_VERY_VERBOSE);
         }
 
-        // CheckResetRequest Loop Closing
+        // CheckRequestReset Loop Closing
         Verbose::PrintMess("Reseting Loop Closing...", Verbose::VERBOSITY_NORMAL);
         mpLoopClosing->RequestResetActiveMap(pMap);
         Verbose::PrintMess("done", Verbose::VERBOSITY_NORMAL);
@@ -2391,7 +2389,7 @@ namespace ORB_SLAM3 {
         mbVelocity = false;
 
         if (mpViewer)
-            mpViewer->Release();
+            mpViewer->CancelReseted();
 
         Verbose::PrintMess("   End reseting! ", Verbose::VERBOSITY_NORMAL);
     }

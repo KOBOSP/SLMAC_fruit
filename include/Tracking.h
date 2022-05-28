@@ -200,7 +200,7 @@ protected:
     // Perform preintegration from last frame
     void PreintegrateIMU();
 
-    // CheckResetRequest IMU biases and compute frame velocity
+    // CheckRequestReset IMU biases and compute frame velocity
     void ResetFrameIMU();
 
     bool mbMapUpdated;

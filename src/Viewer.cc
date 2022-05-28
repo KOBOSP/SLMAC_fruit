@@ -27,7 +27,7 @@ namespace ORB_SLAM3 {
     Viewer::Viewer(System *pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Tracking *pTracking,
                    const string &sSettingPath, Settings *settings) :
             mbFrameBoth(true), mpSystem(pSystem), mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpTracker(pTracking),
-            mbFinishRequested(false), mbFinished(true), mbReseted(true), mbResetRequested(false) {
+            mbRequestFinish(false), mbFinished(true), mbReseted(true), mbRequestReset(false) {
         mfImgFreq = 1e3 / settings->mfImgFps;
         mfImageFrameScale = settings->mfImageFrameScale;
         mfViewpointX = settings->mfViewPointX;
@@ -63,7 +63,7 @@ namespace ORB_SLAM3 {
         pangolin::Var<bool> menuLocalizationMode("menu.Localization Mode", false, true);
         pangolin::Var<bool> menuStepByStep("menu.Step By Step", false, true);  // false, true
         pangolin::Var<bool> menuNextStep("menu.Next Step", false, false);
-        pangolin::Var<bool> menuReset("menu.CheckResetRequest", false, false);
+        pangolin::Var<bool> menuReset("menu.CheckRequestReset", false, false);
         pangolin::Var<bool> menuFinish("menu.Finish", false, false);
         // Define Camera Render Object (for view / scene browsing)
         pangolin::OpenGlRenderState MapView(
@@ -185,7 +185,7 @@ namespace ORB_SLAM3 {
                 menuShowKeyFrames = true;
                 menuShowMapPoints = true;
                 menuLocalizationMode = false;
-                menuStereoFrame = true;
+                menuStereoFrame = false;
                 menuHisoryMapKF = false;
                 if (bLocalizationMode)
                     mpSystem->DeactivateLocalizationMode();
@@ -199,41 +199,38 @@ namespace ORB_SLAM3 {
             if (menuFinish) {
                 if (bLocalizationMode)
                     mpSystem->DeactivateLocalizationMode();
-
-                // CheckResetRequest all threads
-                mpSystem->ShutDownRequest();
-
+                // CheckRequestReset all threads
+                mpSystem->RequestShutDown();
                 menuFinish = false;
             }
-            cout<<"CheckResetRequest"<<endl;
-            if (CheckResetRequest()) {
-                while (IsReseted()) {
+            if (CheckRequestReset()) {
+                while (CheckReseted()) {
                     usleep(500);
                 }
             }
-            cout<<"CheckFinishReqest"<<endl;
             if (CheckFinishReqest())
                 break;
         }
-        SetFinish();
+        SetFinished(true);
     }
 
     void Viewer::RequestFinish() {
         unique_lock<mutex> lock(mMutexFinish);
-        mbFinishRequested = true;
+        mbRequestFinish = true;
     }
 
     bool Viewer::CheckFinishReqest() {
         unique_lock<mutex> lock(mMutexFinish);
-        return mbFinishRequested;
+        return mbRequestFinish;
     }
 
-    void Viewer::SetFinish() {
+    void Viewer::SetFinished(bool flag) {
         unique_lock<mutex> lock(mMutexFinish);
-        mbFinished = true;
+        cout << "Viewer Finished" << endl;
+        mbFinished = flag;
     }
 
-    bool Viewer::IsFinished() {
+    bool Viewer::CheckFinished() {
         unique_lock<mutex> lock(mMutexFinish);
         return mbFinished;
     }
@@ -241,28 +238,27 @@ namespace ORB_SLAM3 {
     void Viewer::RequestReset() {
         unique_lock<mutex> lock(mMutexReset);
         if (!mbReseted)
-            mbResetRequested = true;
+            mbRequestReset = true;
     }
 
-    bool Viewer::IsReseted() {
-        unique_lock<mutex> lock(mMutexReset);
-        return mbReseted;
-    }
-
-    bool Viewer::CheckResetRequest() {
+    bool Viewer::CheckRequestReset() {
         unique_lock<mutex> lock(mMutexReset);
         unique_lock<mutex> lock2(mMutexFinish);
-        if (mbFinishRequested)
+        if (mbRequestFinish)
             return false;
-        else if (mbResetRequested) {
+        else if (mbRequestReset) {
             mbReseted = true;
-            mbResetRequested = false;
+            mbRequestReset = false;
             return true;
         }
         return false;
     }
+    bool Viewer::CheckReseted() {
+        unique_lock<mutex> lock(mMutexReset);
+        return mbReseted;
+    }
 
-    void Viewer::Release() {
+    void Viewer::CancelReseted() {
         unique_lock<mutex> lock(mMutexReset);
         mbReseted = false;
     }

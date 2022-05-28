@@ -40,7 +40,7 @@ namespace ORB_SLAM3 {
  */
     LoopClosing::LoopClosing(Atlas *pAtlas, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale,
                              const bool bActiveLC, Settings *settings) :
-            mbResetRequested(false), mbResetActiveMapRequested(false), mbFinishRequested(false), mbFinished(true),
+            mbResetRequested(false), mbResetActiveMapRequested(false), mbRequestFinish(false), mbFinished(true),
             mpAtlas(pAtlas),
             mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false),
             mbFinishedGBA(true),
@@ -163,7 +163,7 @@ namespace ORB_SLAM3 {
                         // 标记Place recognition结果为地图融合
                         vnPR_TypeRecogn.push_back(1);
 
-                        // CheckResetRequest all variables
+                        // CheckRequestReset all variables
                         // 重置所有融合相关变量
                         mpMergeLastCurrentKF->SetErase();
                         mpMergeMatchedKF->SetErase();
@@ -175,7 +175,7 @@ namespace ORB_SLAM3 {
 
                         // 重置所有回环相关变量, 说明对与当前帧同时有回环和融合的情况只进行融合
                         if (mbLoopDetected) {
-                            // CheckResetRequest Loop variables
+                            // CheckRequestReset Loop variables
                             mpLoopLastCurrentKF->SetErase();
                             mpLoopMatchedKF->SetErase();
                             mnLoopNumCoincidences = 0;
@@ -243,7 +243,7 @@ namespace ORB_SLAM3 {
                             mnNumCorrection += 1;
                         }
 
-                        // CheckResetRequest all variables
+                        // CheckRequestReset all variables
                         // 重置所有的回环变量
                         mpLoopLastCurrentKF->SetErase();
                         mpLoopMatchedKF->SetErase();
@@ -259,16 +259,13 @@ namespace ORB_SLAM3 {
             }
             // 查看是否有外部线程请求复位当前线程
             ResetIfRequested();
-
             // 查看外部线程是否有终止当前线程的请求,如果有的话就跳出这个线程的主函数的主循环
-            if (CheckFinish()) {
+            if (CheckRequestFinish()) {
                 break;
             }
-
             usleep(500);
         }
-
-        SetFinish();
+        SetFinished();
     }
 
 /**
@@ -1103,7 +1100,7 @@ namespace ORB_SLAM3 {
         // Avoid new keyframes are inserted while correcting the loop
         // Step1. 结束局部地图线程、全局BA，为闭环矫正做准备
         // 请求局部地图停止，防止在回环矫正时局部地图线程中InsertKeyFrame函数插入新的关键帧
-        mpLocalMapper->RequestStopFromLoopClose();
+        mpLocalMapper->RequestPause();
         mpLocalMapper->EmptyQueue(); // Proccess keyframes in the queue
 
         // 如果正在进行全局BA，丢弃它
@@ -1114,7 +1111,6 @@ namespace ORB_SLAM3 {
             mbStopGBA = true;
             // 记录全局BA次数
             mnFullBAIdx++;
-
             if (mpThreadGBA) {
                 mpThreadGBA->detach();
                 delete mpThreadGBA;
@@ -1124,7 +1120,7 @@ namespace ORB_SLAM3 {
 
         // Wait until Local Mapping has effectively stopped
         // 一直等到局部地图线程结束再继续
-        while (!mpLocalMapper->CheckStopped()) {
+        while (!mpLocalMapper->CheckPaused()) {
             usleep(500);
         }
 
@@ -1364,8 +1360,8 @@ namespace ORB_SLAM3 {
             mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment, this, pLoopMap, mpCurrentKF->mnId);
         }
 
-        // Loop closed. Release Local Mapping.
-        mpLocalMapper->Release();
+        // Loop closed. CancelPause Local Mapping.
+        mpLocalMapper->CancelPause();
 
         mLastLoopKFid = mpCurrentKF->mnId; //TODO old varible, it is not use in the new algorithm
     }
@@ -1409,13 +1405,13 @@ namespace ORB_SLAM3 {
             bRelaunchBA = true;  // 以后还会重新开启
         }
 
-        //Verbose::PrintMess("MERGE-VISUAL: Request CheckResetRequest Local Mapping", Verbose::VERBOSITY_DEBUG);
-        //cout << "Request CheckResetRequest Local Mapping" << endl;
+        //Verbose::PrintMess("MERGE-VISUAL: Request CheckRequestReset Local Mapping", Verbose::VERBOSITY_DEBUG);
+        //cout << "Request CheckRequestReset Local Mapping" << endl;
         // 请求局部建图线程停止
-        mpLocalMapper->RequestStopFromLoopClose();
+        mpLocalMapper->RequestPause();
         // Wait until Local Mapping has effectively stopped
         // 等待局部建图工作停止
-        while (!mpLocalMapper->CheckStopped()) {
+        while (!mpLocalMapper->CheckPaused()) {
             usleep(500);
         }
         //cout << "Local Map stopped" << endl;
@@ -1864,8 +1860,8 @@ namespace ORB_SLAM3 {
 
         //std::cout << "[Merge]: Welding bundle adjustment finished" << std::endl;
 
-        // Loop closed. Release Local Mapping.
-        mpLocalMapper->Release();
+        // Loop closed. CancelPause Local Mapping.
+        mpLocalMapper->CancelPause();
 
         // Step 8 在当前帧整个剩下的地图中（局部窗口外，认为没那么紧急处理）对位姿和地图点进行矫正传播
 
@@ -1877,9 +1873,9 @@ namespace ORB_SLAM3 {
         if (vpCurrentMapKFs.size() == 0) {
 
         } else {
-            mpLocalMapper->RequestStopFromLoopClose();
+            mpLocalMapper->RequestPause();
             // Wait until Local Mapping has effectively stopped
-            while (!mpLocalMapper->CheckStopped()) {
+            while (!mpLocalMapper->CheckPaused()) {
                 usleep(500);
             }
 
@@ -1926,7 +1922,7 @@ namespace ORB_SLAM3 {
 
 
         // Essential graph 优化后可以重新开始局部建图了
-        mpLocalMapper->Release();
+        mpLocalMapper->CancelPause();
 
         // 全局的BA（永远不会执行）
         // 这里没有imu, 所以isImuInitialized一定是false, 此时地图融合Atlas至少2个地图，所以第二个条件也一定是false
@@ -1995,12 +1991,12 @@ namespace ORB_SLAM3 {
         }
 
 
-        //cout << "Request CheckResetRequest Local Mapping" << endl;
+        //cout << "Request CheckRequestReset Local Mapping" << endl;
         // Step 2 暂停局部建图线程
-        mpLocalMapper->RequestStopFromLoopClose();
+        mpLocalMapper->RequestPause();
         // Wait until Local Mapping has effectively stopped
         // 等待直到完全停掉
-        while (!mpLocalMapper->CheckStopped()) {
+        while (!mpLocalMapper->CheckPaused()) {
             usleep(500);
         }
         //cout << "Local Map stopped" << endl;
@@ -2240,7 +2236,7 @@ namespace ORB_SLAM3 {
 
         // TODO Check: If new map is too small, we suppose that not informaiton can be propagated from new to old map
         if (numKFnew < 10) {
-            mpLocalMapper->Release();
+            mpLocalMapper->CancelPause();
             return;
         }
 
@@ -2260,8 +2256,8 @@ namespace ORB_SLAM3 {
     if(!good)
         cout << "BAD ESSENTIAL GRAPH 6!!" << endl;*/
 
-        // Release Local Mapping.
-        mpLocalMapper->Release();
+        // CancelPause Local Mapping.
+        mpLocalMapper->CancelPause();
 
 
         return;
@@ -2506,10 +2502,10 @@ namespace ORB_SLAM3 {
                 Verbose::PrintMess("Global Bundle Adjustment finished", Verbose::VERBOSITY_NORMAL);
                 Verbose::PrintMess("Updating map ...", Verbose::VERBOSITY_NORMAL);
 
-                mpLocalMapper->RequestStopFromLoopClose();
+                mpLocalMapper->RequestPause();
                 // Wait until Local Mapping has effectively stopped
 
-                while (!mpLocalMapper->CheckStopped() && !mpLocalMapper->CheckFinished()) {
+                while (!mpLocalMapper->CheckPaused() && !mpLocalMapper->CheckFinished()) {
                     usleep(500);
                 }
 
@@ -2681,7 +2677,7 @@ namespace ORB_SLAM3 {
 
                 // TODO Check this update
                 // mpTracker->UpdateFrameIMU(1.0f, mpTracker->GetLastKeyFrame()->GetImuBias(), mpTracker->GetLastKeyFrame());
-                mpLocalMapper->Release();
+                mpLocalMapper->CancelPause();
                 Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
             }
 
@@ -2694,19 +2690,20 @@ namespace ORB_SLAM3 {
     void LoopClosing::RequestFinish() {
         unique_lock <mutex> lock(mMutexFinish);
         // cout << "LC: Finish requested" << endl;
-        mbFinishRequested = true;
+        mbRequestFinish = true;
     }
 
 // 当前线程调用,查看是否有外部线程请求当前线程
-    bool LoopClosing::CheckFinish() {
+    bool LoopClosing::CheckRequestFinish() {
         unique_lock <mutex> lock(mMutexFinish);
-        return mbFinishRequested;
+        return mbRequestFinish;
     }
 
 // 有当前线程调用,执行完成该函数之后线程主函数退出,线程销毁
-    void LoopClosing::SetFinish() {
+    void LoopClosing::SetFinished() {
         unique_lock <mutex> lock(mMutexFinish);
         mbFinished = true;
+        cout << "LoopClose Finished" << endl;
     }
 
 // 由外部线程调用,判断当前回环检测线程是否已经正确终止了

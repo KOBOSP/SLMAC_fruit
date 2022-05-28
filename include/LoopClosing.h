@@ -120,9 +120,9 @@ protected:
     Map* mpMapToReset;
     std::mutex mMutexReset;
 
-    bool CheckFinish();
-    void SetFinish();
-    bool mbFinishRequested;
+    bool CheckRequestFinish();
+    void SetFinished();
+    bool mbRequestFinish;
     bool mbFinished;
     std::mutex mMutexFinish;
 

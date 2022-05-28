@@ -49,7 +49,7 @@ namespace ORB_SLAM3 {
     System::System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor,
                    const bool bUseViewer, const int nFrameIdInit, const string &sSeqName) :
             mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbResetThread(false), mbResetActiveMap(false),
-            mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDown(false) {
+            mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDowned(false) {
         cout << "Input Sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
 
         //Check settings file
@@ -131,10 +131,10 @@ namespace ORB_SLAM3 {
         {
             unique_lock<mutex> lock(mMutexMode);
             if (mbActivateLocalizationMode) {
-                mpLocalMapper->RequestStopFromLoopClose();
+                mpLocalMapper->RequestPause();
 
                 // Wait until Local Mapping has effectively stopped
-                while (!mpLocalMapper->CheckStopped()) {
+                while (!mpLocalMapper->CheckPaused()) {
                     usleep(500);
                 }
 
@@ -143,7 +143,7 @@ namespace ORB_SLAM3 {
             }
             if (mbDeactivateLocalizationMode) {
                 mpTracker->InformOnlyTracking(false);
-                mpLocalMapper->Release();
+                mpLocalMapper->CancelPause();
                 mbDeactivateLocalizationMode = false;
             }
         }
@@ -158,8 +158,10 @@ namespace ORB_SLAM3 {
             } else if (mbResetActiveMap) {
                 mpTracker->ResetActiveMap();
                 mbResetActiveMap = false;
-            } else if(mbShutDownRequest){
-                ShutDown();
+            } else if(mbRequestShutDown){
+                ShutDownSystem();
+                mbShutDowned = true;
+                return Sophus::SE3<float>();
             }
         }
 
@@ -204,7 +206,6 @@ namespace ORB_SLAM3 {
             mTrackedMPs = mpTracker->mCurFrame.mvpMPs;
             mTrackedKPsUn = mpTracker->mCurFrame.mvKPsUn;
         }
-
         return Tcw;
     }
 
@@ -239,33 +240,18 @@ namespace ORB_SLAM3 {
         mbResetActiveMap = true;
     }
 
-    void System::ShutDownRequest() {
+    void System::RequestShutDown() {
         unique_lock<mutex> lock(mMutexReset);
-        mbShutDownRequest = true;
+        mbRequestShutDown = true;
     }
 
 
 
-    void System::ShutDown() {
-        cout << "ShutDown" << endl;
-        cout << "mpLocalMapper" << endl;
+    void System::ShutDownSystem() {
         mpLocalMapper->RequestFinish();
-        cout << "mpLoopCloser" << endl;
         mpLoopCloser->RequestFinish();
-        cout << "mpLocalMapper mpLoopCloser" << endl;
-        if (mpViewer) {
-            mpViewer->RequestFinish();
-            cout << "mpViewer" << endl;
-            while (!mpViewer->IsFinished()){
-                usleep(500);
-                cout<<mpViewer->IsFinished()<<endl;
-            }
-            cout << "mpViewer mpViewer" << endl;
-        }
-        cout << "333" << endl;
         // Wait until all thread have effectively stopped
         while (!mpLocalMapper->CheckFinished() || !mpLoopCloser->CheckFinished() || mpLoopCloser->CheckRunningGBA()) {
-            cout << "-444-";
             if(!mpLocalMapper->CheckFinished()){
                 cout << "mpLocalMapper is not finished" << endl;
             }
@@ -274,26 +260,29 @@ namespace ORB_SLAM3 {
             }
             if(mpLoopCloser->CheckRunningGBA()){
                 cout << "mpLoopCloser is running GBA" << endl;
-                cout << "break anyway..." << endl;
-                break;
             }
             usleep(500);
         }
 
-        {
-            unique_lock<mutex> lock(mMutexReset);
-            mbShutDown = true;
+        if (mpViewer) {
+            mpViewer->RequestFinish();
+            while (!mpViewer->CheckFinished()){
+                usleep(500);
+            }
         }
+
         if (!msSaveAtlasToFile.empty()) {
             std::cout << "开始保存地图" << std::endl;
             Verbose::PrintMess("Atlas saving to file " + msSaveAtlasToFile, Verbose::VERBOSITY_NORMAL);
             SaveAtlas(FileType::BINARY_FILE);
+
         }
+        cout << "System Finished" << endl;
     }
 
-    bool System::CheckShutDown() {
+    bool System::CheckShutDowned() {
         unique_lock<mutex> lock(mMutexReset);
-        return mbShutDown;
+        return mbShutDowned;
     }
 
 
