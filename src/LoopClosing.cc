@@ -158,8 +158,8 @@ namespace ORB_SLAM3 {
                             Verbose::PrintMess("Merge finished!", Verbose::VERBOSITY_QUIET);
                         }
                         // 记录时间戳
-                        vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
-                        vdPR_MatchedTime.push_back(mpMergeMatchedKF->mTimeStamp);
+                        vdPR_CurrentTime.push_back(mpCurrentKF->mdTimestamp);
+                        vdPR_MatchedTime.push_back(mpMergeMatchedKF->mdTimestamp);
                         // 标记Place recognition结果为地图融合
                         vnPR_TypeRecogn.push_back(1);
 
@@ -191,8 +191,8 @@ namespace ORB_SLAM3 {
                     if (mbLoopDetected) {
                         // 标记时间戳
                         bool bGoodLoop = true;
-                        vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
-                        vdPR_MatchedTime.push_back(mpLoopMatchedKF->mTimeStamp);
+                        vdPR_CurrentTime.push_back(mpCurrentKF->mdTimestamp);
+                        vdPR_MatchedTime.push_back(mpLoopMatchedKF->mdTimestamp);
                         vnPR_TypeRecogn.push_back(0);
 
                         Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);

@@ -59,8 +59,8 @@ class MapPoint
         //ar & mTrackDepthR;
         //ar & mTrackProjXR;
         //ar & mTrackProjYR;
-        //ar & mbTrackInView;
-        //ar & mbTrackInViewR;
+        //ar & mbTrackInLeftView;
+        //ar & mbTrackInRightView;
         //ar & mnTrackScaleLevel;
         //ar & mnTrackScaleLevelR;
         //ar & mTrackViewCos;
@@ -174,7 +174,7 @@ public:
     float mTrackDepthR;
     float mTrackProjXR;
     float mTrackProjYR;
-    bool mbTrackInView, mbTrackInViewR;
+    bool mbTrackInLeftView, mbTrackInRightView;
     int mnTrackScaleLevel, mnTrackScaleLevelR;
     float mTrackViewCos, mTrackViewCosR;
     long unsigned int mnTrackReferenceForFrame;

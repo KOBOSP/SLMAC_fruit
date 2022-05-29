@@ -88,8 +88,8 @@ namespace ORB_SLAM3 {
                 const cv::KeyPoint &kp1 = pKF1->mvKPsUn[indexKF1];
                 const cv::KeyPoint &kp2 = pKFm->mvKPsUn[indexKF2];
 
-                const float sigmaSquare1 = pKF1->mvLevelSigma2[kp1.octave];
-                const float sigmaSquare2 = pKFm->mvLevelSigma2[kp2.octave];
+                const float sigmaSquare1 = pKF1->mvfLevelSigma2[kp1.octave];
+                const float sigmaSquare2 = pKFm->mvfLevelSigma2[kp2.octave];
 
                 mvnMaxError1.push_back(9.210 * sigmaSquare1);
                 mvnMaxError2.push_back(9.210 * sigmaSquare2);

@@ -154,8 +154,8 @@ namespace ORB_SLAM3 {
         mvIniKPsLeft = pTracker->mInitialFrame.mvKPsLeft;
         mnCurKPsLeft = mvCurKPsLeft.size();
         if (bFrameBoth) {
-            mvCurKPsRight = pTracker->mCurFrame.mvKPsRight;
             pTracker->mImgRight.copyTo(mImgRight);
+            mvCurKPsRight = pTracker->mCurFrame.mvKPsRight;
         }
 
         mvbVO = vector<bool>(mnCurKPsLeft, false);

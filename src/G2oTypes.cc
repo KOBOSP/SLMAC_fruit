@@ -55,7 +55,7 @@ ImuCamPose::ImuCamPose(KeyFrame *pKF):its(0)
     Rbc[0] = Rcb[0].transpose();
     tbc[0] = pKF->mImuCalib.mTbc.translation().cast<double>();
     pCamera[0] = pKF->mpCamera;
-    bf = pKF->mbf;
+    bf = pKF->mfBaselineFocal;
 
     if(num_cams>1)
     {
@@ -107,7 +107,7 @@ ImuCamPose::ImuCamPose(Frame *pF):its(0)
     Rbc[0] = Rcb[0].transpose();
     tbc[0] = pF->mImuCalib.mTbc.translation().cast<double>();
     pCamera[0] = pF->mpCamera;
-    bf = pF->mbf;
+    bf = pF->mfBaselineFocal;
 
     if(num_cams>1)
     {
@@ -149,7 +149,7 @@ ImuCamPose::ImuCamPose(Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc, KeyFrame* p
     Rcw[0] = _Rwc.transpose();
     tcw[0] = -Rcw[0] * _twc;
     pCamera[0] = pKF->mpCamera;
-    bf = pKF->mbf;
+    bf = pKF->mfBaselineFocal;
 
     // For posegraph 4DoF
     Rwb0 = Rwb;
@@ -287,7 +287,7 @@ void ImuCamPose::UpdateW(const double *pu)
 
 // 关于逆深度的，暂未使用
 InvDepthPoint::InvDepthPoint(double _rho, double _u, double _v, KeyFrame* pHostKF): u(_u), v(_v), rho(_rho),
-    fx(pHostKF->fx), fy(pHostKF->fy), cx(pHostKF->cx), cy(pHostKF->cy), bf(pHostKF->mbf)
+    fx(pHostKF->fx), fy(pHostKF->fy), cx(pHostKF->cx), cy(pHostKF->cy), bf(pHostKF->mfBaselineFocal)
 {
 }
 

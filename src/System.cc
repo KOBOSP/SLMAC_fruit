@@ -492,7 +492,7 @@ namespace ORB_SLAM3 {
             Sophus::SE3f Twb = pKF->GetImuPose();
             Eigen::Quaternionf q = Twb.unit_quaternion();
             Eigen::Vector3f twb = Twb.translation();
-            f << setprecision(6) << 1e9 * pKF->mTimeStamp << " " << setprecision(9)
+            f << setprecision(6) << 1e9 * pKF->mdTimestamp << " " << setprecision(9)
               << twb(0) << " " << twb(1) << " " << twb(2) << " "
               << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
         }
@@ -519,7 +519,7 @@ namespace ORB_SLAM3 {
             Sophus::SE3f Twb = pKF->GetImuPose();
             Eigen::Quaternionf q = Twb.unit_quaternion();
             Eigen::Vector3f twb = Twb.translation();
-            f << setprecision(6) << 1e9 * pKF->mTimeStamp << " " << setprecision(9)
+            f << setprecision(6) << 1e9 * pKF->mdTimestamp << " " << setprecision(9)
               << twb(0) << " " << twb(1) << " " << twb(2) << " "
               << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
 

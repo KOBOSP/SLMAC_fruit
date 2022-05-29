@@ -58,7 +58,7 @@ class KeyFrame
     {
         ar & mnId;
         ar & const_cast<long unsigned int&>(mnFrameId);
-        ar & const_cast<double&>(mTimeStamp);
+        ar & const_cast<double&>(mdTimestamp);
         // Grid
         ar & const_cast<int&>(mnGridCols);
         ar & const_cast<int&>(mnGridRows);
@@ -114,17 +114,17 @@ class KeyFrame
         ar & const_cast<float&>(invfy);
         ar & const_cast<float&>(cx);
         ar & const_cast<float&>(cy);
-        ar & const_cast<float&>(mbf);
-        ar & const_cast<float&>(mb);
-        ar & const_cast<float&>(mThDepth);
+        ar & const_cast<float&>(mfBaselineFocal);
+        ar & const_cast<float&>(mfBaseline);
+        ar & const_cast<float&>(mfThDepth);
         serializeMatrix(ar, mDistCoef, version);
         // Number of Keypoints
-        ar & const_cast<int&>(N);
+        ar & const_cast<int&>(mnKPsLeftNum);
         // KeyPoints
-        serializeVectorKeyPoints<Archive>(ar, mvKPs, version);
+        serializeVectorKeyPoints<Archive>(ar, mvKPsLeft, version);
         serializeVectorKeyPoints<Archive>(ar, mvKPsUn, version);
-        ar & const_cast<vector<float>& >(mvuRight);
-        ar & const_cast<vector<float>& >(mvDepth);
+        ar & const_cast<vector<float>& >(mvfXInRight);
+        ar & const_cast<vector<float>& >(mvfMPDepth);
         serializeMatrix<Archive>(ar,mDescriptors,version);
         // BOW
         ar & mBowVec;
@@ -136,14 +136,14 @@ class KeyFrame
         ar & const_cast<float&>(mfScaleFactor);
         ar & const_cast<float&>(mfLogScaleFactor);
         ar & const_cast<vector<float>& >(mvScaleFactors);
-        ar & const_cast<vector<float>& >(mvLevelSigma2);
-        ar & const_cast<vector<float>& >(mvInvLevelSigma2);
+        ar & const_cast<vector<float>& >(mvfLevelSigma2);
+        ar & const_cast<vector<float>& >(mvfInvLevelSigma2);
         // Image bounds and calibration
         ar & const_cast<int&>(mnMinX);
         ar & const_cast<int&>(mnMinY);
         ar & const_cast<int&>(mnMaxX);
         ar & const_cast<int&>(mnMaxY);
-        ar & boost::serialization::make_array(mK_.data(), mK_.size());
+        ar & boost::serialization::make_array(mEigenK.data(), mEigenK.size());
         // Pose
         serializeSophusSE3<Archive>(ar, mTcw, version);
         // MapPointsId associated to keypoints
@@ -312,7 +312,7 @@ public:
     long unsigned int mnId;
     const long unsigned int mnFrameId;
 
-    const double mTimeStamp;
+    const double mdTimestamp;
 
     // Grid (to speed up feature matching)
     const int mnGridCols;
@@ -371,17 +371,17 @@ public:
     float mfScale;
 
     // Calibration parameters
-    const float fx, fy, cx, cy, invfx, invfy, mbf, mb, mThDepth;
+    const float fx, fy, cx, cy, invfx, invfy, mfBaselineFocal, mfBaseline, mfThDepth;
     cv::Mat mDistCoef;
 
     // Number of KeyPoints
-    const int N;
+    const int mnKPsLeftNum;
 
     // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    const std::vector<cv::KeyPoint> mvKPs;
+    const std::vector<cv::KeyPoint> mvKPsLeft;
     const std::vector<cv::KeyPoint> mvKPsUn;
-    const std::vector<float> mvuRight; // negative value for monocular points
-    const std::vector<float> mvDepth; // negative value for monocular points
+    const std::vector<float> mvfXInRight; // negative value for monocular points
+    const std::vector<float> mvfMPDepth; // negative value for monocular points
     const cv::Mat mDescriptors;
 
     //BoW
@@ -396,8 +396,8 @@ public:
     const float mfScaleFactor;
     const float mfLogScaleFactor;
     const std::vector<float> mvScaleFactors;
-    const std::vector<float> mvLevelSigma2;
-    const std::vector<float> mvInvLevelSigma2;
+    const std::vector<float> mvfLevelSigma2;
+    const std::vector<float> mvfInvLevelSigma2;
 
     // Image bounds and calibration
     const int mnMinX;
@@ -493,7 +493,7 @@ protected:
     unsigned int mnBackupIdCamera, mnBackupIdCamera2;
 
     // Calibration
-    Eigen::Matrix3f mK_;
+    Eigen::Matrix3f mEigenK;
 
     // Mutex
     std::mutex mMutexPose; // for pose, velocity and biases
@@ -526,8 +526,8 @@ public:
 
     void PrintPointDistribution(){
         int left = 0, right = 0;
-        int Nlim = (NLeft != -1) ? NLeft : N;
-        for(int i = 0; i < N; i++){
+        int Nlim = (NLeft != -1) ? NLeft : mnKPsLeftNum;
+        for(int i = 0; i < mnKPsLeftNum; i++){
             if(mvpMapPoints[i]){
                 if(i < Nlim) left++;
                 else right++;

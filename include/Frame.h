@@ -61,8 +61,8 @@ namespace ORB_SLAM3 {
         Frame(const Frame &frame);
 
         // Constructor for stereo cameras.
-        Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimeStamp, ORBextractor *ExtractorLeft,
-              ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &K, cv::Mat &DistCoef, const float &fBF,
+        Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp, ORBextractor *ExtractorLeft,
+              ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &cvK, cv::Mat &DistCoef, const float &fBaselineFocal,
               const float &fThDepth, GeometricCamera *pCamera, Frame *pPrevF = static_cast<Frame *>(NULL),
               const IMU::Calib &ImuCalib = IMU::Calib());
 
@@ -198,11 +198,11 @@ namespace ORB_SLAM3 {
         ORBextractor *mpORBextractorLeft, *mpORBextractorRight;
 
         // Frame timestamp.
-        double mTimeStamp;
+        double mdTimestamp;
 
         // Calibration matrix and OpenCV distortion parameters.
-        cv::Mat mK;
-        Eigen::Matrix3f mK_;
+        cv::Mat mcvK;
+        Eigen::Matrix3f mEigenK;
         static float fx;
         static float fy;
         static float cx;
@@ -212,17 +212,17 @@ namespace ORB_SLAM3 {
         cv::Mat mDistCoef;
 
         // Stereo baseline multiplied by fx.
-        float mbf;
+        float mfBaselineFocal;
 
         // Stereo baseline in meters.
-        float mb;
+        float mfBaseline;
 
         // Threshold close/far points. Close points are inserted from 1 view.
         // Far points are inserted as in the monocular case from 2 views.
-        float mThDepth;
+        float mfThDepth;
 
         // Number of KeyPoints.
-        int N;
+        int mnKPsLeftNum;
 
         // Vector of keypoints (original for visualization) and undistorted (actually used by the system).
         // In the stereo case, mvKPsUn is redundant as images must be rectified.
@@ -233,15 +233,15 @@ namespace ORB_SLAM3 {
         // Corresponding stereo coordinate and depth for each keypoint.
         std::vector<MapPoint *> mvpMPs;
         // "Monocular" keypoints have a negative value.
-        std::vector<float> mvuRight;
-        std::vector<float> mvDepth;
+        std::vector<float> mvfXInRight;
+        std::vector<float> mvfMPDepth;
 
         // Bag of Words Vector structures.
         DBoW2::BowVector mBowVec;
         DBoW2::FeatureVector mFeatVec;
 
         // ORB descriptor, each row associated to a keypoint.
-        cv::Mat mDescriptors, mDescriptorsRight;
+        cv::Mat mDescriptorsLeft, mDescriptorsRight;
 
         // MapPoints associated to keypoints, NULL pointer if no association.
         // Flag to identify outlier associations.
@@ -280,16 +280,16 @@ namespace ORB_SLAM3 {
         int mnScaleLevels;
         float mfScaleFactor;
         float mfLogScaleFactor;
-        vector<float> mvScaleFactors;
-        vector<float> mvInvScaleFactors;
-        vector<float> mvLevelSigma2;
-        vector<float> mvInvLevelSigma2;
+        vector<float> mvfScaleFactors;
+        vector<float> mvfInvScaleFactors;
+        vector<float> mvfLevelSigma2;
+        vector<float> mvfInvLevelSigma2;
 
         // Undistorted Image Bounds (computed once).
-        static float mnMinX;
-        static float mnMaxX;
-        static float mnMinY;
-        static float mnMaxY;
+        static float mfMinX;
+        static float mfMaxX;
+        static float mfMinY;
+        static float mfMaxY;
 
         static bool mbInitialComputations;
 
@@ -348,8 +348,8 @@ namespace ORB_SLAM3 {
 
         void PrintPointDistribution() {
             int left = 0, right = 0;
-            int Nlim = (Nleft != -1) ? Nleft : N;
-            for (int i = 0; i < N; i++) {
+            int Nlim = mnKPsLeftNum;
+            for (int i = 0; i < mnKPsLeftNum; i++) {
                 if (mvpMPs[i] && !mvbOutlier[i]) {
                     if (i < Nlim) left++;
                     else right++;

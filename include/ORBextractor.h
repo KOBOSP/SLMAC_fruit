@@ -59,25 +59,25 @@ public:
                     cv::OutputArray _descriptors, std::vector<int> &vLappingArea);
 
     int inline GetLevels(){
-        return nlevels;}
+        return nLevels;}
 
     float inline GetScaleFactor(){
-        return scaleFactor;}
+        return fScaleFactor;}
 
     std::vector<float> inline GetScaleFactors(){
-        return mvScaleFactor;
+        return mvfScaleFactor;
     }
 
     std::vector<float> inline GetInverseScaleFactors(){
-        return mvInvScaleFactor;
+        return mvfInvScaleFactor;
     }
 
     std::vector<float> inline GetScaleSigmaSquares(){
-        return mvLevelSigma2;
+        return mvfLevelSigma2;
     }
 
     std::vector<float> inline GetInverseScaleSigmaSquares(){
-        return mvInvLevelSigma2;
+        return mvfInvLevelSigma2;
     }
 
     std::vector<cv::Mat> mvImagePyramid;
@@ -92,20 +92,20 @@ protected:
     void ComputeKeyPointsOld(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
     std::vector<cv::Point> pattern;
 
-    int nfeatures;
-    double scaleFactor;
-    int nlevels;
-    int iniThFAST;
-    int minThFAST;
+    int nFeatures;
+    double fScaleFactor;
+    int nLevels;
+    int fIniThFAST;
+    int nMinThFAST;
 
     std::vector<int> mnFeaturesPerLevel;
 
     std::vector<int> umax;
 
-    std::vector<float> mvScaleFactor;
-    std::vector<float> mvInvScaleFactor;    
-    std::vector<float> mvLevelSigma2;
-    std::vector<float> mvInvLevelSigma2;
+    std::vector<float> mvfScaleFactor;
+    std::vector<float> mvfInvScaleFactor;
+    std::vector<float> mvfLevelSigma2;
+    std::vector<float> mvfInvLevelSigma2;
 };
 
 } //namespace ORB_SLAM

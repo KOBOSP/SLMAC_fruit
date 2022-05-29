@@ -26,7 +26,7 @@ namespace ORB_SLAM3 {
     long unsigned int KeyFrame::nNextId = 0;
 
     KeyFrame::KeyFrame()
-            : mnFrameId(0), mTimeStamp(0), mnGridCols(FRAME_GRID_COLS), mnGridRows(FRAME_GRID_ROWS),
+            : mnFrameId(0), mdTimestamp(0), mnGridCols(FRAME_GRID_COLS), mnGridRows(FRAME_GRID_ROWS),
               mfGridElementWidthInv(0), mfGridElementHeightInv(0),
               mnTrackReferenceForFrame(0), mnFuseTargetForKF(0), mnBALocalForKF(0), mnBAFixedForKF(0),
               mnBALocalForMerge(0),
@@ -34,11 +34,12 @@ namespace ORB_SLAM3 {
               mnBAGlobalForKF(0),
               fx(0), fy(0), cx(0), cy(0), invfx(0), invfy(0), mnPlaceRecognitionQuery(0), mnPlaceRecognitionWords(0),
               mPlaceRecognitionScore(0),
-              mbf(0), mb(0), mThDepth(0), N(0), mvKPs(static_cast<vector<cv::KeyPoint>>(NULL)),
+              mfBaselineFocal(0), mfBaseline(0), mfThDepth(0), mnKPsLeftNum(0),
+              mvKPsLeft(static_cast<vector<cv::KeyPoint>>(NULL)),
               mvKPsUn(static_cast<vector<cv::KeyPoint>>(NULL)),
-              mvuRight(static_cast<vector<float>>(NULL)), mvDepth(static_cast<vector<float>>(NULL)), mnScaleLevels(0),
+              mvfXInRight(static_cast<vector<float>>(NULL)), mvfMPDepth(static_cast<vector<float>>(NULL)), mnScaleLevels(0),
               mfScaleFactor(0),
-              mfLogScaleFactor(0), mvScaleFactors(0), mvLevelSigma2(0), mvInvLevelSigma2(0), mnMinX(0), mnMinY(0),
+              mfLogScaleFactor(0), mvScaleFactors(0), mvfLevelSigma2(0), mvfInvLevelSigma2(0), mnMinX(0), mnMinY(0),
               mnMaxX(0),
               mnMaxY(0), mPrevKF(static_cast<KeyFrame *>(NULL)), mNextKF(static_cast<KeyFrame *>(NULL)),
               mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
@@ -48,7 +49,8 @@ namespace ORB_SLAM3 {
     }
 
     KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB)
-            : bImu(pMap->isImuInitialized()), mnFrameId(F.mnId), mTimeStamp(F.mTimeStamp), mnGridCols(FRAME_GRID_COLS),
+            : bImu(pMap->isImuInitialized()), mnFrameId(F.mnId), mdTimestamp(F.mdTimestamp),
+              mnGridCols(FRAME_GRID_COLS),
               mnGridRows(FRAME_GRID_ROWS),
               mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
               mnTrackReferenceForFrame(0), mnFuseTargetForKF(0), mnBALocalForKF(0), mnBAFixedForKF(0),
@@ -56,16 +58,18 @@ namespace ORB_SLAM3 {
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnBAGlobalForKF(0),
               mnPlaceRecognitionQuery(0), mnPlaceRecognitionWords(0), mPlaceRecognitionScore(0),
               fx(F.fx), fy(F.fy), cx(F.cx), cy(F.cy), invfx(F.invfx), invfy(F.invfy),
-              mbf(F.mbf), mb(F.mb), mThDepth(F.mThDepth), N(F.N), mvKPs(F.mvKPsLeft), mvKPsUn(F.mvKPsUn),
-              mvuRight(F.mvuRight), mvDepth(F.mvDepth), mDescriptors(F.mDescriptors.clone()),
+              mfBaselineFocal(F.mfBaselineFocal), mfBaseline(F.mfBaseline), mfThDepth(F.mfThDepth),
+              mnKPsLeftNum(F.mnKPsLeftNum), mvKPsLeft(F.mvKPsLeft), mvKPsUn(F.mvKPsUn),
+              mvfXInRight(F.mvfXInRight), mvfMPDepth(F.mvfMPDepth), mDescriptors(F.mDescriptorsLeft.clone()),
               mBowVec(F.mBowVec), mFeatVec(F.mFeatVec), mnScaleLevels(F.mnScaleLevels), mfScaleFactor(F.mfScaleFactor),
-              mfLogScaleFactor(F.mfLogScaleFactor), mvScaleFactors(F.mvScaleFactors), mvLevelSigma2(F.mvLevelSigma2),
-              mvInvLevelSigma2(F.mvInvLevelSigma2), mnMinX(F.mnMinX), mnMinY(F.mnMinY), mnMaxX(F.mnMaxX),
-              mnMaxY(F.mnMaxY), mK_(F.mK_), mPrevKF(NULL), mNextKF(NULL), mpImuPreintegrated(F.mpImuPreintegrated),
+              mfLogScaleFactor(F.mfLogScaleFactor), mvScaleFactors(F.mvfScaleFactors), mvfLevelSigma2(F.mvfLevelSigma2),
+              mvfInvLevelSigma2(F.mvfInvLevelSigma2), mnMinX(F.mfMinX), mnMinY(F.mfMinY), mnMaxX(F.mfMaxX),
+              mnMaxY(F.mfMaxY), mEigenK(F.mEigenK), mPrevKF(NULL), mNextKF(NULL), mpImuPreintegrated(F.mpImuPreintegrated),
               mImuCalib(F.mImuCalib), mvpMapPoints(F.mvpMPs), mpKeyFrameDB(pKFDB),
               mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mDistCoef(F.mDistCoef),
               mbNotErase(false), mnDataset(F.mnDataset),
-              mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb / 2), mpMap(pMap), mbCurrentPlaceRecognition(false),
+              mbToBeErased(false), mbBad(false), mHalfBaseline(F.mfBaseline / 2), mpMap(pMap),
+              mbCurrentPlaceRecognition(false),
               mnMergeCorrectedForKF(0),
               mpCamera(F.mpCamera), mpCamera2(F.mpCamera2),
               mvLeftToRightMatch(F.mvLeftToRightMatch), mvRightToLeftMatch(F.mvRightToLeftMatch),
@@ -76,8 +80,6 @@ namespace ORB_SLAM3 {
 
         // 根据指定的普通帧, 初始化用于加速匹配的网格对象信息; 其实就把每个网格中有的特征点的索引复制过来
         mGrid.resize(mnGridCols);
-        if (F.Nleft != -1)
-            mGridRight.resize(mnGridCols);
         for (int i = 0; i < mnGridCols; i++) {
             mGrid[i].resize(mnGridRows);
             if (F.Nleft != -1)
@@ -366,7 +368,7 @@ namespace ORB_SLAM3 {
         // 是否检查数目
         const bool bCheckObs = minObs > 0;
         // N是当前帧中特征点的个数
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < mnKPsLeftNum; i++) {
             MapPoint *pMP = mvpMapPoints[i];
             if (pMP) {
                 if (!pMP->isBad()) {
@@ -767,7 +769,7 @@ namespace ORB_SLAM3 {
     vector<size_t>
     KeyFrame::GetFeaturesInArea(const float &x, const float &y, const float &r, const bool bRight) const {
         vector<size_t> vIndices;
-        vIndices.reserve(N);
+        vIndices.reserve(mnKPsLeftNum);
 
         // 计算要搜索的cell的范围
         float factorX = r;
@@ -797,7 +799,7 @@ namespace ORB_SLAM3 {
                 const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
                 for (size_t j = 0, jend = vCell.size(); j < jend; j++) {
                     const cv::KeyPoint &kpUn = (NLeft == -1) ? mvKPsUn[vCell[j]]
-                                                             : (!bRight) ? mvKPs[vCell[j]]
+                                                             : (!bRight) ? mvKPsLeft[vCell[j]]
                                                                          : mvKPsRight[vCell[j]];
                     const float distx = kpUn.pt.x - x;
                     const float disty = kpUn.pt.y - y;
@@ -823,12 +825,12 @@ namespace ORB_SLAM3 {
  * @return Eigen::Vector3f              返回世界坐标系下三维点
  */
     bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D) {
-        const float z = mvDepth[i];
+        const float z = mvfMPDepth[i];
         if (z > 0) {
             // 由2维图像反投影到相机坐标系
             // 双目中mvDepth是在ComputeStereoMatches函数中求取的，rgbd中是直接测量的
-            const float u = mvKPs[i].pt.x;
-            const float v = mvKPs[i].pt.y;
+            const float u = mvKPsLeft[i].pt.x;
+            const float v = mvKPsLeft[i].pt.y;
             const float x = (u - cx) * z * invfx;
             const float y = (v - cy) * z * invfy;
             Eigen::Vector3f x3Dc(x, y, z);
@@ -843,7 +845,7 @@ namespace ORB_SLAM3 {
 // Compute Scene Depth (q=2 median). Used in monocular. 评估当前关键帧场景深度，q=2表示中值. 只是在单目情况下才会使用
 // 其实过程就是对当前关键帧下所有地图点的深度进行从小到大排序,返回距离头部其中1/q处的深度值作为当前场景的平均深度
     float KeyFrame::ComputeSceneMedianDepth(const int q) {
-        if (N == 0)
+        if (mnKPsLeftNum == 0)
             return -1.0;
 
         vector<MapPoint *> vpMapPoints;
@@ -858,11 +860,11 @@ namespace ORB_SLAM3 {
         }
 
         vector<float> vDepths;
-        vDepths.reserve(N);
+        vDepths.reserve(mnKPsLeftNum);
         Eigen::Matrix<float, 1, 3> Rcw2 = Rcw.row(2);
         float zcw = tcw(2);
         // 遍历每一个地图点,计算并保存其在当前关键帧下的深度
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < mnKPsLeftNum; i++) {
             if (mvpMapPoints[i]) {
                 MapPoint *pMP = mvpMapPoints[i];
                 Eigen::Vector3f x3Dw = pMP->GetWorldPos();
@@ -911,8 +913,8 @@ namespace ORB_SLAM3 {
     void KeyFrame::PreSave(set<KeyFrame *> &spKF, set<MapPoint *> &spMP, set<GeometricCamera *> &spCam) {
         // Save the id of each MapPoint in this KF, there can be null pointer in the vector
         mvBackupMapPointsId.clear();
-        mvBackupMapPointsId.reserve(N);
-        for (int i = 0; i < N; ++i) {
+        mvBackupMapPointsId.reserve(mnKPsLeftNum);
+        for (int i = 0; i < mnKPsLeftNum; ++i) {
 
             if (mvpMapPoints[i] && spMP.find(mvpMapPoints[i]) != spMP.end()) // Checks if the element is not null
                 mvBackupMapPointsId.push_back(mvpMapPoints[i]->mnId);
@@ -990,8 +992,8 @@ namespace ORB_SLAM3 {
         // Reference reconstruction
         // Each MapPoint sight from this KeyFrame
         mvpMapPoints.clear();
-        mvpMapPoints.resize(N);
-        for (int i = 0; i < N; ++i) {
+        mvpMapPoints.resize(mnKPsLeftNum);
+        for (int i = 0; i < mnKPsLeftNum; ++i) {
             if (mvBackupMapPointsId[i] != -1)
                 mvpMapPoints[i] = mpMPid[mvBackupMapPointsId[i]];
             else

@@ -77,9 +77,6 @@ public:
     void SetStepByStep(bool bSet);
     bool GetStepByStep();
 
-    // Load new settings
-    // The focal lenght should be similar or scale prediction will fail when projecting points
-    void ChangeCalibration(const string &strSettingPath);
 
     // Use this function if you have deactivated local mapping and you only want to localize the camera.
     void InformOnlyTracking(const bool &flag);
@@ -233,7 +230,6 @@ protected:
 
     //ORB
     ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
-    ORBextractor* mpIniORBextractor;
 
     //BoW
     ORBVocabulary* mpORBVocabulary;
@@ -261,14 +257,14 @@ protected:
     Atlas* mpAtlas;
 
     //Calibration matrix
-    cv::Mat mK;
-    Eigen::Matrix3f mK_;
+    cv::Mat mCvK;
+    Eigen::Matrix3f mEigenK;
     cv::Mat mDistCoef;
-    float mbf;
+    float mfBaselineFocal;
     float mImageScale;
 
     float mImuFreq;
-    double mImuPer;
+    double mImuInterval;
     bool mInsertKFsLost;
 
     //New KeyFrame rules (according to fps)
@@ -281,7 +277,7 @@ protected:
     // Threshold close/far points
     // Points seen as close by the stereo/RGBD sensor are considered reliable
     // and inserted from just one frame. Far points requiere a match in two keyframes.
-    float mThDepth;
+    float mfThDepth;
 
     // For RGB-D inputs only. For some datasets (e.g. TUM) the depthmap values are scaled.
     float mDepthMapFactor;

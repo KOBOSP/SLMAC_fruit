@@ -142,7 +142,7 @@ namespace ORB_SLAM3 {
                                           mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
                             // 如果距离大于5厘米，记录当前KF和上一KF时间戳的差，累加到mTinit
                             if (dist > 0.05)
-                                mTinit += mpCurrentKeyFrame->mTimeStamp - mpCurrentKeyFrame->mPrevKF->mTimeStamp;
+                                mTinit += mpCurrentKeyFrame->mdTimestamp - mpCurrentKeyFrame->mPrevKF->mdTimestamp;
                             // 当前关键帧所在的地图尚未完成IMU BA2（IMU第三阶段初始化）
                             if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()) {
                                 // 如果累计时间差小于10s 并且 距离小于2厘米，认为运动幅度太小，不足以初始化IMU，将mbBadImu设置为true
@@ -472,7 +472,7 @@ namespace ORB_SLAM3 {
             if (!mbMonocular) {
                 // 如果是双目相机，关键帧间距小于本身的基线时不生成3D点
                 // 因为太短的基线下能够恢复的地图点不稳定
-                if (baseline < pKF2->mb)
+                if (baseline < pKF2->mfBaseline)
                     continue;
             } else {
                 // 单目相机情况
@@ -524,11 +524,11 @@ namespace ORB_SLAM3 {
                 // 当前匹配在当前关键帧中的特征点
                 const cv::KeyPoint &kp1 = (mpCurrentKeyFrame->NLeft == -1) ? mpCurrentKeyFrame->mvKPsUn[idx1]
                                                                            : (idx1 < mpCurrentKeyFrame->NLeft)
-                                                                             ? mpCurrentKeyFrame->mvKPs[idx1]
+                                                                             ? mpCurrentKeyFrame->mvKPsLeft[idx1]
                                                                              : mpCurrentKeyFrame->mvKPsRight[idx1 -
                                                                                                              mpCurrentKeyFrame->NLeft];
                 // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
-                const float kp1_ur = mpCurrentKeyFrame->mvuRight[idx1];
+                const float kp1_ur = mpCurrentKeyFrame->mvfXInRight[idx1];
                 bool bStereo1 = (!mpCurrentKeyFrame->mpCamera2 && kp1_ur >= 0);
                 // 查看点idx1是否为右目的点
                 const bool bRight1 = (mpCurrentKeyFrame->NLeft == -1 || idx1 < mpCurrentKeyFrame->NLeft) ? false
@@ -538,12 +538,12 @@ namespace ORB_SLAM3 {
                 // 5.2
                 // 当前匹配在邻接关键帧中的特征点
                 const cv::KeyPoint &kp2 = (pKF2->NLeft == -1) ? pKF2->mvKPsUn[idx2]
-                                                              : (idx2 < pKF2->NLeft) ? pKF2->mvKPs[idx2]
+                                                              : (idx2 < pKF2->NLeft) ? pKF2->mvKPsLeft[idx2]
                                                                                      : pKF2->mvKPsRight[idx2 -
                                                                                                         pKF2->NLeft];
                 // mvuRight中存放着双目的深度值，如果不是双目，其值将为-1
                 // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
-                const float kp2_ur = pKF2->mvuRight[idx2];
+                const float kp2_ur = pKF2->mvfXInRight[idx2];
                 bool bStereo2 = (!pKF2->mpCamera2 && kp2_ur >= 0);
                 // 查看点idx2是否为右目的点
                 const bool bRight2 = (pKF2->NLeft == -1 || idx2 < pKF2->NLeft) ? false
@@ -621,10 +621,10 @@ namespace ORB_SLAM3 {
                     // 假设是平行的双目相机，计算出两个相机观察这个点的时候的视差角;
                     // ? 感觉直接使用向量夹角的方式计算会准确一些啊（双目的时候），那么为什么不直接使用那个呢？
                     // 回答：因为双目深度值、基线是更可靠的，比特征匹配再三角化出来的稳
-                    cosParallaxStereo1 = cos(2 * atan2(mpCurrentKeyFrame->mb / 2, mpCurrentKeyFrame->mvDepth[idx1]));
+                    cosParallaxStereo1 = cos(2 * atan2(mpCurrentKeyFrame->mfBaseline / 2, mpCurrentKeyFrame->mvfMPDepth[idx1]));
                 else if (bStereo2)
                     //传感器是双目相机,并且邻接的关键帧的这个点有对应的深度，和上面一样操作
-                    cosParallaxStereo2 = cos(2 * atan2(pKF2->mb / 2, pKF2->mvDepth[idx2]));
+                    cosParallaxStereo2 = cos(2 * atan2(pKF2->mfBaseline / 2, pKF2->mvfMPDepth[idx2]));
 
                 // 统计用的
                 if (bStereo1 || bStereo2) totalStereoPts++;
@@ -682,7 +682,7 @@ namespace ORB_SLAM3 {
 
                 //Check reprojection error in first keyframe
                 // Step 5.7：计算3D点在当前关键帧下的重投影误差
-                const float &sigmaSquare1 = mpCurrentKeyFrame->mvLevelSigma2[kp1.octave];
+                const float &sigmaSquare1 = mpCurrentKeyFrame->mvfLevelSigma2[kp1.octave];
                 const float x1 = Rcw1.row(0).dot(x3D) + tcw1(0);
                 const float y1 = Rcw1.row(1).dot(x3D) + tcw1(1);
                 const float invz1 = 1.0 / z1;
@@ -701,7 +701,7 @@ namespace ORB_SLAM3 {
                     // 双目情况
                     float u1 = fx1 * x1 * invz1 + cx1;
                     // 根据视差公式计算假想的右目坐标
-                    float u1_r = u1 - mpCurrentKeyFrame->mbf * invz1;
+                    float u1_r = u1 - mpCurrentKeyFrame->mfBaselineFocal * invz1;
                     float v1 = fy1 * y1 * invz1 + cy1;
                     float errX1 = u1 - kp1.pt.x;
                     float errY1 = v1 - kp1.pt.y;
@@ -713,7 +713,7 @@ namespace ORB_SLAM3 {
 
                 //Check reprojection error in second keyframe
                 // 计算3D点在另一个关键帧下的重投影误差，操作同上
-                const float sigmaSquare2 = pKF2->mvLevelSigma2[kp2.octave];
+                const float sigmaSquare2 = pKF2->mvfLevelSigma2[kp2.octave];
                 const float x2 = Rcw2.row(0).dot(x3D) + tcw2(0);
                 const float y2 = Rcw2.row(1).dot(x3D) + tcw2(1);
                 const float invz2 = 1.0 / z2;
@@ -725,7 +725,7 @@ namespace ORB_SLAM3 {
                         continue;
                 } else {
                     float u2 = fx2 * x2 * invz2 + cx2;
-                    float u2_r = u2 - mpCurrentKeyFrame->mbf * invz2;
+                    float u2_r = u2 - mpCurrentKeyFrame->mfBaselineFocal * invz2;
                     float v2 = fy2 * y2 * invz2 + cy2;
                     float errX2 = u2 - kp2.pt.x;
                     float errY2 = v2 - kp2.pt.y;
@@ -1103,7 +1103,7 @@ namespace ORB_SLAM3 {
                     if (!pMP->isBad()) {
                         if (!mbMonocular) {
                             // 对于双目，仅考虑近处（不超过基线的40倍 ）的地图点
-                            if (pKF->mvDepth[i] > pKF->mThDepth || pKF->mvDepth[i] < 0)
+                            if (pKF->mvfMPDepth[i] > pKF->mfThDepth || pKF->mvfMPDepth[i] < 0)
                                 continue;
                         }
 
@@ -1111,7 +1111,7 @@ namespace ORB_SLAM3 {
                         // pMP->Observations() 是观测到该地图点的相机总数目（单目1，双目2）
                         if (pMP->Observations() > thObs) {
                             const int &scaleLevel = (pKF->NLeft == -1) ? pKF->mvKPsUn[i].octave
-                                                                       : (i < pKF->NLeft) ? pKF->mvKPs[i].octave
+                                                                       : (i < pKF->NLeft) ? pKF->mvKPsLeft[i].octave
                                                                                           : pKF->mvKPsRight[i].octave;
                             const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
                             int nObs = 0;
@@ -1128,7 +1128,7 @@ namespace ORB_SLAM3 {
                                     scaleLeveli = pKFi->mvKPsUn[leftIndex].octave;
                                 else {
                                     if (leftIndex != -1) {
-                                        scaleLeveli = pKFi->mvKPs[leftIndex].octave;
+                                        scaleLeveli = pKFi->mvKPsLeft[leftIndex].octave;
                                     }
                                     if (rightIndex != -1) {
                                         int rightLevel = pKFi->mvKPsRight[rightIndex - pKFi->NLeft].octave;
@@ -1168,7 +1168,7 @@ namespace ORB_SLAM3 {
 
                     // 关键帧具有前后关键帧
                     if (pKF->mPrevKF && pKF->mNextKF) {
-                        const float t = pKF->mNextKF->mTimeStamp - pKF->mPrevKF->mTimeStamp;
+                        const float t = pKF->mNextKF->mdTimestamp - pKF->mPrevKF->mdTimestamp;
                         // 下面两个括号里的内容一模一样
                         // imu初始化了，且距当前帧的ID超过21，且前后两个关键帧时间间隔小于3s
                         // 或者时间间隔小于0.5s
@@ -1369,8 +1369,8 @@ namespace ORB_SLAM3 {
         if (vpKF.size() < nMinKF)
             return;
 
-        mFirstTs = vpKF.front()->mTimeStamp;
-        if (mpCurrentKeyFrame->mTimeStamp - mFirstTs < minTime)
+        mFirstTs = vpKF.front()->mdTimestamp;
+        if (mpCurrentKeyFrame->mdTimestamp - mFirstTs < minTime)
             return;
 
         // 正在做IMU的初始化，在tracking里面使用，如果为true，暂不添加关键帧
@@ -1435,7 +1435,7 @@ namespace ORB_SLAM3 {
             // 获得重力方向到当前速度方向的旋转向量
             Rwg = Sophus::SO3f::exp(vzg).matrix();
             mRwg = Rwg.cast<double>();
-            mTinit = mpCurrentKeyFrame->mTimeStamp - mFirstTs;
+            mTinit = mpCurrentKeyFrame->mdTimestamp - mFirstTs;
         } else {
             mRwg = Eigen::Matrix3d::Identity();
             mbg = mpCurrentKeyFrame->GetGyroBias().cast<double>();
@@ -1445,7 +1445,7 @@ namespace ORB_SLAM3 {
         mScale = 1.0;
 
         // 暂时没发现在别的地方出现过
-        mInitTime = mpTracker->mLastFrame.mTimeStamp - vpKF.front()->mTimeStamp;
+        mInitTime = mpTracker->mLastFrame.mdTimestamp - vpKF.front()->mdTimestamp;
 
         std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
         // 3. 计算残差及偏置差，优化尺度重力方向及速度偏置，偏置先验为0，双目时不优化尺度
@@ -1493,7 +1493,7 @@ namespace ORB_SLAM3 {
         if (!mpAtlas->isImuInitialized()) {
             // ! 重要！标记初始化成功
             mpAtlas->SetImuInitialized();
-            mpTracker->t0IMU = mpTracker->mCurFrame.mTimeStamp;
+            mpTracker->t0IMU = mpTracker->mCurFrame.mdTimestamp;
             mpCurrentKeyFrame->bImu = true;
         }
 
@@ -1732,7 +1732,7 @@ namespace ORB_SLAM3 {
     double LocalMapping::GetCurrKFTime() {
 
         if (mpCurrentKeyFrame) {
-            return mpCurrentKeyFrame->mTimeStamp;
+            return mpCurrentKeyFrame->mdTimestamp;
         } else
             return 0.0;
     }

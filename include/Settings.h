@@ -111,8 +111,8 @@ namespace ORB_SLAM3 {
         bool mbNeedToResize;
 
         Sophus::SE3f mTlr;
-        float mThDepth;
-        float mBaselineFocal, mBaseline;
+        float mfThDepth;
+        float mfBaselineFocal, mfBaseline;
 
         /*
          * Rectification stuff

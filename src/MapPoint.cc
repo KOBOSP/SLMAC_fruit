@@ -53,8 +53,8 @@ MapPoint::MapPoint(const Eigen::Vector3f &Pos, KeyFrame *pRefKF, Map* pMap):
 
     mNormalVector.setZero();
 
-    mbTrackInViewR = false;
-    mbTrackInView = false;
+    mbTrackInRightView = false;
+    mbTrackInLeftView = false;
 
     // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
     unique_lock<mutex> lock(mpMap->mMutexPointCreation);
@@ -114,13 +114,13 @@ MapPoint::MapPoint(const Eigen::Vector3f &Pos, Map* pMap, Frame* pFrame, const i
     const int level = (pFrame -> Nleft == -1) ? pFrame->mvKPsUn[idxF].octave
                                               : (idxF < pFrame -> Nleft) ? pFrame->mvKPsLeft[idxF].octave
                                                                          : pFrame -> mvKPsRight[idxF].octave;
-    const float levelScaleFactor =  pFrame->mvScaleFactors[level];
+    const float levelScaleFactor =  pFrame->mvfScaleFactors[level];
     const int nLevels = pFrame->mnScaleLevels;
 
     mfMaxDistance = dist*levelScaleFactor;
-    mfMinDistance = mfMaxDistance/pFrame->mvScaleFactors[nLevels-1];
+    mfMinDistance = mfMaxDistance/pFrame->mvfScaleFactors[nLevels - 1];
 
-    pFrame->mDescriptors.row(idxF).copyTo(mDescriptor);
+    pFrame->mDescriptorsLeft.row(idxF).copyTo(mDescriptor);
 
     // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
     unique_lock<mutex> lock(mpMap->mMutexPointCreation);
@@ -194,7 +194,7 @@ void MapPoint::AddObservation(KeyFrame* pKF, int idx)
     // 如果没有添加过观测，记录下能观测到该MapPoint的KF和该MapPoint在KF中的索引
     mObservations[pKF]=indexes;
 
-    if(!pKF->mpCamera2 && pKF->mvuRight[idx]>=0)
+    if(!pKF->mpCamera2 && pKF->mvfXInRight[idx] >= 0)
         nObs+=2;
     else
         nObs++;
@@ -213,7 +213,7 @@ void MapPoint::EraseObservation(KeyFrame* pKF)
             int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
 
             if(leftIndex != -1){
-                if(!pKF->mpCamera2 && pKF->mvuRight[leftIndex]>=0)
+                if(!pKF->mpCamera2 && pKF->mvfXInRight[leftIndex] >= 0)
                     nObs-=2;
                 else
                     nObs--;
@@ -622,7 +622,7 @@ void MapPoint::UpdateNormalAndDepth()
     }
     else if(leftIndex != -1)
     {
-        level = pRefKF -> mvKPs[leftIndex].octave;
+        level = pRefKF -> mvKPsLeft[leftIndex].octave;
     }
     else{
         level = pRefKF -> mvKPsRight[rightIndex - pRefKF -> NLeft].octave;

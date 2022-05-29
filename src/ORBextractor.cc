@@ -473,57 +473,58 @@ namespace ORB_SLAM3 {
                                int _iniThFAST,        //指定初始的FAST特征点提取参数，可以提取出最明显的角点
                                int _minThFAST) :        //如果因为图像纹理不丰富提取出的特征点不多，为了达到想要的特征点数目，
     //就使用这个参数提取出不是那么明显的角点
-            nfeatures(_nfeatures), scaleFactor(_scaleFactor), nlevels(_nlevels),
-            iniThFAST(_iniThFAST), minThFAST(_minThFAST)//设置这些参数
+            nFeatures(_nfeatures), fScaleFactor(_scaleFactor), nLevels(_nlevels),
+            fIniThFAST(_iniThFAST), nMinThFAST(_minThFAST)//设置这些参数
     {
         //存储每层图像缩放系数的vector调整为符合图层数目的大小
-        mvScaleFactor.resize(nlevels);
+        mvfScaleFactor.resize(nLevels);
         //存储这个sigma^2，其实就是每层图像相对初始图像缩放因子的平方
-        mvLevelSigma2.resize(nlevels);
+        mvfLevelSigma2.resize(nLevels);
         //对于初始图像，这两个参数都是1
-        mvScaleFactor[0] = 1.0f;
-        mvLevelSigma2[0] = 1.0f;
+        mvfScaleFactor[0] = 1.0f;
+        mvfLevelSigma2[0] = 1.0f;
         //然后逐层计算图像金字塔中图像相当于初始图像的缩放系数
-        for (int i = 1; i < nlevels; i++) {
+        for (int i = 1; i < nLevels; i++) {
             //其实就是这样累乘计算得出来的
-            mvScaleFactor[i] = mvScaleFactor[i - 1] * scaleFactor;
+            mvfScaleFactor[i] = mvfScaleFactor[i - 1] * fScaleFactor;
             //原来这里的sigma^2就是每层图像相对于初始图像缩放因子的平方
-            mvLevelSigma2[i] = mvScaleFactor[i] * mvScaleFactor[i];
+            mvfLevelSigma2[i] = mvfScaleFactor[i] * mvfScaleFactor[i];
         }
 
         //接下来的两个向量保存上面的参数的倒数，操作都是一样的就不再赘述了
-        mvInvScaleFactor.resize(nlevels);
-        mvInvLevelSigma2.resize(nlevels);
-        for (int i = 0; i < nlevels; i++) {
-            mvInvScaleFactor[i] = 1.0f / mvScaleFactor[i];
-            mvInvLevelSigma2[i] = 1.0f / mvLevelSigma2[i];
+        mvfInvScaleFactor.resize(nLevels);
+        mvfInvLevelSigma2.resize(nLevels);
+        for (int i = 0; i < nLevels; i++) {
+            mvfInvScaleFactor[i] = 1.0f / mvfScaleFactor[i];
+            mvfInvLevelSigma2[i] = 1.0f / mvfLevelSigma2[i];
         }
 
         //调整图像金字塔vector以使得其符合咱们设定的图像层数
-        mvImagePyramid.resize(nlevels);
+        mvImagePyramid.resize(nLevels);
 
         //每层需要提取出来的特征点个数，这个向量也要根据图像金字塔设定的层数进行调整
-        mnFeaturesPerLevel.resize(nlevels);
+        mnFeaturesPerLevel.resize(nLevels);
 
         //图片降采样缩放系数的倒数
-        float factor = 1.0f / scaleFactor;
+        float fInvFactor = 1.0f / fScaleFactor;
         //每个单位缩放系数所希望的特征点个数
         float nDesiredFeaturesPerScale =
-                nfeatures * (1 - factor) / (1 - (float) pow((double) factor, (double) nlevels));
+                nFeatures * (1 - fInvFactor) / (1 - (float) pow((double) fInvFactor, (double) nLevels));
 
         //用于在特征点个数分配的，特征点的累计计数清空
-        int sumFeatures = 0;
+        int nSumFeatures = 0;
         //开始逐层计算要分配的特征点个数，顶层图像除外（看循环后面）
-        for (int level = 0; level < nlevels - 1; level++) {
+        for (int level = 0; level < nLevels - 1; level++) {
             //分配 cvRound : 返回个参数最接近的整数值
             mnFeaturesPerLevel[level] = cvRound(nDesiredFeaturesPerScale);
             //累计
-            sumFeatures += mnFeaturesPerLevel[level];
+            nSumFeatures += mnFeaturesPerLevel[level];
             //乘系数
-            nDesiredFeaturesPerScale *= factor;
+            nDesiredFeaturesPerScale *= fInvFactor;
+            cout<<"nDesiredFeaturesPerScale: "<<nDesiredFeaturesPerScale<<endl;
         }
         //由于前面的特征点个数取整操作，可能会导致剩余一些特征点个数没有被分配，所以这里就将这个余出来的特征点分配到最高的图层中
-        mnFeaturesPerLevel[nlevels - 1] = std::max(nfeatures - sumFeatures, 0);
+        mnFeaturesPerLevel[nLevels - 1] = std::max(nFeatures - nSumFeatures, 0);
 
         //成员变量pattern的长度，也就是点的个数，这里的512表示512个点（上面的数组中是存储的坐标所以是256*2*2）
         const int npoints = 512;
@@ -978,7 +979,7 @@ namespace ORB_SLAM3 {
         vector<cv::KeyPoint> vResultKeys;
 
         //调整大小为要提取的特征点数目
-        vResultKeys.reserve(nfeatures);
+        vResultKeys.reserve(nFeatures);
 
         //遍历这个节点列表
         for (list<ExtractorNode>::iterator lit = lNodes.begin(); lit != lNodes.end(); lit++) {
@@ -1016,14 +1017,14 @@ namespace ORB_SLAM3 {
     //第二层存储的是整个图像金字塔中的所有图层里面的所有特征点
     {
         //重新调整图像层数
-        allKeypoints.resize(nlevels);
+        allKeypoints.resize(nLevels);
 
         //图像cell的尺寸，是个正方形，可以理解为边长in像素坐标
         const float W = 35;
 
         // 对每一层图像做处理
         //遍历所有图像
-        for (int level = 0; level < nlevels; ++level) {
+        for (int level = 0; level < nLevels; ++level) {
             //计算这层图像的坐标边界， NOTICE 注意这里是坐标边界，EDGE_THRESHOLD指的应该是可以提取特征点的有效图像边界，后面会一直使用“有效图像边界“这个自创名词
             const int minBorderX = EDGE_THRESHOLD - 3;            //这里的3是因为在计算FAST特征点的时候，需要建立一个半径为3的圆
             const int minBorderY = minBorderX;                    //minY的计算就可以直接拷贝上面的计算结果了
@@ -1033,7 +1034,7 @@ namespace ORB_SLAM3 {
             //存储需要进行平均分配的特征点
             vector<cv::KeyPoint> vToDistributeKeys;
             //一般地都是过量采集，所以这里预分配的空间大小是nfeatures*10
-            vToDistributeKeys.reserve(nfeatures * 10);
+            vToDistributeKeys.reserve(nFeatures * 10);
 
             //计算进行特征点提取的图像区域尺寸
             const float width = (maxBorderX - minBorderX);
@@ -1084,7 +1085,7 @@ namespace ORB_SLAM3 {
                     //调用opencv的库函数来检测FAST角点
                     FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX),    //待检测的图像，这里就是当前遍历到的图像块
                          vKeysCell,            //存储角点位置的容器
-                         iniThFAST,            //检测阈值
+                         fIniThFAST,            //检测阈值
                          true);                //使能非极大值抑制
 
                     //如果这个图像块中使用默认的FAST检测阈值没有能够检测到角点
@@ -1092,7 +1093,7 @@ namespace ORB_SLAM3 {
                         //那么就使用更低的阈值来进行重新检测
                         FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX),    //待检测的图像
                              vKeysCell,        //存储角点位置的容器
-                             minThFAST,        //更低的检测阈值
+                             nMinThFAST,        //更低的检测阈值
                              true);            //使能非极大值抑制
                     }
 
@@ -1115,7 +1116,7 @@ namespace ORB_SLAM3 {
             //声明一个对当前图层的特征点的容器的引用
             vector<KeyPoint> &keypoints = allKeypoints[level];
             //并且调整其大小为欲提取出来的特征点个数（当然这里也是扩大了的，因为不可能所有的特征点都是在这一个图层中提取出来的）
-            keypoints.reserve(nfeatures);
+            keypoints.reserve(nFeatures);
 
             // 根据mnFeatuvector<KeyPoint> & keypoints = allKeypoints[level];resPerLevel,即该层的兴趣点数,对特征点进行剔除
             //返回值是一个保存有特征点的vector容器，含有剔除后的保留下来的特征点
@@ -1128,7 +1129,7 @@ namespace ORB_SLAM3 {
                                           level);                        //当前层图像所在的图层
 
             //PATCH_SIZE是对于底层的初始图像来说的，现在要根据当前图层的尺度缩放倍数进行缩放得到缩放后的PATCH大小 和特征点的方向计算有关
-            const int scaledPatchSize = PATCH_SIZE * mvScaleFactor[level];
+            const int scaledPatchSize = PATCH_SIZE * mvfScaleFactor[level];
 
             // Add border to coordinates and scale information
             //获取剔除过程后保留下来的特征点数目
@@ -1147,7 +1148,7 @@ namespace ORB_SLAM3 {
 
         // compute orientations
         //然后计算这些特征点的方向信息，注意这里还是分层计算的
-        for (int level = 0; level < nlevels; ++level)
+        for (int level = 0; level < nLevels; ++level)
             computeOrientation(mvImagePyramid[level],    //对应的图层的图像
                                allKeypoints[level],    //这个图层中提取并保留下来的特征点容器
                                umax);                    //以及PATCH的横坐标边界
@@ -1159,13 +1160,13 @@ namespace ORB_SLAM3 {
             std::vector<std::vector<KeyPoint> > &allKeypoints)        //输出，所有图层上的所有特征点
     {
         //根据图像金字塔的图层数调整这个变量中的图层数
-        allKeypoints.resize(nlevels);
+        allKeypoints.resize(nLevels);
 
         //计算底层图像的长宽比，其实也就是所有图像的长宽比
         float imageRatio = (float) mvImagePyramid[0].cols / mvImagePyramid[0].rows;
 
         //开始遍历所有图层的图像
-        for (int level = 0; level < nlevels; ++level) {
+        for (int level = 0; level < nLevels; ++level) {
             //获取每层图像希望提取出来的特征点
             const int nDesiredFeatures = mnFeaturesPerLevel[level];
 
@@ -1290,7 +1291,7 @@ namespace ORB_SLAM3 {
                     //调用opencv的库函数来检测FAST角点
                     FAST(cellImage,                //cell中的图像
                          cellKeyPoints[i][j],    //用于保存提取出来的特征点的vector容器
-                         iniThFAST,                //初步的FAST检测阈值
+                         fIniThFAST,                //初步的FAST检测阈值
                          true);                    //使能非极大值抑制
 
                     //如果当前cell中提取出来的特征点的个数小于3
@@ -1300,7 +1301,7 @@ namespace ORB_SLAM3 {
                         //然后使用更小的参数阈值，进行重新提取
                         FAST(cellImage,                //cell中的图像
                              cellKeyPoints[i][j],    //输出变量，用于保存提取出来的特征点的vector
-                             minThFAST,                //较小的那个FAST阈值
+                             nMinThFAST,                //较小的那个FAST阈值
                              true);                    //使能非极大值抑制
                     }//如果当前cell中提取出来的特征点的个数小于3
 
@@ -1386,7 +1387,7 @@ namespace ORB_SLAM3 {
             //计算在本层图像的时候，图像patch块经过尺度缩放之后的大小（这里的缩放因子就是自己正常认为的缩放因子）
             //TODO 这里的patch用于进行什么操作？又为什么一定要在当前的图层上进行而不是在底层图像上进行？怀疑这个操作是和计算特征点方向有关
             //的变量，但是目前还是没有在本文件中发现对这个变量的使用
-            const int scaledPatchSize = PATCH_SIZE * mvScaleFactor[level];
+            const int scaledPatchSize = PATCH_SIZE * mvfScaleFactor[level];
 
             // Retain by score and transform coordinates
             //根据响应值保留符合要求的特征点，并且进行坐标的转换
@@ -1438,7 +1439,7 @@ namespace ORB_SLAM3 {
         // and compute orientations
         //最后计算这些特征点的方向信息
         //遍历图像金字塔中的每个图层
-        for (int level = 0; level < nlevels; ++level)
+        for (int level = 0; level < nLevels; ++level)
             //计算这个图层所有特征点的方向信息
             computeOrientation(mvImagePyramid[level],    //这个图层的图像
                                allKeypoints[level],    //这个图层的特征点对象vector容器
@@ -1493,12 +1494,12 @@ namespace ORB_SLAM3 {
 
         // Step 3 计算图像的特征点，并且将特征点进行均匀化。均匀的特征点可以提高位姿计算精度
         // 存储所有的特征点，注意此处为二维的vector，第一维存储的是金字塔的层数，第二维存储的是那一层金字塔图像里提取的所有特征点
-        vector<vector<KeyPoint> > allKeypoints;
+        vector<vector<KeyPoint> > vvKeyPointInLay;
         //使用四叉树的方式计算每层图像的特征点并进行分配
-        ComputeKeyPointsOctTree(allKeypoints);
+        ComputeKeyPointsOctTree(vvKeyPointInLay);
 
         //使用传统的方法提取并平均分配图像的特征点，作者并未使用
-        //ComputeKeyPointsOld(allKeypoints);
+        //ComputeKeyPointsOld(vvKeyPointInLay);
 
 
         // Step 4 拷贝图像描述子到新的矩阵descriptors
@@ -1507,8 +1508,8 @@ namespace ORB_SLAM3 {
         //统计整个图像金字塔中的特征点
         int nkeypoints = 0;
         //开始遍历每层图像金字塔，并且累加每层的特征点个数
-        for (int level = 0; level < nlevels; ++level)
-            nkeypoints += (int) allKeypoints[level].size();
+        for (int level = 0; level < nLevels; ++level)
+            nkeypoints += (int) vvKeyPointInLay[level].size();
 
         //如果本图像金字塔中没有任何的特征点
         if (nkeypoints == 0)
@@ -1533,9 +1534,9 @@ namespace ORB_SLAM3 {
         int offset = 0;
         //Modified for speeding up stereo fisheye matching
         int monoIndex = 0, stereoIndex = nkeypoints - 1;
-        for (int level = 0; level < nlevels; ++level) {
+        for (int level = 0; level < nLevels; ++level) {
             //获取在allKeypoints中当前层特征点容器的句柄
-            vector<KeyPoint> &keypoints = allKeypoints[level];
+            vector<KeyPoint> &keypoints = vvKeyPointInLay[level];
             //本层的特征点数
             int nkeypointsLevel = (int) keypoints.size();
 
@@ -1572,7 +1573,7 @@ namespace ORB_SLAM3 {
             // Step 6 对非第0层图像中的特征点的坐标恢复到第0层图像（原图像）的坐标系下
             // ? 得到所有层特征点在第0层里的坐标放到_keypoints里面
             // 对于第0层的图像特征点，他们的坐标就不需要再进行恢复了
-            float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
+            float scale = mvfScaleFactor[level]; //getScale(level, firstLevel, fScaleFactor);
             int i = 0;
             for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
                          keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint) {
@@ -1604,8 +1605,8 @@ namespace ORB_SLAM3 {
      * @param image 输入原图像，这个输入图像所有像素都是有效的，也就是说都是可以在其上提取出FAST角点的
      */
     void ORBextractor::ComputePyramid(cv::Mat image) {
-        for (int level = 0; level < nlevels; ++level) {
-            float scale = mvInvScaleFactor[level];
+        for (int level = 0; level < nLevels; ++level) {
+            float scale = mvfInvScaleFactor[level];
             Size sz(cvRound((float) image.cols * scale), cvRound((float) image.rows * scale));
             Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);
             Mat temp(wholeSize, image.type()), masktemp;

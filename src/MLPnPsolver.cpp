@@ -102,7 +102,7 @@ MLPnPsolver::MLPnPsolver(const Frame &F,                                // 输�
                 mvP2D.push_back(kp.pt);
 
                 // 保存卡方检验中的sigma值
-                mvSigma2.push_back(F.mvLevelSigma2[kp.octave]);
+                mvSigma2.push_back(F.mvfLevelSigma2[kp.octave]);
 
                 // Bearing vector should be normalized
                 //  特征点投影，并计算单位向量

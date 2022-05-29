@@ -194,9 +194,9 @@ namespace ORB_SLAM3 {
         //Load stereo extrinsic calibration
         cv::Mat cvTlr = ReadParameter<cv::Mat>(fSettings, "Stereo.T_c1_c2", found);
         mTlr = Converter::toSophus(cvTlr);
-        mBaseline = mTlr.translation().norm();
-        mBaselineFocal = mBaseline * mCalibration1->GetParameter(0);
-        mThDepth = ReadParameter<float>(fSettings, "Stereo.ThDepth", found);
+        mfBaseline = mTlr.translation().norm();
+        mfBaselineFocal = mfBaseline * mCalibration1->GetParameter(0);
+        mfThDepth = ReadParameter<float>(fSettings, "Stereo.ThDepth", found);
     }
 
     void Settings::ReadImageInfo(cv::FileStorage &fSettings) {
@@ -226,10 +226,10 @@ namespace ORB_SLAM3 {
     void Settings::ReadORB(cv::FileStorage &fSettings) {
         bool found;
         mnFeatures = ReadParameter<int>(fSettings, "ORBextractor.nFeatures", found);
-        mfScaleFactor = ReadParameter<float>(fSettings, "ORBextractor.scaleFactor", found);
+        mfScaleFactor = ReadParameter<float>(fSettings, "ORBextractor.fScaleFactor", found);
         mnLevels = ReadParameter<int>(fSettings, "ORBextractor.nLevels", found);
-        mnInitThFAST = ReadParameter<int>(fSettings, "ORBextractor.iniThFAST", found);
-        mnMinThFAST = ReadParameter<int>(fSettings, "ORBextractor.minThFAST", found);
+        mnInitThFAST = ReadParameter<int>(fSettings, "ORBextractor.nIniThFAST", found);
+        mnMinThFAST = ReadParameter<int>(fSettings, "ORBextractor.nMinThFAST", found);
     }
 
     void Settings::ReadViewer(cv::FileStorage &fSettings) {
@@ -298,7 +298,7 @@ namespace ORB_SLAM3 {
         mCalibration1->setParameter(P1.at<double>(1, 2), 3);
 
         //Update bf
-        mBaselineFocal = mBaseline * P1.at<double>(0, 0);
+        mfBaselineFocal = mfBaseline * P1.at<double>(0, 0);
 
         //Update relative pose between camera 1 and IMU if necessary
         Eigen::Matrix3f eigenR_r1_u1;
@@ -344,8 +344,8 @@ namespace ORB_SLAM3 {
 
 
         output << "\t-Sequence FPS: " << settings.mfImgFps << endl;
-        output << "\t-Stereo baseline: " << settings.mBaseline << endl;
-        output << "\t-Stereo depth threshold : " << settings.mThDepth << endl;
+        output << "\t-Stereo baseline: " << settings.mfBaseline << endl;
+        output << "\t-Stereo depth threshold : " << settings.mfThDepth << endl;
 
 
         output << "\t-Gyro noise: " << settings.mGyrNoise << endl;

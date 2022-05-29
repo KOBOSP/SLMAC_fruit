@@ -50,7 +50,7 @@ namespace ORB_SLAM3 {
         // Step 1 遍历有效的局部地图点
         for (size_t iMP = 0; iMP < vpMapPoints.size(); iMP++) {
             MapPoint *pMP = vpMapPoints[iMP];
-            if (!pMP->mbTrackInView && !pMP->mbTrackInViewR)
+            if (!pMP->mbTrackInLeftView && !pMP->mbTrackInRightView)
                 continue;
 
             if (bFarPoints && pMP->mTrackDepth > thFarPoints)
@@ -59,7 +59,7 @@ namespace ORB_SLAM3 {
             if (pMP->isBad())
                 continue;
 
-            if (pMP->mbTrackInView) {
+            if (pMP->mbTrackInLeftView) {
                 // 通过距离预测的金字塔层数，该层数相对于当前的帧
                 const int &nPredictedLevel = pMP->mnTrackScaleLevel;
 
@@ -74,7 +74,7 @@ namespace ORB_SLAM3 {
                 // Step 3 通过投影点以及搜索窗口和预测的尺度进行搜索, 找出搜索半径内的候选匹配点索引
                 const vector<size_t> vIndices =
                         F.GetFeaturesInArea(pMP->mTrackProjX, pMP->mTrackProjY,      // 该地图点投影到一帧上的坐标
-                                            r * F.mvScaleFactors[nPredictedLevel],    // 认为搜索窗口的大小和该特征点被追踪到时所处的尺度也有关系
+                                            r * F.mvfScaleFactors[nPredictedLevel],    // 认为搜索窗口的大小和该特征点被追踪到时所处的尺度也有关系
                                             nPredictedLevel - 1, nPredictedLevel);     // 搜索的图层范围
 
                 // 没找到候选的,就放弃对当前点的匹配
@@ -100,18 +100,18 @@ namespace ORB_SLAM3 {
                                 continue;
 
                         //如果是双目数据
-                        if (F.Nleft == -1 && F.mvuRight[idx] > 0) {
+                        if (F.Nleft == -1 && F.mvfXInRight[idx] > 0) {
                             //计算在X轴上的投影误差
-                            const float er = fabs(pMP->mTrackProjXR - F.mvuRight[idx]);
+                            const float er = fabs(pMP->mTrackProjXR - F.mvfXInRight[idx]);
                             //超过阈值,说明这个点不行,丢掉.
                             //这里的阈值定义是以给定的搜索范围r为参考,然后考虑到越近的点(nPredictedLevel越大), 相机运动时对其产生的影响也就越大,
                             //因此需要扩大其搜索空间.
-                            //当给定缩放倍率为1.2的时候, mvScaleFactors 中的数据是: 1 1.2 1.2^2 1.2^3 ... 
-                            if (er > r * F.mvScaleFactors[nPredictedLevel])
+                            //当给定缩放倍率为1.2的时候, mvfScaleFactors 中的数据是: 1 1.2 1.2^2 1.2^3 ...
+                            if (er > r * F.mvfScaleFactors[nPredictedLevel])
                                 continue;
                         }
 
-                        const cv::Mat &d = F.mDescriptors.row(idx);
+                        const cv::Mat &d = F.mDescriptorsLeft.row(idx);
 
                         // 计算地图点和候选投影点的描述子距离
                         const int dist = DescriptorDistance(MPdescriptor, d);
@@ -121,14 +121,10 @@ namespace ORB_SLAM3 {
                             bestDist2 = bestDist;
                             bestDist = dist;
                             bestLevel2 = bestLevel;
-                            bestLevel = (F.Nleft == -1) ? F.mvKPsUn[idx].octave
-                                                        : (idx < F.Nleft) ? F.mvKPsLeft[idx].octave
-                                                                          : F.mvKPsRight[idx - F.Nleft].octave;
+                            bestLevel = F.mvKPsUn[idx].octave;
                             bestIdx = idx;
                         } else if (dist < bestDist2) {
-                            bestLevel2 = (F.Nleft == -1) ? F.mvKPsUn[idx].octave
-                                                         : (idx < F.Nleft) ? F.mvKPsLeft[idx].octave
-                                                                           : F.mvKPsRight[idx - F.Nleft].octave;
+                            bestLevel2 = F.mvKPsUn[idx].octave;
                             bestDist2 = dist;
                         }
                     }
@@ -159,14 +155,14 @@ namespace ORB_SLAM3 {
                 }
             }
 
-            if (F.Nleft != -1 && pMP->mbTrackInViewR) {
+            if (F.Nleft != -1 && pMP->mbTrackInRightView) {
                 const int &nPredictedLevel = pMP->mnTrackScaleLevelR;
                 if (nPredictedLevel != -1) {
                     float r = RadiusByViewingCos(pMP->mTrackViewCosR);
 
                     const vector<size_t> vIndices =
                             F.GetFeaturesInArea(pMP->mTrackProjXR, pMP->mTrackProjYR,
-                                                r * F.mvScaleFactors[nPredictedLevel], nPredictedLevel - 1,
+                                                r * F.mvfScaleFactors[nPredictedLevel], nPredictedLevel - 1,
                                                 nPredictedLevel, true);
 
                     if (vIndices.empty())
@@ -190,7 +186,7 @@ namespace ORB_SLAM3 {
                                 continue;
 
 
-                        const cv::Mat &d = F.mDescriptors.row(idx + F.Nleft);
+                        const cv::Mat &d = F.mDescriptorsLeft.row(idx + F.Nleft);
 
                         const int dist = DescriptorDistance(MPdescriptor, d);
 
@@ -251,7 +247,7 @@ namespace ORB_SLAM3 {
         const vector<MapPoint *> vpMapPointsKF = pKF->GetMapPointMatches();
 
         // 和普通帧F特征点的索引一致
-        vpMapPointMatches = vector<MapPoint *>(F.N, static_cast<MapPoint *>(NULL));
+        vpMapPointMatches = vector<MapPoint *>(F.mnKPsLeftNum, static_cast<MapPoint *>(NULL));
 
         // 取出关键帧的词袋特征向量
         const DBoW2::FeatureVector &vFeatVecKF = pKF->mFeatVec;
@@ -316,7 +312,7 @@ namespace ORB_SLAM3 {
                             if (vpMapPointMatches[realIdxF])
                                 continue;
                             // 取出普通帧F中该特征对应的描述子
-                            const cv::Mat &dF = F.mDescriptors.row(realIdxF);
+                            const cv::Mat &dF = F.mDescriptorsLeft.row(realIdxF);
                             // 计算描述子的距离
                             const int dist = DescriptorDistance(dKF, dF);
 
@@ -337,7 +333,7 @@ namespace ORB_SLAM3 {
                             if (vpMapPointMatches[realIdxF])
                                 continue;
 
-                            const cv::Mat &dF = F.mDescriptors.row(realIdxF);
+                            const cv::Mat &dF = F.mDescriptorsLeft.row(realIdxF);
 
                             const int dist = DescriptorDistance(dKF, dF);
 
@@ -371,7 +367,7 @@ namespace ORB_SLAM3 {
                             const cv::KeyPoint &kp =
                                     (!pKF->mpCamera2) ? pKF->mvKPsUn[realIdxKF] :
                                     (realIdxKF >= pKF->NLeft) ? pKF->mvKPsRight[realIdxKF - pKF->NLeft]
-                                                              : pKF->mvKPs[realIdxKF];
+                                                              : pKF->mvKPsLeft[realIdxKF];
                             // Step 4.4：计算匹配点旋转角度差所在的直方图
                             if (mbCheckOrientation) {
                                 cv::KeyPoint &Fkp =
@@ -398,7 +394,7 @@ namespace ORB_SLAM3 {
                                 const cv::KeyPoint &kp =
                                         (!pKF->mpCamera2) ? pKF->mvKPsUn[realIdxKF] :
                                         (realIdxKF >= pKF->NLeft) ? pKF->mvKPsRight[realIdxKF - pKF->NLeft]
-                                                                  : pKF->mvKPs[realIdxKF];
+                                                                  : pKF->mvKPsLeft[realIdxKF];
 
                                 if (mbCheckOrientation) {
                                     cv::KeyPoint &Fkp =
@@ -731,7 +727,7 @@ namespace ORB_SLAM3 {
                 continue;
 
             // 取出参考帧F1中当前遍历特征点对应的描述子
-            cv::Mat d1 = F1.mDescriptors.row(i1);
+            cv::Mat d1 = F1.mDescriptorsLeft.row(i1);
 
             int bestDist = INT_MAX;     //最佳描述子匹配距离，越小越好
             int bestDist2 = INT_MAX;    //次佳描述子匹配距离
@@ -741,7 +737,7 @@ namespace ORB_SLAM3 {
             for (vector<size_t>::iterator vit = vIndices2.begin(); vit != vIndices2.end(); vit++) {
                 size_t i2 = *vit;
                 // 取出候选特征点对应的描述子
-                cv::Mat d2 = F2.mDescriptors.row(i2);
+                cv::Mat d2 = F2.mDescriptorsLeft.row(i2);
                 // 计算两个特征点描述子距离
                 int dist = DescriptorDistance(d1, d2);
 
@@ -1014,8 +1010,8 @@ namespace ORB_SLAM3 {
 
         int nmatches = 0;
         // 记录匹配是否成功，避免重复匹配
-        vector<bool> vbMatched2(pKF2->N, false);
-        vector<int> vMatches12(pKF1->N, -1);
+        vector<bool> vbMatched2(pKF2->mnKPsLeftNum, false);
+        vector<int> vMatches12(pKF1->mnKPsLeftNum, -1);
         // 用于统计匹配点对旋转差的直方图
         vector<int> rotHist[HISTO_LENGTH];
         for (int i = 0; i < HISTO_LENGTH; i++)
@@ -1053,7 +1049,7 @@ namespace ORB_SLAM3 {
                         continue;
                     }
                     // 如果mvuRight中的值大于0，表示是双目，且该特征点有深度值
-                    const bool bStereo1 = (!pKF1->mpCamera2 && pKF1->mvuRight[idx1] >= 0);
+                    const bool bStereo1 = (!pKF1->mpCamera2 && pKF1->mvfXInRight[idx1] >= 0);
 
                     if (bOnlyStereo)
                         if (!bStereo1)
@@ -1061,7 +1057,7 @@ namespace ORB_SLAM3 {
 
                     // Step 2.4：通过特征点索引idx1在pKF1中取出对应的特征点
                     const cv::KeyPoint &kp1 = (pKF1->NLeft == -1) ? pKF1->mvKPsUn[idx1]
-                                                                  : (idx1 < pKF1->NLeft) ? pKF1->mvKPs[idx1]
+                                                                  : (idx1 < pKF1->NLeft) ? pKF1->mvKPsLeft[idx1]
                                                                                          : pKF1->mvKPsRight[idx1 -
                                                                                                             pKF1->NLeft];
 
@@ -1087,7 +1083,7 @@ namespace ORB_SLAM3 {
                         if (vbMatched2[idx2] || pMP2)
                             continue;
 
-                        const bool bStereo2 = (!pKF2->mpCamera2 && pKF2->mvuRight[idx2] >= 0);
+                        const bool bStereo2 = (!pKF2->mpCamera2 && pKF2->mvfXInRight[idx2] >= 0);
 
                         if (bOnlyStereo)
                             if (!bStereo2)
@@ -1104,7 +1100,7 @@ namespace ORB_SLAM3 {
 
                         // 通过特征点索引idx2在pKF2中取出对应的特征点
                         const cv::KeyPoint &kp2 = (pKF2->NLeft == -1) ? pKF2->mvKPsUn[idx2]
-                                                                      : (idx2 < pKF2->NLeft) ? pKF2->mvKPs[idx2]
+                                                                      : (idx2 < pKF2->NLeft) ? pKF2->mvKPsLeft[idx2]
                                                                                              : pKF2->mvKPsRight[idx2 -
                                                                                                                 pKF2->NLeft];
                         const bool bRight2 = (pKF2->NLeft == -1 || idx2 < pKF2->NLeft) ? false
@@ -1116,7 +1112,7 @@ namespace ORB_SLAM3 {
                             const float distey = ep(1) - kp2.pt.y;
                             // Step 2.7 极点e2到kp2的像素距离如果小于阈值th,认为kp2对应的MapPoint距离pKF1相机太近，跳过该匹配点对
                             // 作者根据kp2金字塔尺度因子(scale^n，scale=1.2，n为层数)定义阈值th
-                            // 金字塔层数从0到7，对应距离 sqrt(100*pKF2->mvScaleFactors[kp2.octave]) 是10-20个像素
+                            // 金字塔层数从0到7，对应距离 sqrt(100*pKF2->mvfScaleFactors[kp2.octave]) 是10-20个像素
                             //? 对这个阈值的有效性持怀疑态度
                             if (distex * distex + distey * distey < 100 * pKF2->mvScaleFactors[kp2.octave]) {
                                 continue;
@@ -1158,8 +1154,8 @@ namespace ORB_SLAM3 {
 
                         // Step 2.8 计算特征点kp2到kp1对应极线的距离是否小于阈值
                         if (bCoarse ||
-                            pCamera1->epipolarConstrain(pCamera2, kp1, kp2, R12, t12, pKF1->mvLevelSigma2[kp1.octave],
-                                                        pKF2->mvLevelSigma2[kp2.octave])) // MODIFICATION_2
+                            pCamera1->epipolarConstrain(pCamera2, kp1, kp2, R12, t12, pKF1->mvfLevelSigma2[kp1.octave],
+                                                        pKF2->mvfLevelSigma2[kp2.octave])) // MODIFICATION_2
                         {
                             // bestIdx2，bestDist 是 kp1 对应 KF2中的最佳匹配点 index及匹配距离
                             bestIdx2 = idx2;
@@ -1170,7 +1166,7 @@ namespace ORB_SLAM3 {
                     if (bestIdx2 >= 0) {
                         const cv::KeyPoint &kp2 = (pKF2->NLeft == -1) ? pKF2->mvKPsUn[bestIdx2]
                                                                       : (bestIdx2 < pKF2->NLeft)
-                                                                        ? pKF2->mvKPs[bestIdx2]
+                                                                        ? pKF2->mvKPsLeft[bestIdx2]
                                                                         : pKF2->mvKPsRight[bestIdx2 - pKF2->NLeft];
                         // 记录匹配结果 
                         vMatches12[idx1] = bestIdx2;
@@ -1254,7 +1250,7 @@ namespace ORB_SLAM3 {
         const float &fy = pKF->fy;
         const float &cx = pKF->cx;
         const float &cy = pKF->cy;
-        const float &bf = pKF->mbf;
+        const float &bf = pKF->mfBaselineFocal;
 
         int nFused = 0;
 
@@ -1347,7 +1343,7 @@ namespace ORB_SLAM3 {
             for (vector<size_t>::const_iterator vit = vIndices.begin(), vend = vIndices.end(); vit != vend; vit++) {
                 size_t idx = *vit;
                 const cv::KeyPoint &kp = (pKF->NLeft == -1) ? pKF->mvKPsUn[idx]
-                                                            : (!bRight) ? pKF->mvKPs[idx]
+                                                            : (!bRight) ? pKF->mvKPsLeft[idx]
                                                                         : pKF->mvKPsRight[idx];
 
                 const int &kpLevel = kp.octave;
@@ -1356,12 +1352,12 @@ namespace ORB_SLAM3 {
                     continue;
 
                 // 计算投影点与候选匹配特征点的距离，如果偏差很大，直接跳过
-                if (pKF->mvuRight[idx] >= 0) {
+                if (pKF->mvfXInRight[idx] >= 0) {
                     // Check reprojection error in stereo
                     // 双目情况
                     const float &kpx = kp.pt.x;
                     const float &kpy = kp.pt.y;
-                    const float &kpr = pKF->mvuRight[idx];
+                    const float &kpr = pKF->mvfXInRight[idx];
                     const float ex = uv(0) - kpx;
                     const float ey = uv(1) - kpy;
                     // 右目数据的偏差也要考虑进去
@@ -1369,7 +1365,7 @@ namespace ORB_SLAM3 {
                     const float e2 = ex * ex + ey * ey + er * er;
 
                     //自由度为3, 误差小于1个像素,这种事情95%发生的概率对应卡方检验阈值为7.82
-                    if (e2 * pKF->mvInvLevelSigma2[kpLevel] > 7.8)
+                    if (e2 * pKF->mvfInvLevelSigma2[kpLevel] > 7.8)
                         continue;
                 } else {
                     // 单目情况
@@ -1380,7 +1376,7 @@ namespace ORB_SLAM3 {
                     const float e2 = ex * ex + ey * ey;
 
                     // 自由度为2的，卡方检验阈值5.99（假设测量有一个像素的偏差）
-                    if (e2 * pKF->mvInvLevelSigma2[kpLevel] > 5.99)
+                    if (e2 * pKF->mvfInvLevelSigma2[kpLevel] > 5.99)
                         continue;
                 }
 
@@ -1828,9 +1824,7 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < HISTO_LENGTH; i++)
             rotHist[i].reserve(500);
 
-        //! 原作者代码是 const float factor = 1.0f/HISTO_LENGTH; 是错误的，更改为下面代码
-        // const float factor = HISTO_LENGTH/360.0f;
-        const float factor = 1.0f / HISTO_LENGTH;
+        const float factor = HISTO_LENGTH/360.0f;
 
         // Step 2 计算当前帧和前一帧的平移向量
         //当前帧的相机位姿
@@ -1841,11 +1835,11 @@ namespace ORB_SLAM3 {
         const Eigen::Vector3f tlc = Tlw * twc;
 
         // 判断前进还是后退
-        const bool bForward = tlc(2) > CurrentFrame.mb && !bMono;     // 非单目情况，如果Z大于基线，则表示相机明显前进
-        const bool bBackward = -tlc(2) > CurrentFrame.mb && !bMono;   // 非单目情况，如果-Z小于基线，则表示相机明显后退
+        const bool bForward = tlc(2) > CurrentFrame.mfBaseline && !bMono;     // 非单目情况，如果Z大于基线，则表示相机明显前进
+        const bool bBackward = -tlc(2) > CurrentFrame.mfBaseline && !bMono;   // 非单目情况，如果-Z小于基线，则表示相机明显后退
 
         //  Step 3 对于前一帧的每一个地图点，通过相机投影模型，得到投影到当前帧的像素坐标
-        for (int i = 0; i < LastFrame.N; i++) {
+        for (int i = 0; i < LastFrame.mnKPsLeftNum; i++) {
             MapPoint *pMP = LastFrame.mvpMPs[i];
 
             if (pMP) {
@@ -1864,9 +1858,9 @@ namespace ORB_SLAM3 {
                     // 投影到当前帧中
                     Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dc);
 
-                    if (uv(0) < CurrentFrame.mnMinX || uv(0) > CurrentFrame.mnMaxX)
+                    if (uv(0) < CurrentFrame.mfMinX || uv(0) > CurrentFrame.mfMaxX)
                         continue;
-                    if (uv(1) < CurrentFrame.mnMinY || uv(1) > CurrentFrame.mnMaxY)
+                    if (uv(1) < CurrentFrame.mfMinY || uv(1) > CurrentFrame.mfMaxY)
                         continue;
                     // 认为投影前后地图点的尺度信息不变
                     int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ? LastFrame.mvKPsLeft[i].octave
@@ -1875,7 +1869,7 @@ namespace ORB_SLAM3 {
 
                     // Search in a window. Size depends on scale
                     // 单目：th = 7，双目：th = 15
-                    float radius = th * CurrentFrame.mvScaleFactors[nLastOctave]; // 尺度越大，搜索范围越大
+                    float radius = th * CurrentFrame.mvfScaleFactors[nLastOctave]; // 尺度越大，搜索范围越大
 
                     // 记录候选匹配点的id
                     vector<size_t> vIndices2;
@@ -1910,15 +1904,15 @@ namespace ORB_SLAM3 {
                             if (CurrentFrame.mvpMPs[i2]->Observations() > 0)
                                 continue;
 
-                        if (CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2] > 0) {
+                        if (CurrentFrame.Nleft == -1 && CurrentFrame.mvfXInRight[i2] > 0) {
                             // 双目和rgbd的情况，需要保证右图的点也在搜索半径以内
-                            const float ur = uv(0) - CurrentFrame.mbf * invzc;
-                            const float er = fabs(ur - CurrentFrame.mvuRight[i2]);
+                            const float ur = uv(0) - CurrentFrame.mfBaselineFocal * invzc;
+                            const float er = fabs(ur - CurrentFrame.mvfXInRight[i2]);
                             if (er > radius)
                                 continue;
                         }
 
-                        const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);
+                        const cv::Mat &d = CurrentFrame.mDescriptorsLeft.row(i2);
 
                         const int dist = DescriptorDistance(dMP, d);
 
@@ -1954,73 +1948,6 @@ namespace ORB_SLAM3 {
                             assert(bin >= 0 && bin < HISTO_LENGTH);
                             rotHist[bin].push_back(bestIdx2);
                         }
-                    }
-                    if (CurrentFrame.Nleft != -1) {
-                        Eigen::Vector3f x3Dr = CurrentFrame.GetRelativePoseTrl() * x3Dc;
-                        Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dr);
-
-                        int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ? LastFrame.mvKPsLeft[i].octave
-                                                                                         : LastFrame.mvKPsRight[i -
-                                                                                                                LastFrame.Nleft].octave;
-
-                        // Search in a window. Size depends on scale
-                        float radius = th * CurrentFrame.mvScaleFactors[nLastOctave];
-
-                        vector<size_t> vIndices2;
-
-                        if (bForward)
-                            vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave, -1, true);
-                        else if (bBackward)
-                            vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, 0, nLastOctave, true);
-                        else
-                            vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave - 1,
-                                                                       nLastOctave + 1, true);
-
-                        const cv::Mat dMP = pMP->GetDescriptor();
-
-                        int bestDist = 256;
-                        int bestIdx2 = -1;
-
-                        for (vector<size_t>::const_iterator vit = vIndices2.begin(), vend = vIndices2.end();
-                             vit != vend; vit++) {
-                            const size_t i2 = *vit;
-                            if (CurrentFrame.mvpMPs[i2 + CurrentFrame.Nleft])
-                                if (CurrentFrame.mvpMPs[i2 + CurrentFrame.Nleft]->Observations() > 0)
-                                    continue;
-
-                            const cv::Mat &d = CurrentFrame.mDescriptors.row(i2 + CurrentFrame.Nleft);
-
-                            const int dist = DescriptorDistance(dMP, d);
-
-                            if (dist < bestDist) {
-                                bestDist = dist;
-                                bestIdx2 = i2;
-                            }
-                        }
-
-                        if (bestDist <= TH_HIGH) {
-                            CurrentFrame.mvpMPs[bestIdx2 + CurrentFrame.Nleft] = pMP;
-                            nmatches++;
-                            if (mbCheckOrientation) {
-                                cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKPsUn[i]
-                                                                            : (i < LastFrame.Nleft)
-                                                                              ? LastFrame.mvKPsLeft[i]
-                                                                              : LastFrame.mvKPsRight[i -
-                                                                                                     LastFrame.Nleft];
-
-                                cv::KeyPoint kpCF = CurrentFrame.mvKPsRight[bestIdx2];
-
-                                float rot = kpLF.angle - kpCF.angle;
-                                if (rot < 0.0)
-                                    rot += 360.0f;
-                                int bin = round(rot * factor);
-                                if (bin == HISTO_LENGTH)
-                                    bin = 0;
-                                assert(bin >= 0 && bin < HISTO_LENGTH);
-                                rotHist[bin].push_back(bestIdx2 + CurrentFrame.Nleft);
-                            }
-                        }
-
                     }
                 }
             }
@@ -2088,9 +2015,9 @@ namespace ORB_SLAM3 {
 
                     const Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dc);
 
-                    if (uv(0) < CurrentFrame.mnMinX || uv(0) > CurrentFrame.mnMaxX)
+                    if (uv(0) < CurrentFrame.mfMinX || uv(0) > CurrentFrame.mfMaxX)
                         continue;
-                    if (uv(1) < CurrentFrame.mnMinY || uv(1) > CurrentFrame.mnMaxY)
+                    if (uv(1) < CurrentFrame.mfMinY || uv(1) > CurrentFrame.mfMaxY)
                         continue;
 
                     // Compute predicted scale level
@@ -2109,7 +2036,7 @@ namespace ORB_SLAM3 {
 
                     // Search in a window
                     // 搜索半径和尺度相关
-                    const float radius = th * CurrentFrame.mvScaleFactors[nPredictedLevel];
+                    const float radius = th * CurrentFrame.mvfScaleFactors[nPredictedLevel];
 
                     //  Step 3 搜索候选匹配点
                     const vector<size_t> vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius,
@@ -2129,7 +2056,7 @@ namespace ORB_SLAM3 {
                         if (CurrentFrame.mvpMPs[i2])
                             continue;
 
-                        const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);
+                        const cv::Mat &d = CurrentFrame.mDescriptorsLeft.row(i2);
 
                         const int dist = DescriptorDistance(dMP, d);
 

@@ -39,7 +39,7 @@ namespace ORB_SLAM3 {
 // 这里给这个标志置位的操作是在最初系统开始加载到内存的时候进行的，下一帧就是整个系统的第一帧，所以这个标志要置位
     bool Frame::mbInitialComputations = true;
     float Frame::cx, Frame::cy, Frame::fx, Frame::fy, Frame::invfx, Frame::invfy;
-    float Frame::mnMinX, Frame::mnMinY, Frame::mnMaxX, Frame::mnMaxY;
+    float Frame::mfMinX, Frame::mfMinY, Frame::mfMaxX, Frame::mfMaxY;
     float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
 
 //For stereo fisheye matching
@@ -56,20 +56,20 @@ namespace ORB_SLAM3 {
     Frame::Frame(const Frame &frame)
             : mpcpi(frame.mpcpi), mpORBvocabulary(frame.mpORBvocabulary), mpORBextractorLeft(frame.mpORBextractorLeft),
               mpORBextractorRight(frame.mpORBextractorRight),
-              mTimeStamp(frame.mTimeStamp), mK(frame.mK.clone()), mK_(Converter::toMatrix3f(frame.mK)),
+              mdTimestamp(frame.mdTimestamp), mcvK(frame.mcvK.clone()), mEigenK(Converter::toMatrix3f(frame.mcvK)),
               mDistCoef(frame.mDistCoef.clone()),
-              mbf(frame.mbf), mb(frame.mb), mThDepth(frame.mThDepth), N(frame.N), mvKPsLeft(frame.mvKPsLeft),
-              mvKPsRight(frame.mvKPsRight), mvKPsUn(frame.mvKPsUn), mvuRight(frame.mvuRight),
-              mvDepth(frame.mvDepth), mBowVec(frame.mBowVec), mFeatVec(frame.mFeatVec),
-              mDescriptors(frame.mDescriptors.clone()), mDescriptorsRight(frame.mDescriptorsRight.clone()),
+              mfBaselineFocal(frame.mfBaselineFocal), mfBaseline(frame.mfBaseline), mfThDepth(frame.mfThDepth), mnKPsLeftNum(frame.mnKPsLeftNum), mvKPsLeft(frame.mvKPsLeft),
+              mvKPsRight(frame.mvKPsRight), mvKPsUn(frame.mvKPsUn), mvfXInRight(frame.mvfXInRight),
+              mvfMPDepth(frame.mvfMPDepth), mBowVec(frame.mBowVec), mFeatVec(frame.mFeatVec),
+              mDescriptorsLeft(frame.mDescriptorsLeft.clone()), mDescriptorsRight(frame.mDescriptorsRight.clone()),
               mvpMPs(frame.mvpMPs), mvbOutlier(frame.mvbOutlier), mImuCalib(frame.mImuCalib),
               mnCloseMPs(frame.mnCloseMPs),
               mpImuPreintegrated(frame.mpImuPreintegrated), mpImuPreintegratedFrame(frame.mpImuPreintegratedFrame),
               mImuBias(frame.mImuBias),
               mnId(frame.mnId), mpReferenceKF(frame.mpReferenceKF), mnScaleLevels(frame.mnScaleLevels),
               mfScaleFactor(frame.mfScaleFactor), mfLogScaleFactor(frame.mfLogScaleFactor),
-              mvScaleFactors(frame.mvScaleFactors), mvInvScaleFactors(frame.mvInvScaleFactors), mnDataset(frame.mnDataset),
-              mvLevelSigma2(frame.mvLevelSigma2), mvInvLevelSigma2(frame.mvInvLevelSigma2),
+              mvfScaleFactors(frame.mvfScaleFactors), mvfInvScaleFactors(frame.mvfInvScaleFactors), mnDataset(frame.mnDataset),
+              mvfLevelSigma2(frame.mvfLevelSigma2), mvfInvLevelSigma2(frame.mvfInvLevelSigma2),
               mpPrevFrame(frame.mpPrevFrame), mpLastKeyFrame(frame.mpLastKeyFrame),
               mbIsSet(frame.mbIsSet), mbImuPreintegrated(frame.mbImuPreintegrated), mpMutexImu(frame.mpMutexImu),
               mpCamera(frame.mpCamera), mpCamera2(frame.mpCamera2), Nleft(frame.Nleft), Nright(frame.Nright),
@@ -80,9 +80,6 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < FRAME_GRID_COLS; i++)
             for (int j = 0; j < FRAME_GRID_ROWS; j++) {
                 mGrid[i][j] = frame.mGrid[i][j];
-                if (frame.Nleft > 0) {
-                    mGridRight[i][j] = frame.mGridRight[i][j];
-                }
             }
 
         if (frame.mbHasPose)
@@ -98,12 +95,12 @@ namespace ORB_SLAM3 {
     }
 
 // 立体匹配模式下的双目
-    Frame::Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimeStamp, ORBextractor *ExtractorLeft,
-                 ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &K, cv::Mat &DistCoef, const float &fBF,
+    Frame::Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp, ORBextractor *ExtractorLeft,
+                 ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &cvK, cv::Mat &DistCoef, const float &fBaselineFocal,
                  const float &fThDepth, GeometricCamera *pCamera, Frame *pPrevF, const IMU::Calib &ImuCalib)
             : mpcpi(NULL), mpORBvocabulary(Voc), mpORBextractorLeft(ExtractorLeft), mpORBextractorRight(ExtractorRight),
-              mTimeStamp(dTimeStamp), mK(K.clone()), mK_(Converter::toMatrix3f(K)), mDistCoef(DistCoef.clone()), mbf(fBF),
-              mThDepth(fThDepth),
+              mdTimestamp(dTimestamp), mcvK(cvK.clone()), mEigenK(Converter::toMatrix3f(cvK)), mDistCoef(DistCoef.clone()), mfBaselineFocal(fBaselineFocal),
+              mfThDepth(fThDepth),
               mImuCalib(ImuCalib), mpImuPreintegrated(NULL), mpPrevFrame(pPrevF), mpImuPreintegratedFrame(NULL),
               mpReferenceKF(static_cast<KeyFrame *>(NULL)), mbIsSet(false), mbImuPreintegrated(false),
               mpCamera(pCamera), mpCamera2(nullptr), mbHasPose(false), mbHasVelocity(false) {
@@ -120,13 +117,13 @@ namespace ORB_SLAM3 {
         // 计算上面缩放比的对数
         mfLogScaleFactor = log(mfScaleFactor);
         // 获取每层图像的缩放因子
-        mvScaleFactors = mpORBextractorLeft->GetScaleFactors();
+        mvfScaleFactors = mpORBextractorLeft->GetScaleFactors();
         // 同样获取每层图像缩放因子的倒数
-        mvInvScaleFactors = mpORBextractorLeft->GetInverseScaleFactors();
+        mvfInvScaleFactors = mpORBextractorLeft->GetInverseScaleFactors();
         // 高斯模糊的时候，使用的方差
-        mvLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
+        mvfLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
         // 获取sigma^2的倒数
-        mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
+        mvfInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
 
         // Step 3 对左目右目图像提取ORB特征点, 第一个参数0-左图， 1-右图。为加速计算，同时开了两个线程计算
@@ -139,7 +136,7 @@ namespace ORB_SLAM3 {
 
 
         // mvKeys中保存的是左图像中的特征点，这里是获取左侧图像中特征点的个数
-        N = mvKPsLeft.size();
+        mnKPsLeftNum = mvKPsLeft.size();
 
         // 如果左图像中没有成功提取到特征点那么就返回，也意味这这一帧的图像无法使用
         if (mvKPsLeft.empty())
@@ -149,14 +146,14 @@ namespace ORB_SLAM3 {
         UndistortKeyPoints();
 
 
-        // Step 5 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvDepth
+        // Step 5 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvfMPDepth
         // mvuRight中存储的应该是左图像中的点所匹配的在右图像中的点的横坐标（纵坐标相同）
         ComputeStereoMatches();
 
 
         // 初始化本帧的地图点
-        mvpMPs = vector<MapPoint *>(N, static_cast<MapPoint *>(NULL));
-        mvbOutlier = vector<bool>(N, false);
+        mvpMPs = vector<MapPoint *>(mnKPsLeftNum, static_cast<MapPoint *>(NULL));
+        mvbOutlier = vector<bool>(mnKPsLeftNum, false);
         mmProjectPoints.clear();
         mmMatchedInImage.clear();
 
@@ -168,15 +165,15 @@ namespace ORB_SLAM3 {
             ComputeImageBounds(ImgLeft);
 
             // 表示一个图像像素相当于多少个图像网格列（宽）
-            mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (mnMaxX - mnMinX);
+            mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (mfMaxX - mfMinX);
             // 表示一个图像像素相当于多少个图像网格行（高）
-            mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (mnMaxY - mnMinY);
+            mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (mfMaxY - mfMinY);
 
 
-            fx = K.at<float>(0, 0);
-            fy = K.at<float>(1, 1);
-            cx = K.at<float>(0, 2);
-            cy = K.at<float>(1, 2);
+            fx = cvK.at<float>(0, 0);
+            fy = cvK.at<float>(1, 1);
+            cx = cvK.at<float>(0, 2);
+            cy = cvK.at<float>(1, 2);
             // 猜测是因为这种除法计算需要的时间略长，所以这里直接存储了这个中间计算结果
             invfx = 1.0f / fx;
             invfy = 1.0f / fy;
@@ -186,7 +183,7 @@ namespace ORB_SLAM3 {
         }
 
         // 双目相机基线长度
-        mb = mbf / fx;
+        mfBaseline = mfBaselineFocal / fx;
 
         if (pPrevF) {
             if (pPrevF->HasVelocity())
@@ -220,32 +217,24 @@ namespace ORB_SLAM3 {
         // Step 1  给存储特征点的网格数组 Frame::mGrid 预分配空间
         const int nCells = FRAME_GRID_COLS * FRAME_GRID_ROWS;
 
-        int nReserve = 0.5f * N / (nCells);
+        int nReserve = 0.5f * mnKPsLeftNum / (nCells);
 
         // 开始对mGrid这个二维数组中的每一个vector元素遍历并预分配空间
         for (unsigned int i = 0; i < FRAME_GRID_COLS; i++)
             for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++) {
                 mGrid[i][j].reserve(nReserve);
-                if (Nleft != -1) {
-                    mGridRight[i][j].reserve(nReserve);
-                }
             }
 
         // Step 2 遍历每个特征点，将每个特征点在mvKeysUn中的索引值放到对应的网格mGrid中
 
-        for (int i = 0; i < N; i++) {
-            const cv::KeyPoint &kp = (Nleft == -1) ? mvKPsUn[i]
-                                                   : (i < Nleft) ? mvKPsLeft[i]
-                                                                 : mvKPsRight[i - Nleft];
+        for (int i = 0; i < mnKPsLeftNum; i++) {
+            const cv::KeyPoint &kp = mvKPsUn[i];
             // 存储某个特征点所在网格的网格坐标，nGridPosX范围：[0,FRAME_GRID_COLS], nGridPosY范围：[0,FRAME_GRID_ROWS]
             int nGridPosX, nGridPosY;
             // 计算某个特征点所在网格的网格坐标，如果找到特征点所在的网格坐标，记录在nGridPosX,nGridPosY里，返回true，没找到返回false
             if (PosInGrid(kp, nGridPosX, nGridPosY)) {
-                if (Nleft == -1 || i < Nleft)
-                    // 如果找到特征点所在网格坐标，将这个特征点的索引添加到对应网格的数组mGrid中
-                    mGrid[nGridPosX][nGridPosY].push_back(i);
-                else
-                    mGridRight[nGridPosX][nGridPosY].push_back(i - Nleft);
+                // 如果找到特征点所在网格坐标，将这个特征点的索引添加到对应网格的数组mGrid中
+                mGrid[nGridPosX][nGridPosY].push_back(i);
             }
         }
     }
@@ -262,7 +251,7 @@ namespace ORB_SLAM3 {
         // 判断是左图还是右图
         if (flag == 0)
             // 左图的话就套使用左图指定的特征点提取器，并将提取结果保存到对应的变量中
-            monoLeft = (*mpORBextractorLeft)(im, cv::Mat(), mvKPsLeft, mDescriptors, vLapping);
+            monoLeft = (*mpORBextractorLeft)(im, cv::Mat(), mvKPsLeft, mDescriptorsLeft, vLapping);
         else
             // 右图的话就需要使用右图指定的特征点提取器，并将提取结果保存到对应的变量中
             monoRight = (*mpORBextractorRight)(im, cv::Mat(), mvKPsRight, mDescriptorsRight, vLapping);
@@ -404,107 +393,93 @@ namespace ORB_SLAM3 {
  */
     bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit) {
         // 单目，立体匹配双目，rgbd
-        if (Nleft == -1) {
-            // cout << "\na";
-            // mbTrackInView是决定一个地图点是否进行重投影的标志
-            // 这个标志的确定要经过多个函数的确定，isInFrustum()只是其中的一个验证关卡。这里默认设置为否
-            pMP->mbTrackInView = false;
-            pMP->mTrackProjX = -1;
-            pMP->mTrackProjY = -1;
+        // cout << "\na";
+        // mbTrackInView是决定一个地图点是否进行重投影的标志
+        // 这个标志的确定要经过多个函数的确定，isInFrustum()只是其中的一个验证关卡。这里默认设置为否
+        pMP->mbTrackInLeftView = false;
+        pMP->mTrackProjX = -1;
+        pMP->mTrackProjY = -1;
 
-            // 3D in absolute coordinates
-            // Step 1 获得这个地图点的世界坐标
-            Eigen::Matrix<float, 3, 1> P = pMP->GetWorldPos();
+        // 3D in absolute coordinates
+        // Step 1 获得这个地图点的世界坐标
+        Eigen::Matrix<float, 3, 1> P = pMP->GetWorldPos();
 
-            // 3D in camera coordinates
-            // 根据当前帧(粗糙)位姿转化到当前相机坐标系下的三维点Pc
-            const Eigen::Matrix<float, 3, 1> Pc = mRcw * P + mtcw;
-            const float Pc_dist = Pc.norm();
+        // 3D in camera coordinates
+        // 根据当前帧(粗糙)位姿转化到当前相机坐标系下的三维点Pc
+        const Eigen::Matrix<float, 3, 1> Pc = mRcw * P + mtcw;
+        const float Pc_dist = Pc.norm();
 
-            // Check positive depth
-            const float &PcZ = Pc(2);
-            const float invz = 1.0f / PcZ;
-            // Step 2 关卡一：检查这个地图点在当前帧的相机坐标系下，是否有正的深度.如果是负的，表示出错，直接返回false
-            if (PcZ < 0.0f)
-                return false;
+        // Check positive depth
+        const float &PcZ = Pc(2);
+        const float invz = 1.0f / PcZ;
+        // Step 2 关卡一：检查这个地图点在当前帧的相机坐标系下，是否有正的深度.如果是负的，表示出错，直接返回false
+        if (PcZ < 0.0f)
+            return false;
 
-            const Eigen::Vector2f uv = mpCamera->project(Pc);
+        const Eigen::Vector2f uv = mpCamera->project(Pc);
 
-            // Step 3 关卡二：将MapPoint投影到当前帧的像素坐标(u,v), 并判断是否在图像有效范围内
-            // 判断是否在图像边界中，只要不在那么就说明无法在当前帧下进行重投影
-            if (uv(0) < mnMinX || uv(0) > mnMaxX)
-                return false;
-            if (uv(1) < mnMinY || uv(1) > mnMaxY)
-                return false;
+        // Step 3 关卡二：将MapPoint投影到当前帧的像素坐标(u,v), 并判断是否在图像有效范围内
+        // 判断是否在图像边界中，只要不在那么就说明无法在当前帧下进行重投影
+        if (uv(0) < mfMinX || uv(0) > mfMaxX)
+            return false;
+        if (uv(1) < mfMinY || uv(1) > mfMaxY)
+            return false;
 
-            pMP->mTrackProjX = uv(0);
-            pMP->mTrackProjY = uv(1);
+        pMP->mTrackProjX = uv(0);
+        pMP->mTrackProjY = uv(1);
 
-            // Check distance is in the scale invariance region of the MapPoint
-            // Step 4 关卡三：计算MapPoint到相机中心的距离, 并判断是否在尺度变化的距离内
-            // 得到认为的可靠距离范围:[0.8f*mfMinDistance, 1.2f*mfMaxDistance]
-            const float maxDistance = pMP->GetMaxDistanceInvariance();
-            const float minDistance = pMP->GetMinDistanceInvariance();
-            // 得到当前地图点距离当前帧相机光心的距离,注意P，mOw都是在同一坐标系下才可以
-            //  mOw：当前相机光心在世界坐标系下坐标
-            const Eigen::Vector3f PO = P - mOw;
-            // 取模就得到了距离
-            const float dist = PO.norm();
+        // Check distance is in the scale invariance region of the MapPoint
+        // Step 4 关卡三：计算MapPoint到相机中心的距离, 并判断是否在尺度变化的距离内
+        // 得到认为的可靠距离范围:[0.8f*mfMinDistance, 1.2f*mfMaxDistance]
+        const float maxDistance = pMP->GetMaxDistanceInvariance();
+        const float minDistance = pMP->GetMinDistanceInvariance();
+        // 得到当前地图点距离当前帧相机光心的距离,注意P，mOw都是在同一坐标系下才可以
+        //  mOw：当前相机光心在世界坐标系下坐标
+        const Eigen::Vector3f PO = P - mOw;
+        // 取模就得到了距离
+        const float dist = PO.norm();
 
-            // 如果不在允许的尺度变化范围内，认为重投影不可靠
-            if (dist < minDistance || dist > maxDistance)
-                return false;
+        // 如果不在允许的尺度变化范围内，认为重投影不可靠
+        if (dist < minDistance || dist > maxDistance)
+            return false;
 
-            // Check viewing angle
-            // Step 5 关卡四：
-            // 计算当前相机指向地图点向量和地图点的平均观测方向夹角的余弦值,
-            // 若小于cos(viewingCosLimit), 即夹角大于viewingCosLimit弧度则返回
-            Eigen::Vector3f Pn = pMP->GetNormal();
+        // Check viewing angle
+        // Step 5 关卡四：
+        // 计算当前相机指向地图点向量和地图点的平均观测方向夹角的余弦值,
+        // 若小于cos(viewingCosLimit), 即夹角大于viewingCosLimit弧度则返回
+        Eigen::Vector3f Pn = pMP->GetNormal();
 
-            // 计算当前相机指向地图点向量和地图点的平均观测方向夹角的余弦值，注意平均观测方向为单位向量
-            const float viewCos = PO.dot(Pn) / dist;
+        // 计算当前相机指向地图点向量和地图点的平均观测方向夹角的余弦值，注意平均观测方向为单位向量
+        const float viewCos = PO.dot(Pn) / dist;
 
-            // 如果大于给定的阈值 cos(60°)=0.5，认为这个点方向太偏了，重投影不可靠，返回false
-            if (viewCos < viewingCosLimit)
-                return false;
+        // 如果大于给定的阈值 cos(60°)=0.5，认为这个点方向太偏了，重投影不可靠，返回false
+        if (viewCos < viewingCosLimit)
+            return false;
 
-            // Predict scale in the image
-            // Step 6 根据地图点到光心的距离来预测一个尺度（仿照特征点金字塔层级）
-            const int nPredictedLevel = pMP->PredictScale(dist, this);
+        // Predict scale in the image
+        // Step 6 根据地图点到光心的距离来预测一个尺度（仿照特征点金字塔层级）
+        const int nPredictedLevel = pMP->PredictScale(dist, this);
 
-            // Step 7 记录计算得到的一些参数
-            // Data used by the tracking
-            // 通过置位标记 MapPoint::mbTrackInView 来表示这个地图点要被投影
-            pMP->mbTrackInView = true;
-            // 该地图点投影在当前图像（一般是左图）的像素横坐标
-            pMP->mTrackProjX = uv(0);
-            // bf/z其实是视差，相减得到右图（如有）中对应点的横坐标
-            pMP->mTrackProjXR = uv(0) - mbf * invz;
+        // Step 7 记录计算得到的一些参数
+        // Data used by the tracking
+        // 通过置位标记 MapPoint::mbTrackInLeftView 来表示这个地图点要被投影
+        pMP->mbTrackInLeftView = true;
+        // 该地图点投影在当前图像（一般是左图）的像素横坐标
+        pMP->mTrackProjX = uv(0);
+        // bf/z其实是视差，相减得到右图（如有）中对应点的横坐标
+        pMP->mTrackProjXR = uv(0) - mfBaselineFocal * invz;
 
-            pMP->mTrackDepth = Pc_dist;
+        pMP->mTrackDepth = Pc_dist;
 
-            // 该地图点投影在当前图像（一般是左图）的像素纵坐标
-            pMP->mTrackProjY = uv(1);
-            // 根据地图点到光心距离，预测的该地图点的尺度层级
-            pMP->mnTrackScaleLevel = nPredictedLevel;
-            // 保存当前视角和法线夹角的余弦值
-            pMP->mTrackViewCos = viewCos;
+        // 该地图点投影在当前图像（一般是左图）的像素纵坐标
+        pMP->mTrackProjY = uv(1);
+        // 根据地图点到光心距离，预测的该地图点的尺度层级
+        pMP->mnTrackScaleLevel = nPredictedLevel;
+        // 保存当前视角和法线夹角的余弦值
+        pMP->mTrackViewCos = viewCos;
 
-            // 执行到这里说明这个地图点在相机的视野中并且进行重投影是可靠的，返回true
-            return true;
-        }
-            // 左右目时分别验证
-        else {
-            pMP->mbTrackInView = false;
-            pMP->mbTrackInViewR = false;
-            pMP->mnTrackScaleLevel = -1;
-            pMP->mnTrackScaleLevelR = -1;
-
-            pMP->mbTrackInView = isInFrustumChecks(pMP, viewingCosLimit);
-            pMP->mbTrackInViewR = isInFrustumChecks(pMP, viewingCosLimit, true);
-
-            return pMP->mbTrackInView || pMP->mbTrackInViewR;
-        }
+        // 执行到这里说明这个地图点在相机的视野中并且进行重投影是可靠的，返回true
+        return true;
     }
 
 /** 
@@ -532,9 +507,9 @@ namespace ORB_SLAM3 {
         u = fx * PcX * invz + cx;
         v = fy * PcY * invz + cy;
 
-        if (u < mnMinX || u > mnMaxX)
+        if (u < mfMinX || u > mfMaxX)
             return false;
-        if (v < mnMinY || v > mnMaxY)
+        if (v < mfMinY || v > mfMaxY)
             return false;
 
         float u_distort, v_distort;
@@ -592,19 +567,19 @@ namespace ORB_SLAM3 {
             const int minLevel, const int maxLevel, const bool bRight) const {
         // 存储搜索结果的vector
         vector<size_t> vIndices;
-        vIndices.reserve(N);
+        vIndices.reserve(mnKPsLeftNum);
 
         float factorX = r;
         float factorY = r;
 
         // Step 1 计算半径为r圆左右上下边界所在的网格列和行的id
         // 查找半径为r的圆左侧边界所在网格列坐标。这个地方有点绕，慢慢理解下：
-        // (mnMaxX-mnMinX)/FRAME_GRID_COLS：表示列方向每个网格可以平均分得几个像素（肯定大于1）
-        // mfGridElementWidthInv=FRAME_GRID_COLS/(mnMaxX-mnMinX) 是上面倒数，表示每个像素可以均分几个网格列（肯定小于1）
-        // (x-mnMinX-r)，可以看做是从图像的左边界mnMinX到半径r的圆的左边界区域占的像素列数
+        // (mfMaxX-mfMinX)/FRAME_GRID_COLS：表示列方向每个网格可以平均分得几个像素（肯定大于1）
+        // mfGridElementWidthInv=FRAME_GRID_COLS/(mfMaxX-mfMinX) 是上面倒数，表示每个像素可以均分几个网格列（肯定小于1）
+        // (x-mfMinX-r)，可以看做是从图像的左边界mnMinX到半径r的圆的左边界区域占的像素列数
         // 两者相乘，就是求出那个半径为r的圆的左侧边界在哪个网格列中
         // 保证nMinCellX 结果大于等于0
-        const int nMinCellX = max(0, (int) floor((x - mnMinX - factorX) * mfGridElementWidthInv));
+        const int nMinCellX = max(0, (int) floor((x - mfMinX - factorX) * mfGridElementWidthInv));
         // 如果最终求得的圆的左边界所在的网格列超过了设定了上限，那么就说明计算出错，找不到符合要求的特征点，返回空vector
         if (nMinCellX >= FRAME_GRID_COLS) {
             return vIndices;
@@ -612,20 +587,20 @@ namespace ORB_SLAM3 {
 
         // 计算圆所在的右边界网格列索引
         const int nMaxCellX = min((int) FRAME_GRID_COLS - 1,
-                                  (int) ceil((x - mnMinX + factorX) * mfGridElementWidthInv));
+                                  (int) ceil((x - mfMinX + factorX) * mfGridElementWidthInv));
         // 如果计算出的圆右边界所在的网格不合法，说明该特征点不好，直接返回空vector
         if (nMaxCellX < 0) {
             return vIndices;
         }
 
         // 后面的操作也都是类似的，计算出这个圆上下边界所在的网格行的id
-        const int nMinCellY = max(0, (int) floor((y - mnMinY - factorY) * mfGridElementHeightInv));
+        const int nMinCellY = max(0, (int) floor((y - mfMinY - factorY) * mfGridElementHeightInv));
         if (nMinCellY >= FRAME_GRID_ROWS) {
             return vIndices;
         }
 
         const int nMaxCellY = min((int) FRAME_GRID_ROWS - 1,
-                                  (int) ceil((y - mnMinY + factorY) * mfGridElementHeightInv));
+                                  (int) ceil((y - mfMinY + factorY) * mfGridElementHeightInv));
         if (nMaxCellY < 0) {
             return vIndices;
         }
@@ -685,10 +660,10 @@ namespace ORB_SLAM3 {
  */
     bool Frame::PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY) {
         // 计算特征点x,y坐标落在哪个网格内，网格坐标为posX，posY
-        // mfGridElementWidthInv=(FRAME_GRID_COLS)/(mnMaxX-mnMinX);
-        // mfGridElementHeightInv=(FRAME_GRID_ROWS)/(mnMaxY-mnMinY);
-        posX = round((kp.pt.x - mnMinX) * mfGridElementWidthInv);
-        posY = round((kp.pt.y - mnMinY) * mfGridElementHeightInv);
+        // mfGridElementWidthInv=(FRAME_GRID_COLS)/(mfMaxX-mfMinX);
+        // mfGridElementHeightInv=(FRAME_GRID_ROWS)/(mfMaxY-mfMinY);
+        posX = round((kp.pt.x - mfMinX) * mfGridElementWidthInv);
+        posY = round((kp.pt.y - mfMinY) * mfGridElementHeightInv);
 
         //Keypoint's coordinates are undistorted, which could cause to go out of the image
         // 因为特征点进行了去畸变，而且前面计算是round取整，所以有可能得到的点落在图像网格坐标外面
@@ -708,7 +683,7 @@ namespace ORB_SLAM3 {
         // 判断是否以前已经计算过了，计算过了就跳过
         if (mBowVec.empty()) {
             // 将描述子mDescriptors转换为DBOW要求的输入格式
-            vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
+            vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptorsLeft);
             // 将特征点的描述子转换成词袋向量mBowVec以及特征向量mFeatVec
             mpORBvocabulary->transform(vCurrentDesc,    //当前的描述子vector
                                        mBowVec,         //输出，词袋向量，记录的是单词的id及其对应权重TF-IDF值
@@ -733,10 +708,10 @@ namespace ORB_SLAM3 {
         // Step 2 如果畸变参数不为0，用OpenCV函数进行畸变矫正
         // Fill matrix with points
         // N为提取的特征点数量，为满足OpenCV函数输入要求，将N个特征点保存在N*2的矩阵中
-        cv::Mat mat(N, 2, CV_32F);
+        cv::Mat mat(mnKPsLeftNum, 2, CV_32F);
 
         // 遍历每个特征点，并将它们的坐标保存到矩阵中
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < mnKPsLeftNum; i++) {
             // 然后将这个特征点的横纵坐标分别保存
             mat.at<float>(i, 0) = mvKPsLeft[i].pt.x;
             mat.at<float>(i, 1) = mvKPsLeft[i].pt.y;
@@ -747,15 +722,15 @@ namespace ORB_SLAM3 {
         // 为了能够直接调用opencv的函数来去畸变，需要先将矩阵调整为2通道（对应坐标x,y）
         // cv::undistortPoints最后一个矩阵为空矩阵时，得到的点为归一化坐标点
         mat = mat.reshape(2);
-        cv::undistortPoints(mat, mat, static_cast<Pinhole *>(mpCamera)->toK(), mDistCoef, cv::Mat(), mK);
+        cv::undistortPoints(mat, mat, static_cast<Pinhole *>(mpCamera)->toK(), mDistCoef, cv::Mat(), mcvK);
         // 调整回只有一个通道，回归我们正常的处理方式
         mat = mat.reshape(1);
 
 
         // Fill undistorted keypoint vector
         // Step 3 存储校正后的特征点
-        mvKPsUn.resize(N);
-        for (int i = 0; i < N; i++) {
+        mvKPsUn.resize(mnKPsLeftNum);
+        for (int i = 0; i < mnKPsLeftNum; i++) {
             // 根据索引获取这个特征点
             // 注意之所以这样做而不是直接重新声明一个特征点对象的目的是，能够得到源特征点对象的其他属性
             cv::KeyPoint kp = mvKPsLeft[i];
@@ -764,7 +739,6 @@ namespace ORB_SLAM3 {
             kp.pt.y = mat.at<float>(i, 1);
             mvKPsUn[i] = kp;
         }
-
     }
 
 /**
@@ -788,21 +762,21 @@ namespace ORB_SLAM3 {
 
             // 和前面校正特征点一样的操作，将这几个边界点作为输入进行校正
             mat = mat.reshape(2);
-            cv::undistortPoints(mat, mat, static_cast<Pinhole *>(mpCamera)->toK(), mDistCoef, cv::Mat(), mK);
+            cv::undistortPoints(mat, mat, static_cast<Pinhole *>(mpCamera)->toK(), mDistCoef, cv::Mat(), mcvK);
             mat = mat.reshape(1);
 
             // Undistort corners
             // 校正后的四个边界点已经不能够围成一个严格的矩形，因此在这个四边形的外侧加边框作为坐标的边界
-            mnMinX = min(mat.at<float>(0, 0), mat.at<float>(2, 0));  // 左上和左下横坐标最小的
-            mnMaxX = max(mat.at<float>(1, 0), mat.at<float>(3, 0));  // 右上和右下横坐标最大的
-            mnMinY = min(mat.at<float>(0, 1), mat.at<float>(1, 1));  // 左上和右上纵坐标最小的
-            mnMaxY = max(mat.at<float>(2, 1), mat.at<float>(3, 1));  // 左下和右下纵坐标最小的
+            mfMinX = min(mat.at<float>(0, 0), mat.at<float>(2, 0));  // 左上和左下横坐标最小的
+            mfMaxX = max(mat.at<float>(1, 0), mat.at<float>(3, 0));  // 右上和右下横坐标最大的
+            mfMinY = min(mat.at<float>(0, 1), mat.at<float>(1, 1));  // 左上和右上纵坐标最小的
+            mfMaxY = max(mat.at<float>(2, 1), mat.at<float>(3, 1));  // 左下和右下纵坐标最小的
         } else {
             // 如果畸变参数为0，就直接获得图像边界
-            mnMinX = 0.0f;
-            mnMaxX = imLeft.cols;
-            mnMinY = 0.0f;
-            mnMaxY = imLeft.rows;
+            mfMinX = 0.0f;
+            mfMaxX = imLeft.cols;
+            mfMinY = 0.0f;
+            mfMaxY = imLeft.rows;
         }
     }
 
@@ -814,7 +788,7 @@ namespace ORB_SLAM3 {
  * 这里所说的SAD是一种双目立体视觉匹配算法，可参考[https://blog.csdn.net/u012507022/article/details/51446891]
  * 最后对所有SAD的值进行排序, 剔除SAD值较大的匹配对，然后利用抛物线拟合得到亚像素精度的匹配 \n 
  * 这里所谓的亚像素精度，就是使用这个拟合得到一个小于一个单位像素的修正量，这样可以取得更好的估计结果，计算出来的点的深度也就越准确
- * 匹配成功后会更新 mvuRight(ur) 和 mvDepth(Z)
+ * 匹配成功后会更新 mvfXInRight(ur) 和 mvfMPDepth(Z)
  */
     void Frame::ComputeStereoMatches() {
         /*两帧图像稀疏立体匹配（即：ORB特征点匹配，非逐像素的密集匹配，但依然满足行对齐）
@@ -826,17 +800,17 @@ namespace ORB_SLAM3 {
               4. 亚像素精度优化. 步骤3得到的视差为uchar/int类型精度，并不一定是真实视差，通过亚像素差值（抛物线插值)获取float精度的真实视差
               5. 最优视差值/深度选择. 通过胜者为王算法（WTA）获取最佳匹配点。
               6. 删除离缺点(outliers). 块匹配相似度阈值判断，归一化sad最小，并不代表就一定是正确匹配，比如光照变化、弱纹理等会造成误匹配
-         * 输出：稀疏特征点视差图/深度图（亚像素精度）mvDepth 匹配结果 mvuRight
+         * 输出：稀疏特征点视差图/深度图（亚像素精度）mvfMPDepth 匹配结果 mvfXInRight
          */
 
         // 为匹配结果预先分配内存，数据类型为float型
         // mvuRight存储右图匹配点索引
         // mvDepth存储特征点的深度信息
-        mvuRight = vector<float>(N, -1.0f);
-        mvDepth = vector<float>(N, -1.0f);
+        mvfXInRight = vector<float>(mnKPsLeftNum, -1.0f);
+        mvfMPDepth = vector<float>(mnKPsLeftNum, -1.0f);
 
         // orb特征相似度阈值  -> mean ～= (max  + min) / 2
-        const int thOrbDist = (ORBmatcher::TH_HIGH + ORBmatcher::TH_LOW) / 2;
+        const int nThOrbDist = (ORBmatcher::TH_HIGH + ORBmatcher::TH_LOW) / 2;
 
         // 金字塔顶层（0层）图像高 nRows
         const int nRows = mpORBextractorLeft->mvImagePyramid[0].rows;
@@ -851,16 +825,16 @@ namespace ORB_SLAM3 {
             vRowIndices[i].reserve(200);
 
         // 右图特征点数量，N表示数量 r表示右图，且不能被修改
-        const int Nr = mvKPsRight.size();
+        const int nKPsRightNum = mvKPsRight.size();
 
         // Step 1. 行特征点统计. 考虑到尺度金字塔特征，一个特征点可能存在于多行，而非唯一的一行
-        for (int iR = 0; iR < Nr; iR++) {
+        for (int iR = 0; iR < nKPsRightNum; iR++) {
             // 获取特征点ir的y坐标，即行号
             const cv::KeyPoint &kp = mvKPsRight[iR];
             const float &kpY = kp.pt.y;
             // 计算特征点ir在行方向上，可能的偏移范围r，即可能的行号为[kpY + r, kpY -r]
             // 2 表示在全尺寸(scale = 1)的情况下，假设有2个像素的偏移，随着尺度变化，r也跟着变化
-            const float r = 2.0f * mvScaleFactors[mvKPsRight[iR].octave];
+            const float r = 2.0f * mvfScaleFactors[mvKPsRight[iR].octave];
             const int maxr = ceil(kpY + r);
             const int minr = floor(kpY - r);
 
@@ -875,17 +849,17 @@ namespace ORB_SLAM3 {
         // maxd = baseline * length_focal / minZ
         // mind = baseline * length_focal / maxZ
         // Set limits for search
-        const float minZ = mb;
+        const float minZ = mfBaseline;
         const float minD = 0;
-        const float maxD = mbf / minZ;
+        const float maxD = mfBaselineFocal / minZ;
 
         // For each left keypoint search a match in the right image
         // 保存sad块匹配相似度和左图特征点索引
         vector<pair<int, int> > vDistIdx;
-        vDistIdx.reserve(N);
+        vDistIdx.reserve(mnKPsLeftNum);
 
         // 为左图每一个特征点il，在右图搜索最相似的特征点ir
-        for (int iL = 0; iL < N; iL++) {
+        for (int iL = 0; iL < mnKPsLeftNum; iL++) {
             const cv::KeyPoint &kpL = mvKPsLeft[iL];
             const int &levelL = kpL.octave;
             const float &vL = kpL.pt.y;
@@ -909,7 +883,7 @@ namespace ORB_SLAM3 {
             int bestDist = ORBmatcher::TH_HIGH;
             size_t bestIdxR = 0;
 
-            const cv::Mat &dL = mDescriptors.row(iL);
+            const cv::Mat &dL = mDescriptorsLeft.row(iL);
 
             // Compare descriptor to right keypoints
             // Step2. 粗配准. 左图特征点il与右图中的可能的匹配点进行逐个比较,得到最相似匹配点的相似度和索引
@@ -941,11 +915,11 @@ namespace ORB_SLAM3 {
             // Subpixel match by correlation
             // 如果刚才匹配过程中的最佳描述子距离小于给定的阈值
             // Step 3. 精确匹配.
-            if (bestDist < thOrbDist) {
+            if (bestDist < nThOrbDist) {
                 // coordinates in image pyramid at keypoint scale
                 // 计算右图特征点x坐标和对应的金字塔尺度
                 const float uR0 = mvKPsRight[bestIdxR].pt.x;
-                const float scaleFactor = mvInvScaleFactors[kpL.octave];
+                const float scaleFactor = mvfInvScaleFactors[kpL.octave];
                 // 尺度缩放后的左右图特征点坐标
                 const float scaleduL = round(kpL.pt.x * scaleFactor);
                 const float scaledvL = round(kpL.pt.y * scaleFactor);
@@ -1026,7 +1000,7 @@ namespace ORB_SLAM3 {
 
                 // Re-scaled coordinate
                 // 根据亚像素精度偏移量delta调整最佳匹配索引
-                float bestuR = mvScaleFactors[kpL.octave] * ((float) scaleduR0 + (float) bestincR + deltaR);
+                float bestuR = mvfScaleFactors[kpL.octave] * ((float) scaleduR0 + (float) bestincR + deltaR);
 
                 float disparity = (uL - bestuR);
 
@@ -1040,8 +1014,8 @@ namespace ORB_SLAM3 {
                     // 保存最相似点的列坐标(x)信息
                     // 保存归一化sad最小相似度
                     // Step 5. 最优视差值/深度选择.
-                    mvDepth[iL] = mbf / disparity;
-                    mvuRight[iL] = bestuR;
+                    mvfMPDepth[iL] = mfBaselineFocal / disparity;
+                    mvfXInRight[iL] = bestuR;
                     vDistIdx.push_back(pair<int, int>(bestDist, iL));
                 }
             }
@@ -1059,8 +1033,8 @@ namespace ORB_SLAM3 {
                 break;
             else {
                 // 误匹配点置为-1，和初始化时保持一直，作为error code
-                mvuRight[vDistIdx[i].second] = -1;
-                mvDepth[vDistIdx[i].second] = -1;
+                mvfXInRight[vDistIdx[i].second] = -1;
+                mvfMPDepth[vDistIdx[i].second] = -1;
             }
         }
     }
@@ -1070,7 +1044,7 @@ namespace ORB_SLAM3 {
  * @brief 当某个特征点的深度信息或者双目信息有效时,将它反投影到三维世界坐标系中
  */
     bool Frame::UnprojectStereo(const int &i, Eigen::Vector3f &x3D) {
-        const float z = mvDepth[i];
+        const float z = mvfMPDepth[i];
         if (z > 0) {
             const float u = mvKPsUn[i].pt.x;
             const float v = mvKPsUn[i].pt.y;
@@ -1141,9 +1115,9 @@ namespace ORB_SLAM3 {
 
         // Step 3 关卡二：将MapPoint投影到当前帧的像素坐标(u,v), 并判断是否在图像有效范围内
         // 判断是否在图像边界中，只要不在那么就说明无法在当前帧下进行重投影
-        if (uv(0) < mnMinX || uv(0) > mnMaxX)
+        if (uv(0) < mfMinX || uv(0) > mfMaxX)
             return false;
-        if (uv(1) < mnMinY || uv(1) > mnMaxY)
+        if (uv(1) < mfMinY || uv(1) > mfMaxY)
             return false;
 
         // Check distance is in the scale invariance region of the MapPoint
