@@ -178,10 +178,7 @@ namespace ORB_SLAM3 {
                     if (!mpCurrentKeyFrame->GetMap()->isImuInitialized() && mbInertial) {
                         // 在函数InitializeIMU里设置IMU成功初始化标志 SetImuInitialized
                         // IMU第一阶段初始化
-                        if (mbMonocular)
-                            InitializeIMU(1e2, 1e10, true);
-                        else
-                            InitializeIMU(1e2, 1e5, true);
+                        InitializeIMU(1e2, 1e5, true);
                     }
 
 
@@ -203,10 +200,7 @@ namespace ORB_SLAM3 {
                                 if (mTinit > 5.0f) {
                                     cout << "start VIBA 1" << endl;
                                     mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
-                                    if (mbMonocular)
-                                        InitializeIMU(1.f, 1e5, true);
-                                    else
-                                        InitializeIMU(1.f, 1e5, true);
+                                    InitializeIMU(1.f, 1e5, true);
 
                                     cout << "end VIBA 1" << endl;
                                 }
@@ -217,11 +211,7 @@ namespace ORB_SLAM3 {
                                 if (mTinit > 15.0f) {
                                     cout << "start VIBA 2" << endl;
                                     mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
-                                    if (mbMonocular)
-                                        InitializeIMU(0.f, 0.f, true);
-                                    else
-                                        InitializeIMU(0.f, 0.f, true);
-
+                                    InitializeIMU(0.f, 0.f, true);
                                     cout << "end VIBA 2" << endl;
                                 }
                             }
@@ -522,82 +512,18 @@ namespace ORB_SLAM3 {
 
                 // 5.1
                 // 当前匹配在当前关键帧中的特征点
-                const cv::KeyPoint &kp1 = (mpCurrentKeyFrame->NLeft == -1) ? mpCurrentKeyFrame->mvKPsUn[idx1]
-                                                                           : (idx1 < mpCurrentKeyFrame->NLeft)
-                                                                             ? mpCurrentKeyFrame->mvKPsLeft[idx1]
-                                                                             : mpCurrentKeyFrame->mvKPsRight[idx1 -
-                                                                                                             mpCurrentKeyFrame->NLeft];
+                const cv::KeyPoint &kp1 = mpCurrentKeyFrame->mvKPsUn[idx1];
                 // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
                 const float kp1_ur = mpCurrentKeyFrame->mvfXInRight[idx1];
-                bool bStereo1 = (!mpCurrentKeyFrame->mpCamera2 && kp1_ur >= 0);
-                // 查看点idx1是否为右目的点
-                const bool bRight1 = (mpCurrentKeyFrame->NLeft == -1 || idx1 < mpCurrentKeyFrame->NLeft) ? false
-                                                                                                         : true;
-
+                bool bStereo1 = (kp1_ur >= 0);
 
                 // 5.2
                 // 当前匹配在邻接关键帧中的特征点
-                const cv::KeyPoint &kp2 = (pKF2->NLeft == -1) ? pKF2->mvKPsUn[idx2]
-                                                              : (idx2 < pKF2->NLeft) ? pKF2->mvKPsLeft[idx2]
-                                                                                     : pKF2->mvKPsRight[idx2 -
-                                                                                                        pKF2->NLeft];
+                const cv::KeyPoint &kp2 = pKF2->mvKPsUn[idx2];
                 // mvuRight中存放着双目的深度值，如果不是双目，其值将为-1
                 // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
                 const float kp2_ur = pKF2->mvfXInRight[idx2];
-                bool bStereo2 = (!pKF2->mpCamera2 && kp2_ur >= 0);
-                // 查看点idx2是否为右目的点
-                const bool bRight2 = (pKF2->NLeft == -1 || idx2 < pKF2->NLeft) ? false
-                                                                               : true;
-
-                // 5.3 当目前为左右目时，确定两个点所在相机之间的位姿关系
-                if (mpCurrentKeyFrame->mpCamera2 && pKF2->mpCamera2) {
-                    if (bRight1 && bRight2) {
-                        sophTcw1 = mpCurrentKeyFrame->GetRightPose();
-                        Ow1 = mpCurrentKeyFrame->GetRightCameraCenter();
-
-                        sophTcw2 = pKF2->GetRightPose();
-                        Ow2 = pKF2->GetRightCameraCenter();
-
-                        pCamera1 = mpCurrentKeyFrame->mpCamera2;
-                        pCamera2 = pKF2->mpCamera2;
-                    } else if (bRight1 && !bRight2) {
-                        sophTcw1 = mpCurrentKeyFrame->GetRightPose();
-                        Ow1 = mpCurrentKeyFrame->GetRightCameraCenter();
-
-                        sophTcw2 = pKF2->GetPose();
-                        Ow2 = pKF2->GetCameraCenter();
-
-                        pCamera1 = mpCurrentKeyFrame->mpCamera2;
-                        pCamera2 = pKF2->mpCamera;
-                    } else if (!bRight1 && bRight2) {
-                        sophTcw1 = mpCurrentKeyFrame->GetPose();
-                        Ow1 = mpCurrentKeyFrame->GetCameraCenter();
-
-                        sophTcw2 = pKF2->GetRightPose();
-                        Ow2 = pKF2->GetRightCameraCenter();
-
-                        pCamera1 = mpCurrentKeyFrame->mpCamera;
-                        pCamera2 = pKF2->mpCamera2;
-                    } else {
-                        sophTcw1 = mpCurrentKeyFrame->GetPose();
-                        Ow1 = mpCurrentKeyFrame->GetCameraCenter();
-
-                        sophTcw2 = pKF2->GetPose();
-                        Ow2 = pKF2->GetCameraCenter();
-
-                        pCamera1 = mpCurrentKeyFrame->mpCamera;
-                        pCamera2 = pKF2->mpCamera;
-                    }
-                    eigTcw1 = sophTcw1.matrix3x4();
-                    Rcw1 = eigTcw1.block<3, 3>(0, 0);
-                    Rwc1 = Rcw1.transpose();
-                    tcw1 = sophTcw1.translation();
-
-                    eigTcw2 = sophTcw2.matrix3x4();
-                    Rcw2 = eigTcw2.block<3, 3>(0, 0);
-                    Rwc2 = Rcw2.transpose();
-                    tcw2 = sophTcw2.translation();
-                }
+                bool bStereo2 = (kp2_ur >= 0);
 
                 // Check parallax between rays
                 // Step 5.4：利用匹配点反投影得到视差角
@@ -867,7 +793,6 @@ namespace ORB_SLAM3 {
             // 2.如果地图点能匹配关键帧的特征点，并且该点没有对应的地图点，那么为该点添加该投影地图点
             // 注意这个时候对地图点融合的操作是立即生效的
             matcher.Fuse(pKFi, vpMapPointMatches);
-            if (pKFi->NLeft != -1) matcher.Fuse(pKFi, vpMapPointMatches, true);
         }
 
 
@@ -907,7 +832,6 @@ namespace ORB_SLAM3 {
         // Step 4.2：进行地图点投影融合,和正向融合操作是完全相同的
         // 不同的是正向操作是"每个关键帧和当前关键帧的地图点进行融合",而这里的是"当前关键帧和所有邻接关键帧的地图点进行融合"
         matcher.Fuse(mpCurrentKeyFrame, vpFuseCandidates);
-        if (mpCurrentKeyFrame->NLeft != -1) matcher.Fuse(mpCurrentKeyFrame, vpFuseCandidates, true);
 
 
         // Update points
@@ -1110,9 +1034,7 @@ namespace ORB_SLAM3 {
                         nMPs++;
                         // pMP->Observations() 是观测到该地图点的相机总数目（单目1，双目2）
                         if (pMP->Observations() > thObs) {
-                            const int &scaleLevel = (pKF->NLeft == -1) ? pKF->mvKPsUn[i].octave
-                                                                       : (i < pKF->NLeft) ? pKF->mvKPsLeft[i].octave
-                                                                                          : pKF->mvKPsRight[i].octave;
+                            const int &scaleLevel = pKF->mvKPsUn[i].octave;
                             const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
                             int nObs = 0;
                             // 遍历观测到该地图点的关键帧
@@ -1124,18 +1046,7 @@ namespace ORB_SLAM3 {
                                 tuple<int, int> indexes = mit->second;
                                 int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
                                 int scaleLeveli = -1;
-                                if (pKFi->NLeft == -1)
-                                    scaleLeveli = pKFi->mvKPsUn[leftIndex].octave;
-                                else {
-                                    if (leftIndex != -1) {
-                                        scaleLeveli = pKFi->mvKPsLeft[leftIndex].octave;
-                                    }
-                                    if (rightIndex != -1) {
-                                        int rightLevel = pKFi->mvKPsRight[rightIndex - pKFi->NLeft].octave;
-                                        scaleLeveli = (scaleLeveli == -1 || scaleLeveli > rightLevel) ? rightLevel
-                                                                                                      : scaleLeveli;
-                                    }
-                                }
+                                scaleLeveli = pKFi->mvKPsUn[leftIndex].octave;
                                 // 尺度约束：为什么pKF 尺度+1 要大于等于 pKFi 尺度？
                                 // 回答：因为同样或更低金字塔层级的地图点更准确
                                 if (scaleLeveli <= scaleLevel + 1) {

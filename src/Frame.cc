@@ -72,7 +72,7 @@ namespace ORB_SLAM3 {
               mvfLevelSigma2(frame.mvfLevelSigma2), mvfInvLevelSigma2(frame.mvfInvLevelSigma2),
               mpPrevFrame(frame.mpPrevFrame), mpLastKeyFrame(frame.mpLastKeyFrame),
               mbIsSet(frame.mbIsSet), mbImuPreintegrated(frame.mbImuPreintegrated), mpMutexImu(frame.mpMutexImu),
-              mpCamera(frame.mpCamera), mpCamera2(frame.mpCamera2), Nleft(frame.Nleft), Nright(frame.Nright),
+              mpCamera(frame.mpCamera), mpCamera2(frame.mpCamera2),
               monoLeft(frame.monoLeft), monoRight(frame.monoRight), mvLeftToRightMatch(frame.mvLeftToRightMatch),
               mvRightToLeftMatch(frame.mvRightToLeftMatch), mvStereo3Dpoints(frame.mvStereo3Dpoints),
               mTlr(frame.mTlr), mRlr(frame.mRlr), mtlr(frame.mtlr), mTrl(frame.mTrl),
@@ -195,8 +195,6 @@ namespace ORB_SLAM3 {
         mpMutexImu = new std::mutex();
 
         //Set no stereo fisheye information
-        Nleft = -1;
-        Nright = -1;
         mvLeftToRightMatch = vector<int>(0);
         mvRightToLeftMatch = vector<int>(0);
         mvStereo3Dpoints = vector<Eigen::Vector3f>(0);
@@ -622,9 +620,7 @@ namespace ORB_SLAM3 {
                 // 如果这个网格中有特征点，那么遍历这个图像网格中所有的特征点
                 for (size_t j = 0, jend = vCell.size(); j < jend; j++) {
                     // 根据索引先读取这个特征点
-                    const cv::KeyPoint &kpUn = (Nleft == -1) ? mvKPsUn[vCell[j]]
-                                                             : (!bRight) ? mvKPsLeft[vCell[j]]
-                                                                         : mvKPsRight[vCell[j]];
+                    const cv::KeyPoint &kpUn = mvKPsUn[vCell[j]];
                     if (bCheckLevels) {
                         // cv::KeyPoint::octave中表示的是从金字塔的哪一层提取的数据
                         // 保证特征点是在金字塔层级minLevel和maxLevel之间，不是的话跳过
@@ -1083,17 +1079,10 @@ namespace ORB_SLAM3 {
 
         Eigen::Matrix3f mR;
         Eigen::Vector3f mt, twc;
-        if (bRight) {
-            Eigen::Matrix3f Rrl = mTrl.rotationMatrix();
-            Eigen::Vector3f trl = mTrl.translation();
-            mR = Rrl * mRcw;
-            mt = Rrl * mtcw + trl;
-            twc = mRwc * mTlr.translation() + mOw;
-        } else {
-            mR = mRcw;
-            mt = mtcw;
-            twc = mOw;
-        }
+        mR = mRcw;
+        mt = mtcw;
+        twc = mOw;
+
 
         // 3D in camera coordinates
         // 根据当前帧(粗糙)位姿转化到当前相机坐标系下的三维点Pc
@@ -1108,10 +1097,7 @@ namespace ORB_SLAM3 {
 
         // Project in image and check it is not outside
         Eigen::Vector2f uv;
-        if (bRight)
-            uv = mpCamera2->project(Pc);
-        else
-            uv = mpCamera->project(Pc);
+        uv = mpCamera->project(Pc);
 
         // Step 3 关卡二：将MapPoint投影到当前帧的像素坐标(u,v), 并判断是否在图像有效范围内
         // 判断是否在图像边界中，只要不在那么就说明无法在当前帧下进行重投影
@@ -1151,19 +1137,11 @@ namespace ORB_SLAM3 {
         const int nPredictedLevel = pMP->PredictScale(dist, this);
 
         // Step 7 记录计算得到的一些参数
-        if (bRight) {
-            pMP->mTrackProjXR = uv(0);
-            pMP->mTrackProjYR = uv(1);
-            pMP->mnTrackScaleLevelR = nPredictedLevel;
-            pMP->mTrackViewCosR = viewCos;
-            pMP->mTrackDepthR = Pc_dist;
-        } else {
-            pMP->mTrackProjX = uv(0);
-            pMP->mTrackProjY = uv(1);
-            pMP->mnTrackScaleLevel = nPredictedLevel;
-            pMP->mTrackViewCos = viewCos;
-            pMP->mTrackDepth = Pc_dist;
-        }
+        pMP->mTrackProjX = uv(0);
+        pMP->mTrackProjY = uv(1);
+        pMP->mnTrackScaleLevel = nPredictedLevel;
+        pMP->mTrackViewCos = viewCos;
+        pMP->mTrackDepth = Pc_dist;
 
         return true;
     }

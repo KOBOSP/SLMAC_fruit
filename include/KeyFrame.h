@@ -169,13 +169,10 @@ class KeyFrame
 
         // Camera variables
         ar & mnBackupIdCamera;
-        ar & mnBackupIdCamera2;
 
         // Fisheye variables
         ar & mvLeftToRightMatch;
         ar & mvRightToLeftMatch;
-        ar & const_cast<int&>(NLeft);
-        ar & const_cast<int&>(NRight);
         serializeSophusSE3<Archive>(ar, mTlr, version);
         serializeVectorKeyPoints<Archive>(ar, mvKPsRight, version);
         ar & mGridRight;
@@ -490,7 +487,7 @@ protected:
     IMU::Preintegrated mBackupImuPreintegrated;
 
     // Backup for Cameras
-    unsigned int mnBackupIdCamera, mnBackupIdCamera2;
+    unsigned int mnBackupIdCamera;
 
     // Calibration
     Eigen::Matrix3f mEigenK;
@@ -513,8 +510,6 @@ public:
     //KeyPoints in the right image (for stereo fisheye, coordinates are needed)
     const std::vector<cv::KeyPoint> mvKPsRight;
 
-    const int NLeft, NRight;
-
     std::vector< std::vector <std::vector<size_t> > > mGridRight;
 
     Sophus::SE3<float> GetRightPose();
@@ -526,7 +521,7 @@ public:
 
     void PrintPointDistribution(){
         int left = 0, right = 0;
-        int Nlim = (NLeft != -1) ? NLeft : mnKPsLeftNum;
+        int Nlim = mnKPsLeftNum;
         for(int i = 0; i < mnKPsLeftNum; i++){
             if(mvpMapPoints[i]){
                 if(i < Nlim) left++;

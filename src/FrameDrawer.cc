@@ -169,7 +169,7 @@ namespace ORB_SLAM3 {
                 MapPoint *pMP = pTracker->mCurFrame.mvpMPs[i];
                 if (pMP) {
                     if (!pTracker->mCurFrame.mvbOutlier[i]) {
-                        if (pMP->Observations() > 0)
+                        if (pMP->Observations() > 2)
                             mvbMap[i] = true;
                         else
                             mvbVO[i] = true;

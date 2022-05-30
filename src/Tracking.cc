@@ -1104,11 +1104,7 @@ namespace ORB_SLAM3 {
 
                     mCurFrame.mvpMPs[i] = static_cast<MapPoint *>(NULL);
                     mCurFrame.mvbOutlier[i] = false;
-                    if (i < mCurFrame.Nleft) {
-                        pMP->mbTrackInLeftView = false;
-                    } else {
-                        pMP->mbTrackInRightView = false;
-                    }
+                    pMP->mbTrackInRightView = false;
                     pMP->mbTrackInLeftView = false;
                     pMP->mnLastFrameSeen = mCurFrame.mnId;
                     nmatches--;
@@ -1147,7 +1143,7 @@ namespace ORB_SLAM3 {
         // We sort points according to their measured depth by the stereo/RGB-D sensor
         // Step 2.1：得到上一帧中具有有效深度值的特征点（不一定是地图点）
         vector<pair<float, int> > vDepthIdx;
-        const int Nfeat = mLastFrame.Nleft == -1 ? mLastFrame.mnKPsLeftNum : mLastFrame.Nleft;
+        const int Nfeat = mLastFrame.mnKPsLeftNum;
         vDepthIdx.reserve(Nfeat);
         for (int i = 0; i < Nfeat; i++) {
             float z = mLastFrame.mvfMPDepth[i];
@@ -1279,11 +1275,7 @@ namespace ORB_SLAM3 {
 
                     mCurFrame.mvpMPs[i] = static_cast<MapPoint *>(NULL);
                     mCurFrame.mvbOutlier[i] = false;
-                    if (i < mCurFrame.Nleft) {
-                        pMP->mbTrackInLeftView = false;
-                    } else {
-                        pMP->mbTrackInRightView = false;
-                    }
+                    pMP->mbTrackInRightView = false;
                     pMP->mnLastFrameSeen = mCurFrame.mnId;
                     nmatches--;
                 } else if (mCurFrame.mvpMPs[i]->Observations() > 0)
@@ -1471,7 +1463,7 @@ namespace ORB_SLAM3 {
         // Step 6：对于双目或RGBD摄像头，统计成功跟踪的近点的数量，如果跟踪到的近点太少，没有跟踪到的近点较多，可以插入关键帧
         int nNonTrackedClose = 0;  // 双目或RGB-D中没有跟踪到的近点
         int nTrackedClose = 0;  // 双目或RGB-D中成功跟踪的近点（三维点）
-        int N = (mCurFrame.Nleft == -1) ? mCurFrame.mnKPsLeftNum : mCurFrame.Nleft;
+        int N = mCurFrame.mnKPsLeftNum;
         for (int i = 0; i < N; i++) {
             // 深度值在有效范围内
             if (mCurFrame.mvfMPDepth[i] > 0 && mCurFrame.mvfMPDepth[i] < mfThDepth) {
@@ -1612,7 +1604,7 @@ namespace ORB_SLAM3 {
 
         // Step 3.1：得到当前帧有深度值的特征点（不一定是地图点）
         vector<pair<float, int> > vDepthIdx;
-        int N = (mCurFrame.Nleft != -1) ? mCurFrame.Nleft : mCurFrame.mnKPsLeftNum;
+        int N = mCurFrame.mnKPsLeftNum;
         vDepthIdx.reserve(mCurFrame.mnKPsLeftNum);
         for (int i = 0; i < N; i++) {
             float z = mCurFrame.mvfMPDepth[i];
@@ -1646,25 +1638,11 @@ namespace ORB_SLAM3 {
                 // 如果需要就新建地图点，这里的地图点不是临时的，是全局地图中新建地图点，用于跟踪
                 if (bCreateNew) {
                     Eigen::Vector3f x3D;
-
-                    if (mCurFrame.Nleft == -1) {
-                        mCurFrame.UnprojectStereo(i, x3D);
-                    } else {
-                        x3D = mCurFrame.UnprojectStereoFishEye(i);
-                    }
+                    mCurFrame.UnprojectStereo(i, x3D);
 
                     MapPoint *pNewMP = new MapPoint(x3D, pKF, mpAtlas->GetCurrentMap());
                     // 这些添加属性的操作是每次创建MapPoint后都要做的
                     pNewMP->AddObservation(pKF, i);
-
-                    //Check if it is a stereo observation in order to not
-                    //duplicate mappoints
-                    if (mCurFrame.Nleft != -1 && mCurFrame.mvLeftToRightMatch[i] >= 0) {
-                        mCurFrame.mvpMPs[mCurFrame.Nleft +
-                                         mCurFrame.mvLeftToRightMatch[i]] = pNewMP;
-                        pNewMP->AddObservation(pKF, mCurFrame.Nleft + mCurFrame.mvLeftToRightMatch[i]);
-                        pKF->AddMapPoint(pNewMP, mCurFrame.Nleft + mCurFrame.mvLeftToRightMatch[i]);
-                    }
 
                     pKF->AddMapPoint(pNewMP, i);
                     pNewMP->ComputeDistinctiveDescriptors();

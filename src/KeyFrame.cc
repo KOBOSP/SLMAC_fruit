@@ -44,8 +44,7 @@ namespace ORB_SLAM3 {
               mnMaxY(0), mPrevKF(static_cast<KeyFrame *>(NULL)), mNextKF(static_cast<KeyFrame *>(NULL)),
               mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
               mbToBeErased(false), mbBad(false), mHalfBaseline(0), mbCurrentPlaceRecognition(false),
-              mnMergeCorrectedForKF(0),
-              NLeft(0), NRight(0), mnNumberOfOpt(0), mbHasVelocity(false) {
+              mnMergeCorrectedForKF(0), mnNumberOfOpt(0), mbHasVelocity(false) {
     }
 
     KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB)
@@ -74,7 +73,7 @@ namespace ORB_SLAM3 {
               mpCamera(F.mpCamera), mpCamera2(F.mpCamera2),
               mvLeftToRightMatch(F.mvLeftToRightMatch), mvRightToLeftMatch(F.mvRightToLeftMatch),
               mTlr(F.GetRelativePoseTlr()),
-              mvKPsRight(F.mvKPsRight), NLeft(F.Nleft), NRight(F.Nright), mTrl(F.GetRelativePoseTrl()),
+              mvKPsRight(F.mvKPsRight), mTrl(F.GetRelativePoseTrl()),
               mnNumberOfOpt(0), mbHasVelocity(false) {
         mnId = nNextId++;
 
@@ -82,13 +81,8 @@ namespace ORB_SLAM3 {
         mGrid.resize(mnGridCols);
         for (int i = 0; i < mnGridCols; i++) {
             mGrid[i].resize(mnGridRows);
-            if (F.Nleft != -1)
-                mGridRight[i].resize(mnGridRows);
             for (int j = 0; j < mnGridRows; j++) {
                 mGrid[i][j] = F.mGrid[i][j];
-                if (F.Nleft != -1) {
-                    mGridRight[i][j] = F.mGridRight[i][j];
-                }
             }
         }
 
@@ -374,10 +368,10 @@ namespace ORB_SLAM3 {
                 if (!pMP->isBad()) {
                     if (bCheckObs) {
                         // 满足输入阈值要求的地图点计数加1
-                        if (mvpMapPoints[i]->Observations() >= minObs)
+                        if (mvpMapPoints[i]->Observations() >= minObs){
                             nPoints++;
-                    } else
-                        nPoints++;
+                        }
+                    }
                 }
             }
         }
@@ -798,9 +792,7 @@ namespace ORB_SLAM3 {
             for (int iy = nMinCellY; iy <= nMaxCellY; iy++) {
                 const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
                 for (size_t j = 0, jend = vCell.size(); j < jend; j++) {
-                    const cv::KeyPoint &kpUn = (NLeft == -1) ? mvKPsUn[vCell[j]]
-                                                             : (!bRight) ? mvKPsLeft[vCell[j]]
-                                                                         : mvKPsRight[vCell[j]];
+                    const cv::KeyPoint &kpUn = mvKPsUn[vCell[j]];
                     const float distx = kpUn.pt.x - x;
                     const float disty = kpUn.pt.y - y;
 
@@ -963,10 +955,6 @@ namespace ORB_SLAM3 {
         if (mpCamera && spCam.find(mpCamera) != spCam.end())
             mnBackupIdCamera = mpCamera->GetId();
 
-        mnBackupIdCamera2 = -1;
-        if (mpCamera2 && spCam.find(mpCamera2) != spCam.end())
-            mnBackupIdCamera2 = mpCamera2->GetId();
-
         // Inertial data
         mBackupPrevKFId = -1;
         if (mPrevKF && spKF.find(mPrevKF) != spKF.end())
@@ -1038,9 +1026,6 @@ namespace ORB_SLAM3 {
             mpCamera = mpCamId[mnBackupIdCamera];
         } else {
             cout << "ERROR: There is not a main camera in KF " << mnId << endl;
-        }
-        if (mnBackupIdCamera2 >= 0) {
-            mpCamera2 = mpCamId[mnBackupIdCamera2];
         }
 
         // Inertial data

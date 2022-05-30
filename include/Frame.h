@@ -320,9 +320,6 @@ namespace ORB_SLAM3 {
 
     public:
         GeometricCamera *mpCamera, *mpCamera2;
-
-        //Number of KeyPoints extracted in the left and right images
-        int Nleft, Nright;
         //Number of Non Lapping Keypoints
         int monoLeft, monoRight;
 

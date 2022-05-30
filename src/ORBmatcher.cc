@@ -100,7 +100,7 @@ namespace ORB_SLAM3 {
                                 continue;
 
                         //如果是双目数据
-                        if (F.Nleft == -1 && F.mvfXInRight[idx] > 0) {
+                        if (F.mvfXInRight[idx] > 0) {
                             //计算在X轴上的投影误差
                             const float er = fabs(pMP->mTrackProjXR - F.mvfXInRight[idx]);
                             //超过阈值,说明这个点不行,丢掉.
@@ -140,84 +140,9 @@ namespace ORB_SLAM3 {
 
                         if (bestLevel != bestLevel2 || bestDist <= mfNNratio * bestDist2) {
                             F.mvpMPs[bestIdx] = pMP;
-
-                            if (F.Nleft != -1 && F.mvLeftToRightMatch[bestIdx] !=
-                                                 -1) { //Also match with the stereo observation at right camera
-                                F.mvpMPs[F.mvLeftToRightMatch[bestIdx] + F.Nleft] = pMP;
-                                nmatches++;
-                                right++;
-                            }
-
                             nmatches++;
                             left++;
                         }
-                    }
-                }
-            }
-
-            if (F.Nleft != -1 && pMP->mbTrackInRightView) {
-                const int &nPredictedLevel = pMP->mnTrackScaleLevelR;
-                if (nPredictedLevel != -1) {
-                    float r = RadiusByViewingCos(pMP->mTrackViewCosR);
-
-                    const vector<size_t> vIndices =
-                            F.GetFeaturesInArea(pMP->mTrackProjXR, pMP->mTrackProjYR,
-                                                r * F.mvfScaleFactors[nPredictedLevel], nPredictedLevel - 1,
-                                                nPredictedLevel, true);
-
-                    if (vIndices.empty())
-                        continue;
-
-                    const cv::Mat MPdescriptor = pMP->GetDescriptor();
-
-                    int bestDist = 256;
-                    int bestLevel = -1;
-                    int bestDist2 = 256;
-                    int bestLevel2 = -1;
-                    int bestIdx = -1;
-
-                    // Get best and second matches with near keypoints
-                    for (vector<size_t>::const_iterator vit = vIndices.begin(), vend = vIndices.end();
-                         vit != vend; vit++) {
-                        const size_t idx = *vit;
-
-                        if (F.mvpMPs[idx + F.Nleft])
-                            if (F.mvpMPs[idx + F.Nleft]->Observations() > 0)
-                                continue;
-
-
-                        const cv::Mat &d = F.mDescriptorsLeft.row(idx + F.Nleft);
-
-                        const int dist = DescriptorDistance(MPdescriptor, d);
-
-                        if (dist < bestDist) {
-                            bestDist2 = bestDist;
-                            bestDist = dist;
-                            bestLevel2 = bestLevel;
-                            bestLevel = F.mvKPsRight[idx].octave;
-                            bestIdx = idx;
-                        } else if (dist < bestDist2) {
-                            bestLevel2 = F.mvKPsRight[idx].octave;
-                            bestDist2 = dist;
-                        }
-                    }
-
-                    // Apply ratio to second match (only if best and second are in the same scale level)
-                    if (bestDist <= TH_HIGH) {
-                        if (bestLevel == bestLevel2 && bestDist > mfNNratio * bestDist2)
-                            continue;
-
-                        if (F.Nleft != -1 && F.mvRightToLeftMatch[bestIdx] !=
-                                             -1) { //Also match with the stereo observation at right camera
-                            F.mvpMPs[F.mvRightToLeftMatch[bestIdx]] = pMP;
-                            nmatches++;
-                            left++;
-                        }
-
-
-                        F.mvpMPs[bestIdx + F.Nleft] = pMP;
-                        nmatches++;
-                        right++;
                     }
                 }
             }
@@ -304,54 +229,27 @@ namespace ORB_SLAM3 {
                     int bestDist2R = 256;
                     // Step 3：遍历F中属于该node的特征点，寻找最佳匹配点
                     for (size_t iF = 0; iF < vIndicesF.size(); iF++) {
-                        if (F.Nleft == -1) {
-                            // 这里的realIdxF是指普通帧该节点中特征点的索引
-                            const unsigned int realIdxF = vIndicesF[iF];
+                        // 这里的realIdxF是指普通帧该节点中特征点的索引
+                        const unsigned int realIdxF = vIndicesF[iF];
 
-                            // 如果地图点存在，说明这个点已经被匹配过了，不再匹配，加快速度
-                            if (vpMapPointMatches[realIdxF])
-                                continue;
-                            // 取出普通帧F中该特征对应的描述子
-                            const cv::Mat &dF = F.mDescriptorsLeft.row(realIdxF);
-                            // 计算描述子的距离
-                            const int dist = DescriptorDistance(dKF, dF);
+                        // 如果地图点存在，说明这个点已经被匹配过了，不再匹配，加快速度
+                        if (vpMapPointMatches[realIdxF])
+                            continue;
+                        // 取出普通帧F中该特征对应的描述子
+                        const cv::Mat &dF = F.mDescriptorsLeft.row(realIdxF);
+                        // 计算描述子的距离
+                        const int dist = DescriptorDistance(dKF, dF);
 
-                            // 遍历，记录最佳距离、最佳距离对应的索引、次佳距离等
-                            // 如果 dist < bestDist1 < bestDist2，更新bestDist1 bestDist2
-                            if (dist < bestDist1) {
-                                bestDist2 = bestDist1;
-                                bestDist1 = dist;
-                                bestIdxF = realIdxF;
-                            }
-                                // 如果bestDist1 < dist < bestDist2，更新bestDist2
-                            else if (dist < bestDist2) {
-                                bestDist2 = dist;
-                            }
-                        } else {
-                            const unsigned int realIdxF = vIndicesF[iF];
-
-                            if (vpMapPointMatches[realIdxF])
-                                continue;
-
-                            const cv::Mat &dF = F.mDescriptorsLeft.row(realIdxF);
-
-                            const int dist = DescriptorDistance(dKF, dF);
-
-                            if (realIdxF < F.Nleft && dist < bestDist1) {
-                                bestDist2 = bestDist1;
-                                bestDist1 = dist;
-                                bestIdxF = realIdxF;
-                            } else if (realIdxF < F.Nleft && dist < bestDist2) {
-                                bestDist2 = dist;
-                            }
-
-                            if (realIdxF >= F.Nleft && dist < bestDist1R) {
-                                bestDist2R = bestDist1R;
-                                bestDist1R = dist;
-                                bestIdxFR = realIdxF;
-                            } else if (realIdxF >= F.Nleft && dist < bestDist2R) {
-                                bestDist2R = dist;
-                            }
+                        // 遍历，记录最佳距离、最佳距离对应的索引、次佳距离等
+                        // 如果 dist < bestDist1 < bestDist2，更新bestDist1 bestDist2
+                        if (dist < bestDist1) {
+                            bestDist2 = bestDist1;
+                            bestDist1 = dist;
+                            bestIdxF = realIdxF;
+                        }
+                            // 如果bestDist1 < dist < bestDist2，更新bestDist2
+                        else if (dist < bestDist2) {
+                            bestDist2 = dist;
                         }
 
                     }
@@ -364,16 +262,10 @@ namespace ORB_SLAM3 {
                             vpMapPointMatches[bestIdxF] = pMP;
 
                             // 这里的realIdxKF是当前遍历到的关键帧的特征点id
-                            const cv::KeyPoint &kp =
-                                    (!pKF->mpCamera2) ? pKF->mvKPsUn[realIdxKF] :
-                                    (realIdxKF >= pKF->NLeft) ? pKF->mvKPsRight[realIdxKF - pKF->NLeft]
-                                                              : pKF->mvKPsLeft[realIdxKF];
+                            const cv::KeyPoint &kp = pKF->mvKPsUn[realIdxKF];
                             // Step 4.4：计算匹配点旋转角度差所在的直方图
                             if (mbCheckOrientation) {
-                                cv::KeyPoint &Fkp =
-                                        (!pKF->mpCamera2 || F.Nleft == -1) ? F.mvKPsLeft[bestIdxF] :
-                                        (bestIdxF >= F.Nleft) ? F.mvKPsRight[bestIdxF - F.Nleft]
-                                                              : F.mvKPsLeft[bestIdxF];
+                                cv::KeyPoint &Fkp = F.mvKPsLeft[bestIdxF];
                                 // 所有的特征点的角度变化应该是一致的，通过直方图统计得到最准确的角度变化值
                                 float rot = kp.angle - Fkp.angle;
                                 if (rot < 0.0)
@@ -391,16 +283,10 @@ namespace ORB_SLAM3 {
                             if (static_cast<float>(bestDist1R) < mfNNratio * static_cast<float>(bestDist2R) || true) {
                                 vpMapPointMatches[bestIdxFR] = pMP;
 
-                                const cv::KeyPoint &kp =
-                                        (!pKF->mpCamera2) ? pKF->mvKPsUn[realIdxKF] :
-                                        (realIdxKF >= pKF->NLeft) ? pKF->mvKPsRight[realIdxKF - pKF->NLeft]
-                                                                  : pKF->mvKPsLeft[realIdxKF];
+                                const cv::KeyPoint &kp = pKF->mvKPsUn[realIdxKF];
 
                                 if (mbCheckOrientation) {
-                                    cv::KeyPoint &Fkp =
-                                            (!F.mpCamera2) ? F.mvKPsLeft[bestIdxFR] :
-                                            (bestIdxFR >= F.Nleft) ? F.mvKPsRight[bestIdxFR - F.Nleft]
-                                                                   : F.mvKPsLeft[bestIdxFR];
+                                    cv::KeyPoint &Fkp = F.mvKPsLeft[bestIdxFR];
 
                                     float rot = kp.angle - Fkp.angle;
                                     if (rot < 0.0)
@@ -870,9 +756,6 @@ namespace ORB_SLAM3 {
                 // 遍历KF中属于该node的特征点
                 for (size_t i1 = 0, iend1 = f1it->second.size(); i1 < iend1; i1++) {
                     const size_t idx1 = f1it->second[i1];
-                    if (pKF1->NLeft != -1 && idx1 >= pKF1->mvKPsUn.size()) {
-                        continue;
-                    }
 
                     MapPoint *pMP1 = vpMapPoints1[idx1];
                     if (!pMP1)
@@ -889,10 +772,6 @@ namespace ORB_SLAM3 {
                     // Step 4 遍历KF2中属于该node的特征点，找到了最优及次优匹配点
                     for (size_t i2 = 0, iend2 = f2it->second.size(); i2 < iend2; i2++) {
                         const size_t idx2 = f2it->second[i2];
-
-                        if (pKF2->NLeft != -1 && idx2 >= pKF2->mvKPsUn.size()) {
-                            continue;
-                        }
 
                         MapPoint *pMP2 = vpMapPoints2[idx2];
 
@@ -989,18 +868,10 @@ namespace ORB_SLAM3 {
 
         GeometricCamera *pCamera1 = pKF1->mpCamera, *pCamera2 = pKF2->mpCamera;
 
-        if (!pKF1->mpCamera2 && !pKF2->mpCamera2) {
-            T12 = T1w * Tw2;
-            R12 = T12.rotationMatrix();
-            t12 = T12.translation();
-        } else {
-            Sophus::SE3f Tr1w = pKF1->GetRightPose();
-            Sophus::SE3f Twr2 = pKF2->GetRightPoseInverse();
-            Tll = T1w * Tw2;
-            Tlr = T1w * Twr2;
-            Trl = Tr1w * Tw2;
-            Trr = Tr1w * Twr2;
-        }
+        T12 = T1w * Tw2;
+        R12 = T12.rotationMatrix();
+        t12 = T12.translation();
+
         Eigen::Matrix3f Rll = Tll.rotationMatrix(), Rlr = Tlr.rotationMatrix(), Rrl = Trl.rotationMatrix(), Rrr = Trr.rotationMatrix();
         Eigen::Vector3f tll = Tll.translation(), tlr = Tlr.translation(), trl = Trl.translation(), trr = Trr.translation();
 
@@ -1049,20 +920,16 @@ namespace ORB_SLAM3 {
                         continue;
                     }
                     // 如果mvuRight中的值大于0，表示是双目，且该特征点有深度值
-                    const bool bStereo1 = (!pKF1->mpCamera2 && pKF1->mvfXInRight[idx1] >= 0);
+                    const bool bStereo1 = (pKF1->mvfXInRight[idx1] >= 0);
 
                     if (bOnlyStereo)
                         if (!bStereo1)
                             continue;
 
                     // Step 2.4：通过特征点索引idx1在pKF1中取出对应的特征点
-                    const cv::KeyPoint &kp1 = (pKF1->NLeft == -1) ? pKF1->mvKPsUn[idx1]
-                                                                  : (idx1 < pKF1->NLeft) ? pKF1->mvKPsLeft[idx1]
-                                                                                         : pKF1->mvKPsRight[idx1 -
-                                                                                                            pKF1->NLeft];
+                    const cv::KeyPoint &kp1 = pKF1->mvKPsUn[idx1];
 
-                    const bool bRight1 = (pKF1->NLeft == -1 || idx1 < pKF1->NLeft) ? false
-                                                                                   : true;
+                    const bool bRight1 = false;
                     //if(bRight1) continue;
                     // 通过特征点索引idx1在pKF1中取出对应的特征点的描述子
                     const cv::Mat &d1 = pKF1->mDescriptors.row(idx1);
@@ -1083,7 +950,7 @@ namespace ORB_SLAM3 {
                         if (vbMatched2[idx2] || pMP2)
                             continue;
 
-                        const bool bStereo2 = (!pKF2->mpCamera2 && pKF2->mvfXInRight[idx2] >= 0);
+                        const bool bStereo2 = (pKF2->mvfXInRight[idx2] >= 0);
 
                         if (bOnlyStereo)
                             if (!bStereo2)
@@ -1099,15 +966,10 @@ namespace ORB_SLAM3 {
                             continue;
 
                         // 通过特征点索引idx2在pKF2中取出对应的特征点
-                        const cv::KeyPoint &kp2 = (pKF2->NLeft == -1) ? pKF2->mvKPsUn[idx2]
-                                                                      : (idx2 < pKF2->NLeft) ? pKF2->mvKPsLeft[idx2]
-                                                                                             : pKF2->mvKPsRight[idx2 -
-                                                                                                                pKF2->NLeft];
-                        const bool bRight2 = (pKF2->NLeft == -1 || idx2 < pKF2->NLeft) ? false
-                                                                                       : true;
+                        const cv::KeyPoint &kp2 = pKF2->mvKPsUn[idx2];
                         //? 为什么双目就不需要判断像素点到极点的距离的判断？
                         // 因为双目模式下可以左右互匹配恢复三维点
-                        if (!bStereo1 && !bStereo2 && !pKF1->mpCamera2) {
+                        if (!bStereo1 && !bStereo2) {
                             const float distex = ep(0) - kp2.pt.x;
                             const float distey = ep(1) - kp2.pt.y;
                             // Step 2.7 极点e2到kp2的像素距离如果小于阈值th,认为kp2对应的MapPoint距离pKF1相机太近，跳过该匹配点对
@@ -1117,39 +979,6 @@ namespace ORB_SLAM3 {
                             if (distex * distex + distey * distey < 100 * pKF2->mvScaleFactors[kp2.octave]) {
                                 continue;
                             }
-                        }
-
-                        if (pKF1->mpCamera2 && pKF2->mpCamera2) {
-                            if (bRight1 && bRight2) {
-                                R12 = Rrr;
-                                t12 = trr;
-                                T12 = Trr;
-
-                                pCamera1 = pKF1->mpCamera2;
-                                pCamera2 = pKF2->mpCamera2;
-                            } else if (bRight1 && !bRight2) {
-                                R12 = Rrl;
-                                t12 = trl;
-                                T12 = Trl;
-
-                                pCamera1 = pKF1->mpCamera2;
-                                pCamera2 = pKF2->mpCamera;
-                            } else if (!bRight1 && bRight2) {
-                                R12 = Rlr;
-                                t12 = tlr;
-                                T12 = Tlr;
-
-                                pCamera1 = pKF1->mpCamera;
-                                pCamera2 = pKF2->mpCamera2;
-                            } else {
-                                R12 = Rll;
-                                t12 = tll;
-                                T12 = Tll;
-
-                                pCamera1 = pKF1->mpCamera;
-                                pCamera2 = pKF2->mpCamera;
-                            }
-
                         }
 
                         // Step 2.8 计算特征点kp2到kp1对应极线的距离是否小于阈值
@@ -1164,10 +993,7 @@ namespace ORB_SLAM3 {
                     }
 
                     if (bestIdx2 >= 0) {
-                        const cv::KeyPoint &kp2 = (pKF2->NLeft == -1) ? pKF2->mvKPsUn[bestIdx2]
-                                                                      : (bestIdx2 < pKF2->NLeft)
-                                                                        ? pKF2->mvKPsLeft[bestIdx2]
-                                                                        : pKF2->mvKPsRight[bestIdx2 - pKF2->NLeft];
+                        const cv::KeyPoint &kp2 = pKF2->mvKPsUn[bestIdx2];
                         // 记录匹配结果 
                         vMatches12[idx1] = bestIdx2;
                         // !记录已经匹配，避免重复匹配。原作者漏掉！可以添加下面代码
@@ -1236,15 +1062,10 @@ namespace ORB_SLAM3 {
         Sophus::SE3f Tcw;
         Eigen::Vector3f Ow;
 
-        if (bRight) {
-            Tcw = pKF->GetRightPose();
-            Ow = pKF->GetRightCameraCenter();
-            pCamera = pKF->mpCamera2;
-        } else {
-            Tcw = pKF->GetPose();
-            Ow = pKF->GetCameraCenter();
-            pCamera = pKF->mpCamera;
-        }
+        Tcw = pKF->GetPose();
+        Ow = pKF->GetCameraCenter();
+        pCamera = pKF->mpCamera;
+
 
         const float &fx = pKF->fx;
         const float &fy = pKF->fy;
@@ -1342,9 +1163,7 @@ namespace ORB_SLAM3 {
             int bestIdx = -1;
             for (vector<size_t>::const_iterator vit = vIndices.begin(), vend = vIndices.end(); vit != vend; vit++) {
                 size_t idx = *vit;
-                const cv::KeyPoint &kp = (pKF->NLeft == -1) ? pKF->mvKPsUn[idx]
-                                                            : (!bRight) ? pKF->mvKPsLeft[idx]
-                                                                        : pKF->mvKPsRight[idx];
+                const cv::KeyPoint &kp = pKF->mvKPsUn[idx];
 
                 const int &kpLevel = kp.octave;
                 // 金字塔层级要接近（同一层或小一层），否则跳过
@@ -1379,8 +1198,6 @@ namespace ORB_SLAM3 {
                     if (e2 * pKF->mvfInvLevelSigma2[kpLevel] > 5.99)
                         continue;
                 }
-
-                if (bRight) idx += pKF->NLeft;
 
                 const cv::Mat &dKF = pKF->mDescriptors.row(idx);
 
@@ -1863,9 +1680,7 @@ namespace ORB_SLAM3 {
                     if (uv(1) < CurrentFrame.mfMinY || uv(1) > CurrentFrame.mfMaxY)
                         continue;
                     // 认为投影前后地图点的尺度信息不变
-                    int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ? LastFrame.mvKPsLeft[i].octave
-                                                                                     : LastFrame.mvKPsRight[i -
-                                                                                                            LastFrame.Nleft].octave;
+                    int nLastOctave = LastFrame.mvKPsLeft[i].octave;
 
                     // Search in a window. Size depends on scale
                     // 单目：th = 7，双目：th = 15
@@ -1904,7 +1719,7 @@ namespace ORB_SLAM3 {
                             if (CurrentFrame.mvpMPs[i2]->Observations() > 0)
                                 continue;
 
-                        if (CurrentFrame.Nleft == -1 && CurrentFrame.mvfXInRight[i2] > 0) {
+                        if (CurrentFrame.mvfXInRight[i2] > 0) {
                             // 双目和rgbd的情况，需要保证右图的点也在搜索半径以内
                             const float ur = uv(0) - CurrentFrame.mfBaselineFocal * invzc;
                             const float er = fabs(ur - CurrentFrame.mvfXInRight[i2]);
@@ -1929,16 +1744,8 @@ namespace ORB_SLAM3 {
 
                         // Step 6 计算匹配点旋转角度差所在的直方图
                         if (mbCheckOrientation) {
-                            cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKPsUn[i]
-                                                                        : (i < LastFrame.Nleft) ? LastFrame.mvKPsLeft[i]
-                                                                                                : LastFrame.mvKPsRight[
-                                                                                  i - LastFrame.Nleft];
-
-                            cv::KeyPoint kpCF = (CurrentFrame.Nleft == -1) ? CurrentFrame.mvKPsUn[bestIdx2]
-                                                                           : (bestIdx2 < CurrentFrame.Nleft)
-                                                                             ? CurrentFrame.mvKPsLeft[bestIdx2]
-                                                                             : CurrentFrame.mvKPsRight[bestIdx2 -
-                                                                                                       CurrentFrame.Nleft];
+                            cv::KeyPoint kpLF = LastFrame.mvKPsUn[i];
+                            cv::KeyPoint kpCF = CurrentFrame.mvKPsUn[bestIdx2];
                             float rot = kpLF.angle - kpCF.angle;
                             if (rot < 0.0)
                                 rot += 360.0f;

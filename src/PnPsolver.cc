@@ -172,7 +172,7 @@ namespace ORB_SLAM3 {
         if (mRansacMinInliers == N)//根据期望的残差大小来计算RANSAC需要迭代的次数
             nIterations = 1;
         else
-            nIterations = ceil(log(1 - mRansacProb) / log(1 - pow(mRansacEpsilon, 3)));
+            nIterations = ceil(log(1 - mRansacProb) / log(1 - pow(mRansacEpsilon, 4)));
 
         mRansacMaxIts = max(1, min(nIterations, mRansacMaxIts));
 
