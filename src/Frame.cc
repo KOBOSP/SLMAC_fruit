@@ -218,13 +218,12 @@ namespace ORB_SLAM3 {
         int nReserve = 0.5f * mnKPsLeftNum / (nCells);
 
         // 开始对mGrid这个二维数组中的每一个vector元素遍历并预分配空间
-        for (unsigned int i = 0; i < FRAME_GRID_COLS; i++)
+        for (unsigned int i = 0; i < FRAME_GRID_COLS; i++){
             for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++) {
                 mGrid[i][j].reserve(nReserve);
             }
-
+        }
         // Step 2 遍历每个特征点，将每个特征点在mvKeysUn中的索引值放到对应的网格mGrid中
-
         for (int i = 0; i < mnKPsLeftNum; i++) {
             const cv::KeyPoint &kp = mvKPsUn[i];
             // 存储某个特征点所在网格的网格坐标，nGridPosX范围：[0,FRAME_GRID_COLS], nGridPosY范围：[0,FRAME_GRID_ROWS]
@@ -808,17 +807,17 @@ namespace ORB_SLAM3 {
         // orb特征相似度阈值  -> mean ～= (max  + min) / 2
         const int nThOrbDist = (ORBmatcher::TH_HIGH + ORBmatcher::TH_LOW) / 2;
 
-        // 金字塔顶层（0层）图像高 nRows
-        const int nRows = mpORBextractorLeft->mvImagePyramid[0].rows;
+        // 金字塔顶层（0层）图像高 nLeftRows
+        const int nLeftRows = mpORBextractorLeft->mvImagePyramid[0].rows;
 
         // Assign keypoints to row table
         // 二维vector存储每一行的orb特征点的列坐标的索引，为什么是vector，因为每一行的特征点有可能不一样，例如
-        // vRowIndices[0] = [1，2，5，8, 11]   第1行有5个特征点,他们的列号（即x坐标）分别是1,2,5,8,11
-        // vRowIndices[1] = [2，6，7，9, 13, 17, 20]  第2行有7个特征点.etc
-        vector<vector<size_t> > vRowIndices(nRows, vector<size_t>());
+        // vvnRightKPsInEachLeftRows[0] = [1，2，5，8, 11]   第1行有5个特征点,他们的列号（即x坐标）分别是1,2,5,8,11
+        // vvnRightKPsInEachLeftRows[1] = [2，6，7，9, 13, 17, 20]  第2行有7个特征点.etc
+        vector<vector<size_t> > vvnRightKPsInEachLeftRows(nLeftRows, vector<size_t>());
 
-        for (int i = 0; i < nRows; i++)
-            vRowIndices[i].reserve(200);
+        for (int i = 0; i < nLeftRows; i++)
+            vvnRightKPsInEachLeftRows[i].reserve(200);
 
         // 右图特征点数量，N表示数量 r表示右图，且不能被修改
         const int nKPsRightNum = mvKPsRight.size();
@@ -836,7 +835,7 @@ namespace ORB_SLAM3 {
 
             // 将特征点ir保证在可能的行号中
             for (int yi = minr; yi <= maxr; yi++)
-                vRowIndices[yi].push_back(iR);
+                vvnRightKPsInEachLeftRows[yi].push_back(iR);
         }
 
         // Step 2 -> 3. 粗匹配 + 精匹配
@@ -857,22 +856,22 @@ namespace ORB_SLAM3 {
         // 为左图每一个特征点il，在右图搜索最相似的特征点ir
         for (int iL = 0; iL < mnKPsLeftNum; iL++) {
             const cv::KeyPoint &kpL = mvKPsLeft[iL];
-            const int &levelL = kpL.octave;
-            const float &vL = kpL.pt.y;
-            const float &uL = kpL.pt.x;
+            const int &LL = kpL.octave;
+            const float &YL = kpL.pt.y;
+            const float &XL = kpL.pt.x;
 
             // 获取左图特征点il所在行，以及在右图对应行中可能的匹配点
-            const vector<size_t> &vCandidates = vRowIndices[vL];
+            const vector<size_t> &vCandidates = vvnRightKPsInEachLeftRows[YL];
 
             if (vCandidates.empty())
                 continue;
 
             // 计算理论上的最佳搜索范围
-            const float minU = uL - maxD;
-            const float maxU = uL - minD;
+            const float minX = XL - maxD;
+            const float maxX = XL - minD;
 
             // 最大搜索范围小于0，说明无匹配点
-            if (maxU < 0)
+            if (maxX < 0)
                 continue;
 
             // 初始化最佳相似度，用最大相似度，以及最佳匹配点索引
@@ -888,14 +887,14 @@ namespace ORB_SLAM3 {
                 const cv::KeyPoint &kpR = mvKPsRight[iR];
 
                 // 左图特征点il与带匹配点ic的空间尺度差超过2，放弃
-                if (kpR.octave < levelL - 1 || kpR.octave > levelL + 1)
+                if (kpR.octave < LL - 1 || kpR.octave > LL + 1)
                     continue;
 
                 // 使用列坐标(x)进行匹配，和stereomatch一样
-                const float &uR = kpR.pt.x;
+                const float &XR = kpR.pt.x;
 
-                // 超出理论搜索范围[minU, maxU]，可能是误匹配，放弃
-                if (uR >= minU && uR <= maxU) {
+                // 超出理论搜索范围[minX, maxX]，可能是误匹配，放弃
+                if (XR >= minX && XR <= maxX) {
                     // 计算匹配点il和待匹配点ic的相似度dist
                     const cv::Mat &dR = mDescriptorsRight.row(iR);
                     const int dist = ORBmatcher::DescriptorDistance(dL, dR);
@@ -914,63 +913,62 @@ namespace ORB_SLAM3 {
             if (bestDist < nThOrbDist) {
                 // coordinates in image pyramid at keypoint scale
                 // 计算右图特征点x坐标和对应的金字塔尺度
-                const float uR0 = mvKPsRight[bestIdxR].pt.x;
-                const float scaleFactor = mvfInvScaleFactors[kpL.octave];
+                const float XR0 = mvKPsRight[bestIdxR].pt.x;
+                const float ScaleFactor = mvfInvScaleFactors[kpL.octave];
                 // 尺度缩放后的左右图特征点坐标
-                const float scaleduL = round(kpL.pt.x * scaleFactor);
-                const float scaledvL = round(kpL.pt.y * scaleFactor);
-                const float scaleduR0 = round(uR0 * scaleFactor);
+                const float XLScaled = round(kpL.pt.x * ScaleFactor);
+                const float YLScaled = round(kpL.pt.y * ScaleFactor);
+                const float XR0Scaled = round(XR0 * ScaleFactor);
 
                 // sliding window search
                 // 滑动窗口搜索, 类似模版卷积或滤波
                 // w表示sad相似度的窗口半径
                 const int w = 5;
-                // 提取左图中，以特征点(scaleduL,scaledvL)为中心, 半径为w的图像快patch
-                cv::Mat IL = mpORBextractorLeft->mvImagePyramid[kpL.octave].rowRange(scaledvL - w,
-                                                                                     scaledvL + w + 1).colRange(
-                        scaleduL - w, scaleduL + w + 1);
+                // 提取左图中，以特征点(XLScaled,YLScaled)为中心, 半径为w的图像快patch
+                cv::Mat PatchL = mpORBextractorLeft->mvImagePyramid[kpL.octave].rowRange(YLScaled - w,
+                                                                                     YLScaled + w + 1).colRange(
+                        XLScaled - w, XLScaled + w + 1);
 
                 // 初始化最佳相似度
-                int bestDist = INT_MAX;
+                int nBestDist = INT_MAX;
                 // 通过滑动窗口搜索优化，得到的列坐标偏移量
-                int bestincR = 0;
+                int nBestIncXR = 0;
                 // 滑动窗口的滑动范围为（-L, L）
                 const int L = 5;
                 // 初始化存储图像块相似度
-                vector<float> vDists;
-                vDists.resize(2 * L + 1);
+                vector<float> vfDists;
+                vfDists.resize(2 * L + 1);
 
                 // 计算滑动窗口滑动范围的边界，因为是块匹配，还要算上图像块的尺寸
-                // 列方向起点 iniu = r0 + 最大窗口滑动范围 - 图像块尺寸
+                // 列方向起点 IniX = r0 + 最大窗口滑动范围 - 图像块尺寸
                 // 列方向终点 eniu = r0 + 最大窗口滑动范围 + 图像块尺寸 + 1
                 // 此次 + 1 和下面的提取图像块是列坐标+1是一样的，保证提取的图像块的宽是2 * w + 1
-                const float iniu = scaleduR0 + L - w;
-                const float endu = scaleduR0 + L + w + 1;
+                const float IniX = XR0Scaled + L - w;
+                const float EndX = XR0Scaled + L + w + 1;
                 // 判断搜索是否越界
-                if (iniu < 0 || endu >= mpORBextractorRight->mvImagePyramid[kpL.octave].cols)
+                if (IniX < 0 || EndX >= mpORBextractorRight->mvImagePyramid[kpL.octave].cols)
                     continue;
 
                 // 在搜索范围内从左到右滑动，并计算图像块相似度
-                for (int incR = -L; incR <= +L; incR++) {
-                    // 提取左图中，以特征点(scaleduL,scaledvL)为中心, 半径为w的图像快patch
-                    cv::Mat IR = mpORBextractorRight->mvImagePyramid[kpL.octave].rowRange(scaledvL - w,
-                                                                                          scaledvL + w + 1).colRange(
-                            scaleduR0 + incR - w, scaleduR0 + incR + w + 1);
+                for (int IncXR = -L; IncXR <= +L; IncXR++) {
+                    // 提取左图中，以特征点(XLScaled,YLScaled)为中心, 半径为w的图像快patch
+                    cv::Mat PatchRTmp = mpORBextractorRight->mvImagePyramid[kpL.octave].rowRange(YLScaled - w,
+                                                                                          YLScaled + w + 1).colRange(
+                            XR0Scaled + IncXR - w, XR0Scaled + IncXR + w + 1);
 
                     // sad 计算
-                    float dist = cv::norm(IL, IR, cv::NORM_L1);
+                    float fDist = cv::norm(PatchL, PatchRTmp, cv::NORM_L1);
                     // 统计最小sad和偏移量
-                    if (dist < bestDist) {
-                        bestDist = dist;
-                        bestincR = incR;
+                    if (fDist < nBestDist) {
+                        nBestDist = fDist;
+                        nBestIncXR = IncXR;
                     }
-
-                    // L+incR 为refine后的匹配点列坐标(x)
-                    vDists[L + incR] = dist;
+                    // L+IncXR 为refine后的匹配点列坐标(x)
+                    vfDists[L + IncXR] = fDist;
                 }
 
                 // 搜索窗口越界判断ß
-                if (bestincR == -L || bestincR == L)
+                if (nBestIncXR == -L || nBestIncXR == L)
                     continue;
 
                 // Step 4. 亚像素插值, 使用最佳匹配点及其左右相邻点构成抛物线
@@ -984,9 +982,9 @@ namespace ORB_SLAM3 {
                 // 公式参考opencv sgbm源码中的亚像素插值公式
                 // 或论文<<On Building an Accurate Stereo Matching System on Graphics Hardware>> 公式7
                 // Sub-pixel match (Parabola fitting)
-                const float dist1 = vDists[L + bestincR - 1];
-                const float dist2 = vDists[L + bestincR];
-                const float dist3 = vDists[L + bestincR + 1];
+                const float dist1 = vfDists[L + nBestIncXR - 1];
+                const float dist2 = vfDists[L + nBestIncXR];
+                const float dist3 = vfDists[L + nBestIncXR + 1];
 
                 const float deltaR = (dist1 - dist3) / (2.0f * (dist1 + dist3 - 2.0f * dist2));
 
@@ -996,23 +994,23 @@ namespace ORB_SLAM3 {
 
                 // Re-scaled coordinate
                 // 根据亚像素精度偏移量delta调整最佳匹配索引
-                float bestuR = mvfScaleFactors[kpL.octave] * ((float) scaleduR0 + (float) bestincR + deltaR);
+                float fBestXR = mvfScaleFactors[kpL.octave] * ((float) XR0Scaled + (float) nBestIncXR + deltaR);
 
-                float disparity = (uL - bestuR);
+                float fVisualDisparity = (XL - fBestXR);
 
-                if (disparity >= minD && disparity < maxD) {
+                if (fVisualDisparity >= minD && fVisualDisparity < maxD) {
                     // 如果存在负视差，则约束为0.01
-                    if (disparity <= 0) {
-                        disparity = 0.01;
-                        bestuR = uL - 0.01;
+                    if (fVisualDisparity <= 0) {
+                        fVisualDisparity = 0.01;
+                        fBestXR = XL - 0.01;
                     }
                     // 根据视差值计算深度信息
                     // 保存最相似点的列坐标(x)信息
                     // 保存归一化sad最小相似度
                     // Step 5. 最优视差值/深度选择.
-                    mvfMPDepth[iL] = mfBaselineFocal / disparity;
-                    mvfXInRight[iL] = bestuR;
-                    vDistIdx.push_back(pair<int, int>(bestDist, iL));
+                    mvfMPDepth[iL] = mfBaselineFocal / fVisualDisparity;
+                    mvfXInRight[iL] = fBestXR;
+                    vDistIdx.push_back(pair<int, int>(nBestDist, iL));
                 }
             }
         }

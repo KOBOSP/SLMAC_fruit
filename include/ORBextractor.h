@@ -30,14 +30,12 @@ namespace ORB_SLAM3
 class ExtractorNode
 {
 public:
-    ExtractorNode():bNoMore(false){}
+    ExtractorNode(){}
 
     void DivideNode(ExtractorNode &n1, ExtractorNode &n2, ExtractorNode &n3, ExtractorNode &n4);
 
     std::vector<cv::KeyPoint> vKeys;
     cv::Point2i UL, UR, BL, BR;
-    std::list<ExtractorNode>::iterator lit;
-    bool bNoMore;
 };
 
 class ORBextractor
@@ -54,15 +52,15 @@ public:
     // Compute the ORB features and descriptors on an image.
     // ORB are dispersed on the image using an octree.
     // Mask is ignored in the current implementation.
-    int operator()( cv::InputArray _image, cv::InputArray _mask,
-                    std::vector<cv::KeyPoint>& _keypoints,
-                    cv::OutputArray _descriptors, std::vector<int> &vLappingArea);
+    int operator()(cv::InputArray _image, cv::InputArray _mask,
+                   std::vector<cv::KeyPoint>& vOutKPs,
+                   cv::OutputArray OutDescriptors, std::vector<int> &vLappingArea);
 
     int inline GetLevels(){
-        return nLevels;}
+        return mnLevels;}
 
     float inline GetScaleFactor(){
-        return fScaleFactor;}
+        return mfScaleFactor;}
 
     std::vector<float> inline GetScaleFactors(){
         return mvfScaleFactor;
@@ -84,23 +82,22 @@ public:
 
 protected:
 
-    void ComputePyramid(cv::Mat image);
-    void ComputeKeyPointsOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);    
-    std::vector<cv::KeyPoint> DistributeOctTree(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
-                                           const int &maxX, const int &minY, const int &maxY, const int &nFeatures, const int &level);
+    void DividePyramid(cv::Mat image);
+    void DistributeKPsByOctTree(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
+    std::vector<cv::KeyPoint> DistributeKPsInlevel(const std::vector<cv::KeyPoint>& vToDistributeKeys, const int &minX,
+                                                   const int &maxX, const int &minY, const int &maxY, const int &nDesireFeature, const int &level);
 
-    void ComputeKeyPointsOld(std::vector<std::vector<cv::KeyPoint> >& allKeypoints);
     std::vector<cv::Point> pattern;
 
-    int nFeatures;
-    double fScaleFactor;
-    int nLevels;
-    int fIniThFAST;
-    int nMinThFAST;
+    int mnFeatures;
+    double mfScaleFactor;
+    int mnLevels;
+    int mfIniThFAST;
+    int mnMinThFAST;
 
-    std::vector<int> mnFeaturesPerLevel;
+    std::vector<int> mvnFeaturesPerLevel;
 
-    std::vector<int> umax;
+    std::vector<int> mCircleXMax;
 
     std::vector<float> mvfScaleFactor;
     std::vector<float> mvfInvScaleFactor;

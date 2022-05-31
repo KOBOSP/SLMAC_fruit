@@ -37,9 +37,11 @@ namespace ORB_SLAM3 {
         vector<int> vMatches; // Initialization: correspondeces with reference keypoints
         vector<bool> vbVO, vbMap; // Tracked MapPoints in current frame
         int State;
-        vector<cv::KeyPoint> vIniKPsLeft, vCurKPsLeft, vCurKPsRight; // KeyPoints in current frame
+        vector<cv::KeyPoint> vIniKPsLeft, vCurKPsLeft; // KeyPoints in current frame
+        vector<float> vfCurXInRight;
         cv::Scalar ColorA(0, 255, 0);
         cv::Scalar ColorB(255, 0, 0);
+        cv::Scalar ColorC(0, 0, 255);
 
         //Copy variables within scoped mutex
         {
@@ -51,7 +53,7 @@ namespace ORB_SLAM3 {
             mImgRight.copyTo(ImgRight);
             vCurKPsLeft = mvCurKPsLeft;
             vIniKPsLeft = mvIniKPsLeft;
-            vCurKPsRight = mvCurKPsRight;
+            vfCurXInRight = mvfCurXInRight;
             if (mState == Tracking::NOT_INITIALIZED) {
                 vMatches = mvIniMatches;
             } else if (mState == Tracking::OK) {
@@ -106,9 +108,18 @@ namespace ORB_SLAM3 {
         }
 
         ImgLeft.copyTo(ImgTmp);
-        if(bFrameBoth){
-            cv::resize(ImgRight, ImgRight, cv::Size(ImgLeft.cols, ImgLeft.rows));
+        if(bFrameBoth && vfCurXInRight.size()>0){
             cv::hconcat(ImgLeft, ImgRight, ImgTmp);
+            int n = vCurKPsLeft.size();
+            for (int i = 0; i < n; i++) {
+                if ((vfCurXInRight[i] > 0)&&(vbVO[i] || vbMap[i])) {
+                    cv::Point2f pt1, pt2;
+                    pt1 = vCurKPsLeft[i].pt / imageScale;
+                    pt2.x = (ImgLeft.cols + vfCurXInRight[i]) / imageScale;
+                    pt2.y = pt1.y;
+                    cv::line(ImgTmp, pt1, pt2, ColorC);
+                }
+            }
         }
         DrawTextInfo(ImgTmp, State, ImgLeft);
         return ImgLeft;
@@ -155,7 +166,7 @@ namespace ORB_SLAM3 {
         mnCurKPsLeft = mvCurKPsLeft.size();
         if (bFrameBoth) {
             pTracker->mImgRight.copyTo(mImgRight);
-            mvCurKPsRight = pTracker->mCurFrame.mvKPsRight;
+            mvfCurXInRight = pTracker->mCurFrame.mvfXInRight;
         }
 
         mvbVO = vector<bool>(mnCurKPsLeft, false);

@@ -87,7 +87,7 @@ namespace ORB_SLAM3 {
  * @param[in] u_max     图像块的每一行的坐标边界 u_max
  * @return float        返回特征点的角度，范围为[0,360)角度，精度为0.3°
  */
-    static float IC_Angle(const Mat &image, Point2f pt, const vector<int> &u_max) {
+    static float GetFeatureAngle(const Mat &image, Point2f pt, const vector<int> &u_max) {
         //图像的矩，前者是按照图像块的y坐标加权，后者是按照图像块的x坐标加权
         int m_01 = 0, m_10 = 0;
 
@@ -143,9 +143,9 @@ namespace ORB_SLAM3 {
  * @param[in] pattern   预定义好的随机采样点集
  * @param[out] desc     用作输出变量，保存计算好的描述子，长度为32*8bit
  */
-    static void computeOrbDescriptor(const KeyPoint &kpt,
-                                     const Mat &img, const Point *pattern,
-                                     uchar *desc) {
+    static void GetKPOrbDescriptor(const KeyPoint &kpt,
+                                   const Mat &img, const Point *pattern,
+                                   uchar *desc) {
         //得到特征点的角度，用弧度制表示。kpt.angle是角度制，范围为[0,360)度
         float angle = (float) kpt.angle * factorPI;
         //然后计算这个角度的余弦值和正弦值
@@ -473,58 +473,55 @@ namespace ORB_SLAM3 {
                                int _iniThFAST,        //指定初始的FAST特征点提取参数，可以提取出最明显的角点
                                int _minThFAST) :        //如果因为图像纹理不丰富提取出的特征点不多，为了达到想要的特征点数目，
     //就使用这个参数提取出不是那么明显的角点
-            nFeatures(_nfeatures), fScaleFactor(_scaleFactor), nLevels(_nlevels),
-            fIniThFAST(_iniThFAST), nMinThFAST(_minThFAST)//设置这些参数
+            mnFeatures(_nfeatures), mfScaleFactor(_scaleFactor), mnLevels(_nlevels),
+            mfIniThFAST(_iniThFAST), mnMinThFAST(_minThFAST)//设置这些参数
     {
         //存储每层图像缩放系数的vector调整为符合图层数目的大小
-        mvfScaleFactor.resize(nLevels);
+        mvfScaleFactor.resize(mnLevels);
         //存储这个sigma^2，其实就是每层图像相对初始图像缩放因子的平方
-        mvfLevelSigma2.resize(nLevels);
+        mvfLevelSigma2.resize(mnLevels);
         //对于初始图像，这两个参数都是1
         mvfScaleFactor[0] = 1.0f;
         mvfLevelSigma2[0] = 1.0f;
         //然后逐层计算图像金字塔中图像相当于初始图像的缩放系数
-        for (int i = 1; i < nLevels; i++) {
+        for (int i = 1; i < mnLevels; i++) {
             //其实就是这样累乘计算得出来的
-            mvfScaleFactor[i] = mvfScaleFactor[i - 1] * fScaleFactor;
+            mvfScaleFactor[i] = mvfScaleFactor[i - 1] * mfScaleFactor;
             //原来这里的sigma^2就是每层图像相对于初始图像缩放因子的平方
             mvfLevelSigma2[i] = mvfScaleFactor[i] * mvfScaleFactor[i];
         }
 
         //接下来的两个向量保存上面的参数的倒数，操作都是一样的就不再赘述了
-        mvfInvScaleFactor.resize(nLevels);
-        mvfInvLevelSigma2.resize(nLevels);
-        for (int i = 0; i < nLevels; i++) {
+        mvfInvScaleFactor.resize(mnLevels);
+        mvfInvLevelSigma2.resize(mnLevels);
+        for (int i = 0; i < mnLevels; i++) {
             mvfInvScaleFactor[i] = 1.0f / mvfScaleFactor[i];
             mvfInvLevelSigma2[i] = 1.0f / mvfLevelSigma2[i];
         }
 
         //调整图像金字塔vector以使得其符合咱们设定的图像层数
-        mvImagePyramid.resize(nLevels);
+        mvImagePyramid.resize(mnLevels);
 
         //每层需要提取出来的特征点个数，这个向量也要根据图像金字塔设定的层数进行调整
-        mnFeaturesPerLevel.resize(nLevels);
+        mvnFeaturesPerLevel.resize(mnLevels);
 
         //图片降采样缩放系数的倒数
-        float fInvFactor = 1.0f / fScaleFactor;
+        float fInvFactor = 1.0f / mfScaleFactor;
         //每个单位缩放系数所希望的特征点个数
         float nDesiredFeaturesPerScale =
-                nFeatures * (1 - fInvFactor) / (1 - (float) pow((double) fInvFactor, (double) nLevels));
+                mnFeatures * (1 - fInvFactor) / (1 - (float) pow((double) fInvFactor, (double) mnLevels));
 
         //用于在特征点个数分配的，特征点的累计计数清空
         int nSumFeatures = 0;
         //开始逐层计算要分配的特征点个数，顶层图像除外（看循环后面）
-        for (int level = 0; level < nLevels - 1; level++) {
+        for (int level = 0; level < mnLevels - 1; level++) {
             //分配 cvRound : 返回个参数最接近的整数值
-            mnFeaturesPerLevel[level] = cvRound(nDesiredFeaturesPerScale);
-            //累计
-            nSumFeatures += mnFeaturesPerLevel[level];
-            //乘系数
+            mvnFeaturesPerLevel[level] = cvRound(nDesiredFeaturesPerScale);
+            nSumFeatures += mvnFeaturesPerLevel[level];
             nDesiredFeaturesPerScale *= fInvFactor;
-            cout << "nDesiredFeaturesPerScale: " << nDesiredFeaturesPerScale << endl;
         }
         //由于前面的特征点个数取整操作，可能会导致剩余一些特征点个数没有被分配，所以这里就将这个余出来的特征点分配到最高的图层中
-        mnFeaturesPerLevel[nLevels - 1] = std::max(nFeatures - nSumFeatures, 0);
+        mvnFeaturesPerLevel[mnLevels - 1] = std::max(mnFeatures - nSumFeatures, 0);
 
         //成员变量pattern的长度，也就是点的个数，这里的512表示512个点（上面的数组中是存储的坐标所以是256*2*2）
         const int npoints = 512;
@@ -540,32 +537,28 @@ namespace ORB_SLAM3 {
         // pre-compute the end of a row in a circular patch
         //预先计算圆形patch中行的结束位置
         //+1中的1表示那个圆的中间行
-        umax.resize(HALF_PATCH_SIZE + 1);
+        mCircleXMax.resize(HALF_PATCH_SIZE + 1);
 
         //cvFloor返回不大于参数的最大整数值，cvCeil返回不小于参数的最小整数值，cvRound则是四舍五入
-        int v,        //循环辅助变量
-        v0,        //辅助变量
-        vmax = cvFloor(HALF_PATCH_SIZE * sqrt(2.f) / 2 + 1);    //计算圆的最大行号，+1应该是把中间行也给考虑进去了
+        int nMaxRows = cvFloor(HALF_PATCH_SIZE * sqrt(2.f) / 2 + 1);    //计算圆的最大行号，+1应该是把中间行也给考虑进去了
         //NOTICE 注意这里的最大行号指的是计算的时候的最大行号，此行的和圆的角点在45°圆心角的一边上，之所以这样选择
         //是因为圆周上的对称特性
-
         //这里的二分之根2就是对应那个45°圆心角
-
-        int vmin = cvCeil(HALF_PATCH_SIZE * sqrt(2.f) / 2);
+        int nMinRows = cvCeil(HALF_PATCH_SIZE * sqrt(2.f) / 2);
         //半径的平方
         const double hp2 = HALF_PATCH_SIZE * HALF_PATCH_SIZE;
 
         //利用圆的方程计算每行像素的u坐标边界（max）
-        for (v = 0; v <= vmax; ++v)
-            umax[v] = cvRound(sqrt(hp2 - v * v));        //结果都是大于0的结果，表示x坐标在这一行的边界
-
+        int v0,v1;
+        for (v1 = 0; v1 <= nMaxRows; ++v1)
+            mCircleXMax[v1] = cvRound(sqrt(hp2 - v1 * v1));        //结果都是大于0的结果，表示x坐标在这一行的边界
         // Make sure we are symmetric
         //这里其实是使用了对称的方式计算上四分之一的圆周上的umax，目的也是为了保持严格的对称（如果按照常规的想法做，由于cvRound就会很容易出现不对称的情况，
         //同时这些随机采样的特征点集也不能够满足旋转之后的采样不变性了）
-        for (v = HALF_PATCH_SIZE, v0 = 0; v >= vmin; --v) {
-            while (umax[v0] == umax[v0 + 1])
+        for (v1 = HALF_PATCH_SIZE, v0 = 0; v1 >= nMinRows; --v1) {
+            while (mCircleXMax[v0] == mCircleXMax[v0 + 1])
                 ++v0;
-            umax[v] = v0;
+            mCircleXMax[v1] = v0;
             ++v0;
         }
     }
@@ -577,14 +570,14 @@ namespace ORB_SLAM3 {
  * @param[in & out] keypoints       特征点向量
  * @param[in] umax                  每个特征点所在图像区块的每行的边界 u_max 组成的vector
  */
-    static void computeOrientation(const Mat &image, vector<KeyPoint> &keypoints, const vector<int> &umax) {
+    static void ComputeOrientation(const Mat &image, vector<KeyPoint> &keypoints, const vector<int> &umax) {
         // 遍历所有的特征点
         for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
                      keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint) {
             // 调用IC_Angle 函数计算这个特征点的方向
-            keypoint->angle = IC_Angle(image,            //特征点所在的图层的图像
-                                       keypoint->pt,    //特征点在这张图像中的坐标
-                                       umax);            //每个特征点所在图像区块的每行的边界 u_max 组成的vector
+            keypoint->angle = GetFeatureAngle(image,            //特征点所在的图层的图像
+                                              keypoint->pt,    //特征点在这张图像中的坐标
+                                              umax);            //每个特征点所在图像区块的每行的边界 u_max 组成的vector
         }
     }
 
@@ -654,17 +647,6 @@ namespace ORB_SLAM3 {
             else
                 n4.vKeys.push_back(kp);
         }//遍历当前提取器节点的vkeys中存储的特征点
-
-        //判断每个子特征点提取器节点所在的图像中特征点的数目（就是分配给子节点的特征点数目），然后做标记
-        //这里判断是否数目等于1的目的是确定这个节点还能不能再向下进行分裂
-        if (n1.vKeys.size() == 1)
-            n1.bNoMore = true;
-        if (n2.vKeys.size() == 1)
-            n2.bNoMore = true;
-        if (n3.vKeys.size() == 1)
-            n3.bNoMore = true;
-        if (n4.vKeys.size() == 1)
-            n4.bNoMore = true;
     }
 
     static bool compareNodes(pair<int, ExtractorNode *> &e1, pair<int, ExtractorNode *> &e2) {
@@ -689,13 +671,13 @@ namespace ORB_SLAM3 {
  * @param[in] maxX 
  * @param[in] minY 
  * @param[in] maxY 
- * @param[in] N                     希望提取出的特征点个数
+ * @param[in] nDesireFeature                     希望提取出的特征点个数
  * @param[in] level                 指定的金字塔图层，并未使用
  * @return vector<cv::KeyPoint>     已经均匀分散好的特征点vector容器
  */
-    vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint> &vToDistributeKeys, const int &minX,
-                                                         const int &maxX, const int &minY, const int &maxY,
-                                                         const int &N, const int &level) {
+    vector<cv::KeyPoint> ORBextractor::DistributeKPsInlevel(const vector<cv::KeyPoint> &vToDistributeKeys, const int &minX,
+                                                            const int &maxX, const int &minY, const int &maxY,
+                                                            const int &nDesireFeature, const int &level) {
         // Compute how many initial nodes
         // Step 1 根据宽高比确定初始节点数目
         //计算应该生成的初始节点个数，根节点的数量nIni是根据边界的宽高比值确定的，一般是1或者2
@@ -747,230 +729,58 @@ namespace ORB_SLAM3 {
         }
 
         // Step 4 遍历此提取器节点列表，标记那些不可再分裂的节点，删除那些没有分配到特征点的节点
-        // ? 这个步骤是必要的吗？感觉可以省略，通过判断nIni个数和vKeys.size() 就可以吧
-        list<ExtractorNode>::iterator lit = lNodes.begin();
-        while (lit != lNodes.end()) {
-            //如果初始的提取器节点所分配到的特征点个数为1
-            if (lit->vKeys.size() == 1) {
-                //那么就标志位置位，表示此节点不可再分
-                lit->bNoMore = true;
-                //更新迭代器
-                lit++;
+        list<ExtractorNode>::iterator lNit = lNodes.begin();
+        while (lNit != lNodes.end()) {
+            if (lNit->vKeys.empty()) {
+                lNit = lNodes.erase(lNit);
+                continue;
             }
-                ///如果一个提取器节点没有被分配到特征点，那么就从列表中直接删除它
-            else if (lit->vKeys.empty())
-                //注意，由于是直接删除了它，所以这里的迭代器没有必要更新；否则反而会造成跳过元素的情况
-                lit = lNodes.erase(lit);
-            else
-                //如果上面的这些情况和当前的特征点提取器节点无关，那么就只是更新迭代器
-                lit++;
+            lNit++;
         }
-
         //结束标志位清空
         bool bFinish = false;
-
-        //记录迭代次数，只是记录，并未起到作用
-        int iteration = 0;
-
-        //声明一个vector用于存储节点的vSize和句柄对
-        //这个变量记录了在一次分裂循环中，那些可以再继续进行分裂的节点中包含的特征点数目和其句柄
-        vector<pair<int, ExtractorNode *> > vSizeAndPointerToNode;
-
-        //调整大小，这里的意思是一个初始化节点将“分裂”成为四个，当然实际上不会有那么多，这里多分配了一些只是预防万一
-        vSizeAndPointerToNode.reserve(lNodes.size() * 4);
-
         // Step 5 根据兴趣点分布,利用4叉树方法对图像进行划分区域
         while (!bFinish) {
-            //更新迭代次数计数器，只是记录，并未起到作用
-            iteration++;
-
             //保存当前节点个数，prev在这里理解为“保留”比较好
-            int prevSize = lNodes.size();
-
+            int nPreNodeNum = lNodes.size();
             //重新定位迭代器指向列表头部
-            lit = lNodes.begin();
-
-            //需要展开的节点计数，这个一直保持累计，不清零
-            int nToExpand = 0;
-
-            //因为是在循环中，前面的循环体中可能污染了这个变量，so清空这个vector
-            //这个变量也只是统计了某一个循环中的点
-            //这个变量记录了在一次分裂循环中，那些可以再继续进行分裂的节点中包含的特征点数目和其句柄
-            vSizeAndPointerToNode.clear();
+            lNit = lNodes.begin();
 
             // 将目前的子区域进行划分
             //开始遍历列表中所有的提取器节点，并进行分解或者保留
-            while (lit != lNodes.end()) {
+            while (lNit != lNodes.end()) {
                 //如果提取器节点只有一个特征点，
-                if (lit->bNoMore) {
-                    // If node only contains one point do not subdivide and continue
-                    //那么就没有必要再进行细分了
-                    lit++;
-                    //跳过当前节点，继续下一个
+                if (lNit->vKeys.size() == 1) {
+                    lNit++;
                     continue;
                 } else {
-                    // If more than one point, subdivide
-                    //如果当前的提取器节点具有超过一个的特征点，那么就要进行继续细分
                     ExtractorNode n1, n2, n3, n4;
-
-                    //再细分成四个子区域
-                    lit->DivideNode(n1, n2, n3, n4);
-
-                    // Add childs if they contain points
-                    //如果这里分出来的子区域中有特征点，那么就将这个子区域的节点添加到提取器节点的列表中
-                    //注意这里的条件是，有特征点即可
+                    lNit->DivideNode(n1, n2, n3, n4);
                     if (n1.vKeys.size() > 0) {
-                        //注意这里也是添加到列表前面的
                         lNodes.push_front(n1);
-
-                        //再判断其中子提取器节点中的特征点数目是否大于1
-                        if (n1.vKeys.size() > 1) {
-                            //如果有超过一个的特征点，那么“待展开的节点计数++”
-                            nToExpand++;
-
-                            //保存这个特征点数目和节点指针的信息
-                            vSizeAndPointerToNode.push_back(make_pair(n1.vKeys.size(), &lNodes.front()));
-
-                            //?这个访问用的句柄貌似并没有用到？
-                            // lNodes.front().lit 和前面的迭代的lit 不同，只是名字相同而已
-                            // lNodes.front().lit是node结构体里的一个指针用来记录节点的位置
-                            // 迭代的lit 是while循环里作者命名的遍历的指针名称
-                            lNodes.front().lit = lNodes.begin();
-                        }
                     }
                     //后面的操作都是相同的，这里不再赘述
                     if (n2.vKeys.size() > 0) {
                         lNodes.push_front(n2);
-                        if (n2.vKeys.size() > 1) {
-                            nToExpand++;
-                            vSizeAndPointerToNode.push_back(make_pair(n2.vKeys.size(), &lNodes.front()));
-                            lNodes.front().lit = lNodes.begin();
-                        }
                     }
                     if (n3.vKeys.size() > 0) {
                         lNodes.push_front(n3);
-                        if (n3.vKeys.size() > 1) {
-                            nToExpand++;
-                            vSizeAndPointerToNode.push_back(make_pair(n3.vKeys.size(), &lNodes.front()));
-                            lNodes.front().lit = lNodes.begin();
-                        }
                     }
                     if (n4.vKeys.size() > 0) {
                         lNodes.push_front(n4);
-                        if (n4.vKeys.size() > 1) {
-                            nToExpand++;
-                            vSizeAndPointerToNode.push_back(make_pair(n4.vKeys.size(), &lNodes.front()));
-                            lNodes.front().lit = lNodes.begin();
-                        }
                     }
-
                     //当这个母节点expand之后就从列表中删除它了，能够进行分裂操作说明至少有一个子节点的区域中特征点的数量是>1的
                     //? 分裂方式是后加的先分裂，先加的后分裂。
-                    lit = lNodes.erase(lit);
-
-                    //继续下一次循环，其实这里加不加这句话的作用都是一样的
-                    continue;
+                    lNit = lNodes.erase(lNit);
                 }//判断当前遍历到的节点中是否有超过一个的特征点
+
+                // Finish if there are more nodes than required features or all nodes contain just one point
+                if ((int) lNodes.size() >= nDesireFeature || (int) lNodes.size() == nPreNodeNum){
+                    //停止标志置位
+                    bFinish = true;
+                    break;
+                }
             }//遍历列表中的所有提取器节点
-
-            // Finish if there are more nodes than required features or all nodes contain just one point
-            //停止这个过程的条件有两个，满足其中一个即可：
-            //1、当前的节点数已经超过了要求的特征点数
-            //2、当前所有的节点中都只包含一个特征点
-            if ((int) lNodes.size() >= N                //判断是否超过了要求的特征点数
-                || (int) lNodes.size() == prevSize)    //prevSize中保存的是分裂之前的节点个数，如果分裂之前和分裂之后的总节点个数一样，说明当前所有的
-                //节点区域中只有一个特征点，已经不能够再细分了
-            {
-                //停止标志置位
-                bFinish = true;
-            }
-
-                // Step 6 当再划分之后所有的Node数大于要求数目时,就慢慢划分直到使其刚刚达到或者超过要求的特征点个数
-                //可以展开的子节点个数nToExpand x3，是因为一分四之后，会删除原来的主节点，所以乘以3
-                /**
-                 * //?BUG 但是我觉得这里有BUG，虽然最终作者也给误打误撞、稀里糊涂地修复了
-                 * 注意到，这里的nToExpand变量在前面的执行过程中是一直处于累计状态的，如果因为特征点个数太少，跳过了下面的else-if，又进行了一次上面的遍历
-                 * list的操作之后，lNodes.size()增加了，但是nToExpand也增加了，尤其是在很多次操作之后，下面的表达式：
-                 * ((int)lNodes.size()+nToExpand*3)>mnCurKPsLeft
-                 * 会很快就被满足，但是此时只进行一次对vSizeAndPointerToNode中点进行分裂的操作是肯定不够的；
-                 * 理想中，作者下面的for理论上只要执行一次就能满足，不过作者所考虑的“不理想情况”应该是分裂后出现的节点所在区域可能没有特征点，因此将for
-                 * 循环放在了一个while循环里面，通过再次进行for循环、再分裂一次解决这个问题。而我所考虑的“不理想情况”则是因为前面的一次对vSizeAndPointerToNode
-                 * 中的特征点进行for循环不够，需要将其放在另外一个循环（也就是作者所写的while循环）中不断尝试直到达到退出条件。
-                 * */
-            else if (((int) lNodes.size() + nToExpand * 3) > N) {
-                //如果再分裂一次那么数目就要超了，这里想办法尽可能使其刚刚达到或者超过要求的特征点个数时就退出
-                //这里的nToExpand和vSizeAndPointerToNode不是一次循环对一次循环的关系，而是前者是累计计数，后者只保存某一个循环的
-                //一直循环，直到结束标志位被置位
-                while (!bFinish) {
-                    //获取当前的list中的节点个数
-                    prevSize = lNodes.size();
-
-                    //Prev这里是应该是保留的意思吧，保留那些还可以分裂的节点的信息, 这里是深拷贝
-                    vector<pair<int, ExtractorNode *> > vPrevSizeAndPointerToNode = vSizeAndPointerToNode;
-                    //清空
-                    vSizeAndPointerToNode.clear();
-
-                    // 对需要划分的节点进行排序，对pair对的第一个元素进行排序，默认是从小到大排序
-                    // 优先分裂特征点多的节点，使得特征点密集的区域保留更少的特征点
-                    //! 注意这里的排序规则非常重要！会导致每次最后产生的特征点都不一样。建议使用 stable_sort
-                    sort(vPrevSizeAndPointerToNode.begin(), vPrevSizeAndPointerToNode.end(), compareNodes);
-
-                    //遍历这个存储了pair对的vector，注意是从后往前遍历
-                    for (int j = vPrevSizeAndPointerToNode.size() - 1; j >= 0; j--) {
-                        ExtractorNode n1, n2, n3, n4;
-                        //对每个需要进行分裂的节点进行分裂
-                        vPrevSizeAndPointerToNode[j].second->DivideNode(n1, n2, n3, n4);
-
-                        // Add childs if they contain points
-                        //其实这里的节点可以说是二级子节点了，执行和前面一样的操作
-                        if (n1.vKeys.size() > 0) {
-                            lNodes.push_front(n1);
-                            if (n1.vKeys.size() > 1) {
-                                //因为这里还有对于vSizeAndPointerToNode的操作，所以前面才会备份vSizeAndPointerToNode中的数据
-                                //为可能的、后续的又一次for循环做准备
-                                vSizeAndPointerToNode.push_back(make_pair(n1.vKeys.size(), &lNodes.front()));
-                                lNodes.front().lit = lNodes.begin();
-                            }
-                        }
-                        if (n2.vKeys.size() > 0) {
-                            lNodes.push_front(n2);
-                            if (n2.vKeys.size() > 1) {
-                                vSizeAndPointerToNode.push_back(make_pair(n2.vKeys.size(), &lNodes.front()));
-                                lNodes.front().lit = lNodes.begin();
-                            }
-                        }
-                        if (n3.vKeys.size() > 0) {
-                            lNodes.push_front(n3);
-                            if (n3.vKeys.size() > 1) {
-                                vSizeAndPointerToNode.push_back(make_pair(n3.vKeys.size(), &lNodes.front()));
-                                lNodes.front().lit = lNodes.begin();
-                            }
-                        }
-                        if (n4.vKeys.size() > 0) {
-                            lNodes.push_front(n4);
-                            if (n4.vKeys.size() > 1) {
-                                vSizeAndPointerToNode.push_back(make_pair(n4.vKeys.size(), &lNodes.front()));
-                                lNodes.front().lit = lNodes.begin();
-                            }
-                        }
-
-                        //删除母节点，在这里其实应该是一级子节点
-                        lNodes.erase(vPrevSizeAndPointerToNode[j].second->lit);
-
-                        //判断是是否超过了需要的特征点数？是的话就退出，不是的话就继续这个分裂过程，直到刚刚达到或者超过要求的特征点个数
-                        //作者的思想其实就是这样的，再分裂了一次之后判断下一次分裂是否会超过N，如果不是那么就放心大胆地全部进行分裂（因为少了一个判断因此
-                        //其运算速度会稍微快一些），如果会那么就引导到这里进行最后一次分裂
-                        if ((int) lNodes.size() >= N)
-                            break;
-                    }//遍历vPrevSizeAndPointerToNode并对其中指定的node进行分裂，直到刚刚达到或者超过要求的特征点个数
-
-                    //这里理想中应该是一个for循环就能够达成结束条件了，但是作者想的可能是，有些子节点所在的区域会没有特征点，因此很有可能一次for循环之后
-                    //的数目还是不能够满足要求，所以还是需要判断结束条件并且再来一次
-                    //判断是否达到了停止条件
-                    if ((int) lNodes.size() >= N || (int) lNodes.size() == prevSize)
-                        bFinish = true;
-                }//一直进行不进行nToExpand累加的节点分裂过程，直到分裂后的nodes数目刚刚达到或者超过要求的特征点数目
-            }//当本次分裂后达不到结束条件但是再进行一次完整的分裂之后就可以达到结束条件时
         }// 根据兴趣点分布,利用4叉树方法对图像进行划分区域
 
         // Retain the best point in each node
@@ -979,52 +789,41 @@ namespace ORB_SLAM3 {
         vector<cv::KeyPoint> vResultKeys;
 
         //调整大小为要提取的特征点数目
-        vResultKeys.reserve(nFeatures);
+        vResultKeys.reserve(mnFeatures);
 
         //遍历这个节点列表
         for (list<ExtractorNode>::iterator lit = lNodes.begin(); lit != lNodes.end(); lit++) {
             //得到这个节点区域中的特征点容器句柄
             vector<cv::KeyPoint> &vNodeKeys = lit->vKeys;
-
             //得到指向第一个特征点的指针，后面作为最大响应值对应的关键点
-            cv::KeyPoint *pKP = &vNodeKeys[0];
-
+            cv::KeyPoint *pKPMaxResP = &vNodeKeys[0];
             //用第1个关键点响应值初始化最大响应值
-            float maxResponse = pKP->response;
-
+            float fMaxResp = pKPMaxResP->response;
             //开始遍历这个节点区域中的特征点容器中的特征点，注意是从1开始哟，0已经用过了
             for (size_t k = 1; k < vNodeKeys.size(); k++) {
                 //更新最大响应值
-                if (vNodeKeys[k].response > maxResponse) {
+                if (vNodeKeys[k].response > fMaxResp) {
                     //更新pKP指向具有最大响应值的keypoints
-                    pKP = &vNodeKeys[k];
-                    maxResponse = vNodeKeys[k].response;
+                    pKPMaxResP = &vNodeKeys[k];
+                    fMaxResp = vNodeKeys[k].response;
                 }
             }
-
             //将这个节点区域中的响应值最大的特征点加入最终结果容器
-            vResultKeys.push_back(*pKP);
+            vResultKeys.push_back(*pKPMaxResP);
         }
-
         //返回最终结果容器，其中保存有分裂出来的区域中，我们最感兴趣、响应值最大的特征点
         return vResultKeys;
     }
 
 
 //计算四叉树的特征点，函数名字后面的OctTree只是说明了在过滤和分配特征点时所使用的方式
-    void ORBextractor::ComputeKeyPointsOctTree(
-            vector<vector<KeyPoint> > &allKeypoints)    //所有的特征点，这里第一层vector存储的是某图层里面的所有特征点，
-    //第二层存储的是整个图像金字塔中的所有图层里面的所有特征点
-    {
-        //重新调整图像层数
-        allKeypoints.resize(nLevels);
-
+    void ORBextractor::DistributeKPsByOctTree(vector<vector<KeyPoint> > &allKeypoints)    //所有的特征点，这里第一层vector存储的是某图层里面的所有特征点，
+    {    //第二层存储的是整个图像金字塔中的所有图层里面的所有特征点
+        allKeypoints.resize(mnLevels);
         //图像cell的尺寸，是个正方形，可以理解为边长in像素坐标
         const float W = 35;
-
         // 对每一层图像做处理
-        //遍历所有图像
-        for (int level = 0; level < nLevels; ++level) {
+        for (int level = 0; level < mnLevels; ++level) {
             //计算这层图像的坐标边界， NOTICE 注意这里是坐标边界，EDGE_THRESHOLD指的应该是可以提取特征点的有效图像边界，后面会一直使用“有效图像边界“这个自创名词
             const int minBorderX = EDGE_THRESHOLD - 3;            //这里的3是因为在计算FAST特征点的时候，需要建立一个半径为3的圆
             const int minBorderY = minBorderX;                    //minY的计算就可以直接拷贝上面的计算结果了
@@ -1034,7 +833,7 @@ namespace ORB_SLAM3 {
             //存储需要进行平均分配的特征点
             vector<cv::KeyPoint> vToDistributeKeys;
             //一般地都是过量采集，所以这里预分配的空间大小是nfeatures*10
-            vToDistributeKeys.reserve(nFeatures * 10);
+            vToDistributeKeys.reserve(mnFeatures * 10);
 
             //计算进行特征点提取的图像区域尺寸
             const float width = (maxBorderX - minBorderX);
@@ -1058,7 +857,6 @@ namespace ORB_SLAM3 {
 
                 //如果初始的行坐标就已经超过了有效的图像边界了，这里的“有效图像”是指原始的、可以提取FAST特征点的图像区域
                 if (iniY >= maxBorderY - 3)
-                    //那么就跳过这一行
                     continue;
                 //如果图像的大小导致不能够正好划分出来整齐的图像网格，那么就要委屈最后一行了
                 if (maxY > maxBorderY)
@@ -1071,9 +869,8 @@ namespace ORB_SLAM3 {
                     //计算这列网格的最大列坐标，+6的含义和前面相同
                     float maxX = iniX + wCell + 6;
                     //判断坐标是否在图像中
-                    //TODO 不太能够明白为什么要-6，前面不都是-3吗
                     //!BUG  正确应该是maxBorderX-3
-                    if (iniX >= maxBorderX - 6)
+                    if (iniX >= maxBorderX - 3)
                         continue;
                     //如果最大坐标越界那么委屈一下
                     if (maxX > maxBorderX)
@@ -1083,17 +880,17 @@ namespace ORB_SLAM3 {
                     //这个向量存储这个cell中的特征点
                     vector<cv::KeyPoint> vKeysCell;
                     //调用opencv的库函数来检测FAST角点
-                    FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX),    //待检测的图像，这里就是当前遍历到的图像块
+                    cv::FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX),    //待检测的图像，这里就是当前遍历到的图像块
                          vKeysCell,            //存储角点位置的容器
-                         fIniThFAST,            //检测阈值
+                         mfIniThFAST,            //检测阈值
                          true);                //使能非极大值抑制
 
                     //如果这个图像块中使用默认的FAST检测阈值没有能够检测到角点
                     if (vKeysCell.empty()) {
                         //那么就使用更低的阈值来进行重新检测
-                        FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX),    //待检测的图像
+                        cv::FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX),    //待检测的图像
                              vKeysCell,        //存储角点位置的容器
-                             nMinThFAST,        //更低的检测阈值
+                             mnMinThFAST,        //更低的检测阈值
                              true);            //使能非极大值抑制
                     }
 
@@ -1114,337 +911,45 @@ namespace ORB_SLAM3 {
             }//开始遍历图像cell的行
 
             //声明一个对当前图层的特征点的容器的引用
-            vector<KeyPoint> &keypoints = allKeypoints[level];
+            vector<KeyPoint> &vKPs = allKeypoints[level];
             //并且调整其大小为欲提取出来的特征点个数（当然这里也是扩大了的，因为不可能所有的特征点都是在这一个图层中提取出来的）
-            keypoints.reserve(nFeatures);
+            vKPs.reserve(mnFeatures);
 
-            // 根据mnFeatuvector<KeyPoint> & keypoints = allKeypoints[level];resPerLevel,即该层的兴趣点数,对特征点进行剔除
+            // 根据mnFeatuvector<KeyPoint> & vKPs = allKeypoints[level];resPerLevel,即该层的兴趣点数,对特征点进行剔除
             //返回值是一个保存有特征点的vector容器，含有剔除后的保留下来的特征点
             //得到的特征点的坐标，依旧是在当前图层下来讲的
-            keypoints = DistributeOctTree(vToDistributeKeys,            //当前图层提取出来的特征点，也即是等待剔除的特征点
+            vKPs = DistributeKPsInlevel(vToDistributeKeys,            //当前图层提取出来的特征点，也即是等待剔除的特征点
                     //NOTICE 注意此时特征点所使用的坐标都是在“半径扩充图像”下的
-                                          minBorderX, maxBorderX,        //当前图层图像的边界，而这里的坐标却都是在“边缘扩充图像”下的
-                                          minBorderY, maxBorderY,
-                                          mnFeaturesPerLevel[level],    //希望保留下来的当前层图像的特征点个数
-                                          level);                        //当前层图像所在的图层
+                                        minBorderX, maxBorderX,        //当前图层图像的边界，而这里的坐标却都是在“边缘扩充图像”下的
+                                        minBorderY, maxBorderY,
+                                        mvnFeaturesPerLevel[level],    //希望保留下来的当前层图像的特征点个数
+                                        level);                        //当前层图像所在的图层
 
             //PATCH_SIZE是对于底层的初始图像来说的，现在要根据当前图层的尺度缩放倍数进行缩放得到缩放后的PATCH大小 和特征点的方向计算有关
             const int scaledPatchSize = PATCH_SIZE * mvfScaleFactor[level];
 
             // Add border to coordinates and scale information
             //获取剔除过程后保留下来的特征点数目
-            const int nkps = keypoints.size();
+            const int nKPs = vKPs.size();
             //然后开始遍历这些特征点，恢复其在当前图层图像坐标系下的坐标
-            for (int i = 0; i < nkps; i++) {
+            for (int i = 0; i < nKPs; i++) {
                 //对每一个保留下来的特征点，恢复到相对于当前图层“边缘扩充图像下”的坐标系的坐标
-                keypoints[i].pt.x += minBorderX;
-                keypoints[i].pt.y += minBorderY;
+                vKPs[i].pt.x += minBorderX;
+                vKPs[i].pt.y += minBorderY;
                 //记录特征点来源的图像金字塔图层
-                keypoints[i].octave = level;
+                vKPs[i].octave = level;
                 //记录计算方向的patch，缩放后对应的大小， 又被称作为特征点半径
-                keypoints[i].size = scaledPatchSize;
+                vKPs[i].size = scaledPatchSize;
             }
         }
-
         // compute orientations
         //然后计算这些特征点的方向信息，注意这里还是分层计算的
-        for (int level = 0; level < nLevels; ++level)
-            computeOrientation(mvImagePyramid[level],    //对应的图层的图像
+        for (int level = 0; level < mnLevels; ++level)
+            ComputeOrientation(mvImagePyramid[level],    //对应的图层的图像
                                allKeypoints[level],    //这个图层中提取并保留下来的特征点容器
-                               umax);                    //以及PATCH的横坐标边界
+                               mCircleXMax);                    //以及PATCH的横坐标边界
     }
 
-
-//这个函数应该是使用老办法来计算特征点
-    void ORBextractor::ComputeKeyPointsOld(
-            std::vector<std::vector<KeyPoint> > &allKeypoints)        //输出，所有图层上的所有特征点
-    {
-        //根据图像金字塔的图层数调整这个变量中的图层数
-        allKeypoints.resize(nLevels);
-
-        //计算底层图像的长宽比，其实也就是所有图像的长宽比
-        float imageRatio = (float) mvImagePyramid[0].cols / mvImagePyramid[0].rows;
-
-        //开始遍历所有图层的图像
-        for (int level = 0; level < nLevels; ++level) {
-            //获取每层图像希望提取出来的特征点
-            const int nDesiredFeatures = mnFeaturesPerLevel[level];
-
-            //计算当前图层中应该有几行cell和几行row
-            //NOTICE 其实下面都应该注意的是最好是使用显式强制转换或者直接使用取整函数。经过查阅资料，发现下面的浮点型数据到整型数据的转换规则
-            //是直接保留浮点数据的整数部分
-            //TODO 不解，为什么是这样子计算本层图像中图像cell的行数和列数。而且这个数目和希望提取的特征点个数有关
-            const int levelCols = sqrt((float) nDesiredFeatures / (5 * imageRatio));
-            //按照图像比例计算，省事
-            const int levelRows = imageRatio * levelCols;
-
-            //这里指的应该是FAST角点可以存在的坐标位置范围，其实就是原始图像的坐标范围
-            //注意这里没有提前进行+3的操作，而是在后面计算每个网格的区域的时候使用-3的操作来处理FAST角点半径问题
-            //本质上和前面的思想是一样的
-            const int minBorderX = EDGE_THRESHOLD;
-            const int minBorderY = minBorderX;
-            const int maxBorderX = mvImagePyramid[level].cols - EDGE_THRESHOLD;
-            const int maxBorderY = mvImagePyramid[level].rows - EDGE_THRESHOLD;
-
-            //计算这个容许坐标区域的宽度和高度
-            const int W = maxBorderX - minBorderX;
-            const int H = maxBorderY - minBorderY;
-            //同时计算每个图像cell的宽度和高度
-            const int cellW = ceil((float) W / levelCols);
-            const int cellH = ceil((float) H / levelRows);
-
-            //计算本层图像中的总cell个数
-            const int nCells = levelRows * levelCols;
-            //ceil:返回大于或者等于表达式的最小整数，向上取整
-            //这里计算了每个cell中需要提取出来的特征点数量，由于存在小数取整问题，所以都是往多了取整
-            const int nfeaturesCell = ceil((float) nDesiredFeatures / nCells);
-
-            //以方便查找的格式存储从图像cell中提取出来的特征点，
-            //第三层vector-当前cell中的特征点向量
-            //第二层vector-包含了一行cell中，每个cell的上面的特征点容器
-            //第一层vector-包含了所有行的，存储“第二层vector”的容器
-            vector<vector<vector<KeyPoint> > > cellKeyPoints(levelRows, vector<vector<KeyPoint> >(levelCols));
-
-            //每个cell中应该保留的特征点数量
-            vector<vector<int> > nToRetain(levelRows, vector<int>(levelCols, 0));
-            //每个cell中实际提取出来的特征点的数量
-            vector<vector<int> > nTotal(levelRows, vector<int>(levelCols, 0));
-            //每个cell中是否只提取出来了一个特征点的标记
-            vector<vector<bool> > bNoMore(levelRows, vector<bool>(levelCols, false));
-            //保存每一个cell图像的x起始坐标和y起始坐标
-            vector<int> iniXCol(levelCols);
-            vector<int> iniYRow(levelRows);
-
-            //TODO 那些只有一个特征点的图像cell的计数？
-            int nNoMore = 0;
-            //存储需要进行分裂的图像cell计数
-            int nToDistribute = 0;
-
-            //考虑到提取FAST特征点的图像半径时，计算cell边界所使用的增量
-            //+6=+3+3，代表这起始侧和终止侧提取FAST特征点时的那个3个像素的圆半径
-            //也就是说，这里的cellH指的是有效的、FAST角点可以存在的图像长度
-            float hY = cellH + 6;
-
-            //开始逐行遍历网格
-            for (int i = 0; i < levelRows; i++) {
-                //计算用于进行FAST特征点提取的图像cell行边界，这里考虑到了半径为3的半径
-                const float iniY = minBorderY + i * cellH - 3;
-                //记录，因为同样的网格分布在后面进行特征点的均匀和过滤操作中同样会用到
-                iniYRow[i] = iniY;
-                //如果当前的行是最后一行
-                if (i == levelRows - 1) {
-                    //计算当前的起始位置到最终的图像终止位置（考虑FAST提取半径）增量
-                    hY = maxBorderY + 3 - iniY;
-                    //如果为负说明这个地方不能够再有一行cell了
-                    /**
-                     * NOTICE 如果要是最后一行存在计算的意义，那么要求hY>0,即
-                     * maxBorderY+3-iniY>0
-                     * 而前面计算iniY时，实际上考虑到了提取FAST角点所用到的半径为3pixels的半径，所以已经减去了3，这里为了方便分析，不妨
-                     * 设原始的图像网格的起始坐标为borderY，那么就有：
-                     * iniY=boderY-3
-                     * 整理可得，使得最后一行计算有意义的要求为：
-                     * borderY < maxBorderY+6
-                     * 然而根据程序前面的计算，这里的borderY是不应该超过maxBorderY的，所以，这里的这个比较是否是没有必要呢？
-                     */
-
-                    if (hY <= 0)
-                        continue;
-                }
-
-                //计算从起始的行位置到终止的行位置的坐标增量
-                //+6=+3+3,前面的+3是弥补iniY相对于minBorderY + i*cellH的-3，后面的+3则是在minBorderY + （i+1）*cellH
-                //的基础上，又+的3来表示考虑到提取FAST特征点的半径为3的圆
-                float hX = cellW + 6;
-
-                //接下来开始遍历一行中每个列的图像cell
-                for (int j = 0; j < levelCols; j++) {
-                    //某个cell的x轴起始坐标
-                    float iniX;
-
-                    //如果这个cell是在第一行
-                    if (i == 0) {
-                        //那么就要计算初始边界
-                        iniX = minBorderX + j * cellW - 3;
-                        //并且保存留备后用
-                        iniXCol[j] = iniX;
-                    } else {
-                        //如果这个cell不是在第一行，那么就可以直接读取之前计算好的初始坐标了
-                        iniX = iniXCol[j];
-                    }//判断当前遍历的是否是第一行，是否需要计算初始坐标
-
-
-                    //判断当前的cell是否是当前行的最后一个cell
-                    if (j == levelCols - 1) {
-                        //如果是的话就要计算它的坐标增量，计算原因和前面是相同的
-                        hX = maxBorderX + 3 - iniX;
-                        //如果这个坐标增量是负的说明这个小网格不能够用来提取FAST特征点，直接跳过（然后就不满足循环条件结束了）
-                        if (hX <= 0)
-                            continue;
-                    }
-
-                    //从当前图层的图像中扣取这个图像cell的图像
-                    Mat cellImage = mvImagePyramid[level].rowRange(iniY, iniY + hY).colRange(iniX, iniX + hX);
-
-                    //过量提取特征点空间预留，这里预留了当前网格应该提取的特征点个数的5倍
-                    cellKeyPoints[i][j].reserve(nfeaturesCell * 5);
-
-                    //调用opencv的库函数来检测FAST角点
-                    FAST(cellImage,                //cell中的图像
-                         cellKeyPoints[i][j],    //用于保存提取出来的特征点的vector容器
-                         fIniThFAST,                //初步的FAST检测阈值
-                         true);                    //使能非极大值抑制
-
-                    //如果当前cell中提取出来的特征点的个数小于3
-                    if (cellKeyPoints[i][j].size() <= 3) {
-                        //那么首先清空刚才提取出来的特征点
-                        cellKeyPoints[i][j].clear();
-                        //然后使用更小的参数阈值，进行重新提取
-                        FAST(cellImage,                //cell中的图像
-                             cellKeyPoints[i][j],    //输出变量，用于保存提取出来的特征点的vector
-                             nMinThFAST,                //较小的那个FAST阈值
-                             true);                    //使能非极大值抑制
-                    }//如果当前cell中提取出来的特征点的个数小于3
-
-                    //得到提取到的特征点数目
-                    const int nKeys = cellKeyPoints[i][j].size();
-                    //记录
-                    nTotal[i][j] = nKeys;
-
-                    //如果这个数目已经满足了在这个cell中需要提取出来的特征点数目要求了
-                    if (nKeys > nfeaturesCell) {
-                        //那么就将需要保留的特征点数目设置为我们想要这个cell具有的特征点数目
-                        nToRetain[i][j] = nfeaturesCell;
-                        //TODO 不太明白这里的用意，是想说明这个数目已经超了吗？
-                        //目前来看这里的意思是认为这个网格中已经不再需要更多的点来补充了
-                        bNoMore[i][j] = false;
-                    } else {
-                        //如果没有满足，那么也只能保留目前已经有的特征点数目
-                        nToRetain[i][j] = nKeys;
-                        //需要进行分配到这里的特征点数目就是当前提取到的特征点数目和应该提取的数目之间差值，可以理解为特征点个数的缺口
-                        //累加
-                        nToDistribute += nfeaturesCell - nKeys;
-                        //置位表示这个cell真正提取到的特征点数目没有被满足，即需要更多的点
-                        bNoMore[i][j] = true;
-                        //计数++
-                        nNoMore++;
-                    }//判断从当前cell中提取出来的特征点数目是否符合我们的预期要求
-                }//接下来开始遍历一行中每个列的图像cell
-            }//接下来开始遍历一行中每个列的图像cell
-
-
-            // Retain by score
-            //根据评分数值决定哪个特征点将会被留下
-            //进行的条件：
-            //1、有需要匀给少特征点的cell的特征点数
-            //2、不是所有的cell都nomore了
-            //反着说，这个过程停止的条件一是没有需要在进行均匀的特征点个数，二是当前次循环时所有的特征点数目都不足以补充特征点个数的缺口了
-            while (nToDistribute > 0 && nNoMore < nCells) {
-                //对于那些在上一轮中特征点个数达到要求的图像cell，计算出在本轮循环中，需要补足本层图像特征点总个数的缺口，
-                //这些cell所需要重新设定的“期望提取出来的”特征点个数
-                int nNewFeaturesCell = nfeaturesCell + ceil((float) nToDistribute /        //仍旧需要匀过来的特征点数量缺口
-                                                            (nCells - nNoMore));    //那些满足特征点数目的cell数
-
-                //由于即使是补充，仍然会有一些cell能够满足第一轮的特征点数目要求，但是不能够满足第二轮（甚至根据情况会有第三轮，第四轮等等）
-                //的数目要求，这个特征点数量的缺口就记录在这个变量中，所以这里要对它进行清零操作
-                nToDistribute = 0;
-
-                //接下来开始遍历每行cell
-                for (int i = 0; i < levelRows; i++) {
-                    //接着开始遍历一行中每个列中的图像cell
-                    for (int j = 0; j < levelCols; j++) {
-                        //对那些在上一轮提取特征点时满足甚至超过的cell进行操作,就是那些bNoMore[i][j] == false的点
-                        if (!bNoMore[i][j]) {
-                            //判断在上一轮的特征点提取过程中这个cell提取到的特征点数量，是否满足在本轮中的特征点数量要求
-                            if (nTotal[i][j] > nNewFeaturesCell) {
-                                //如果满足的话，那么就重新设置要保存的特征点数量
-                                nToRetain[i][j] = nNewFeaturesCell;
-                                //因为减去在本轮要求的特征点数量之后还有剩余，所以这里设置为false
-                                bNoMore[i][j] = false;
-                            } else {
-                                //如果不幸不能够满足在本轮中的特征点数目要求，那么也只好将就了
-                                //只保存能够提取出来的特征点数目
-                                nToRetain[i][j] = nTotal[i][j];
-                                //这部分特征点数目的缺口也只好由其他的部分来补充了，因此还是累加到这个变量中
-                                nToDistribute += nNewFeaturesCell - nTotal[i][j];
-                                //这个cell中确实没有能够满足本轮，以及可能的、后面的几轮的特征点数目要求了
-                                bNoMore[i][j] = true;
-                                //这个计数++
-                                nNoMore++;
-                            }//如果当前遍历到的这个点不能够满足在本轮中的特征点数目要求
-                        }//判断上一轮时这个cell是否满足了要提取的特征点数目
-                    }//遍历一行中每个列中的图像cell
-                }//遍历每行cell
-            }//判断是否达到了停止条件
-
-            //请注意，执行到这里，只是完成了每个图像cell中特征点的提取+每个cell中应该保留的特征点数量，下面才是正式地开始对每个
-            //cell中vector中的特征点进行删减——或者说是过滤
-
-            //声明一个对当前图层中特征点vector容器的引用
-            vector<KeyPoint> &keypoints = allKeypoints[level];
-            //预分配2倍的期望特征点空间（因为实际的提取过程中，我们都是按照稍微超过期望值的特征点数目进行操作的）
-            keypoints.reserve(nDesiredFeatures * 2);
-
-            //计算在本层图像的时候，图像patch块经过尺度缩放之后的大小（这里的缩放因子就是自己正常认为的缩放因子）
-            //TODO 这里的patch用于进行什么操作？又为什么一定要在当前的图层上进行而不是在底层图像上进行？怀疑这个操作是和计算特征点方向有关
-            //的变量，但是目前还是没有在本文件中发现对这个变量的使用
-            const int scaledPatchSize = PATCH_SIZE * mvfScaleFactor[level];
-
-            // Retain by score and transform coordinates
-            //根据响应值保留符合要求的特征点，并且进行坐标的转换
-            //开始遍历每行的cell
-            for (int i = 0; i < levelRows; i++) {
-                //遍历某行中每列的cell
-                for (int j = 0; j < levelCols; j++) {
-                    //获取当前遍历到的cell所提取出来的特征点vector容器句柄
-                    vector<KeyPoint> &keysCell = cellKeyPoints[i][j];
-                    //这里是调用了opencv函数，根据特征点的评分（也就是响应值），保留一个cell中指定数量的特征点
-                    KeyPointsFilter::retainBest(keysCell,            //输入输出，用于提供待保留的特征点vector，操作完成后将保留的特征点存放在里面
-                            //其实就是把那些响应值低的点从vector中给删除了
-                                                nToRetain[i][j]);    //指定要保留的特征点数目
-                    //如果由于小数取整等原因（前面都是向多了取整的），【对于当前的cell】，经过去除之后的特征点数目还是大于之前设定的要保留的特征点数目
-                    if ((int) keysCell.size() > nToRetain[i][j])
-                        //那么就强制丢弃vector后面的特征点以满足保留的特征点数目要求
-                        //TODO 注意，目前所找到的opencv的相关资料中，并没有介绍是否是调用retainBest完成了特征点的过滤之后，
-                        //这里vector中的特征点就已经按照响应值的大小进行了排序.不过不管是否是已经经过了排序，这里最终的结果都是
-                        //一样的，也就是都将特征点个数缩减到了所希望的数目，不过就是删除的点的是否是“不太那么好的点”而已
-                        keysCell.resize(nToRetain[i][j]);
-
-                    //遍历剔除后的特征点vector，进行坐标的转换，以及添加相关的信息
-                    //NOTICE 这里的特征点还只是一个cell中的，其坐标也是在一个cell下的坐标
-                    for (size_t k = 0, kend = keysCell.size(); k < kend; k++) {
-                        //转换坐标（这里就用上了之前保存的坐标）
-                        keysCell[k].pt.x += iniXCol[j];
-                        keysCell[k].pt.y += iniYRow[i];
-                        //设置提取到该特征点的图层
-                        keysCell[k].octave = level;
-                        //记录这个patch在这个图层上的大小
-                        keysCell[k].size = scaledPatchSize;
-                        //keypoints是对allKeypoints中存储当前图层所有特征点的vector的一个引用
-                        //这里将转换后的结果追加到表示最终结果的vector上
-                        keypoints.push_back(keysCell[k]);
-                    }//遍历剔除后的特征点vector，进行坐标的转换，以及添加相关的信息
-                }//遍历某行中每列的cell
-            }//开始遍历每行的cell
-
-            //如果经过上面的剔除操作之后，最终，当前图层的特征点数目还是大于期望的
-            //和上面的不同，上面判断的是每个图像cell中的，这里则是判断整个图层中的特征点数目
-            if ((int) keypoints.size() > nDesiredFeatures) {
-                //那么就再调用opencv的库函数对这组特征点按照其响应值进行一次剔除
-                KeyPointsFilter::retainBest(keypoints, nDesiredFeatures);
-                //并且强制丢弃还是超过期望结果的特征点
-                keypoints.resize(nDesiredFeatures);
-            }//如果最终结果中，本层图像的的特征点数目还是大于希望的，那么就再剔除一次
-        }//遍历每个图层
-
-        // and compute orientations
-        //最后计算这些特征点的方向信息
-        //遍历图像金字塔中的每个图层
-        for (int level = 0; level < nLevels; ++level)
-            //计算这个图层所有特征点的方向信息
-            computeOrientation(mvImagePyramid[level],    //这个图层的图像
-                               allKeypoints[level],    //这个图层的特征点对象vector容器
-                               umax);                    //patch区域的边界
-    }
 
 //注意这是一个不属于任何类的全局静态函数，static修饰符限定其只能够被本文件中的函数调用
 /**
@@ -1455,18 +960,18 @@ namespace ORB_SLAM3 {
  * @param[out] descriptors          描述子
  * @param[in] pattern               计算描述子使用的固定随机点集
  */
-    static void computeDescriptors(const Mat &image, vector<KeyPoint> &keypoints, Mat &descriptors,
-                                   const vector<Point> &pattern) {
+    static void GetFeatureDescriptors(const Mat &image, vector<KeyPoint> &keypoints, Mat &descriptors,
+                                      const vector<Point> &pattern) {
         //清空保存描述子信息的容器
         descriptors = Mat::zeros((int) keypoints.size(), 32, CV_8UC1);
 
         //开始遍历特征点
         for (size_t i = 0; i < keypoints.size(); i++)
             //计算这个特征点的描述子
-            computeOrbDescriptor(keypoints[i],                //要计算描述子的特征点
-                                 image,                    //以及其图像
-                                 &pattern[0],                //随机点集的首地址
-                                 descriptors.ptr((int) i));    //提取出来的描述子的保存位置
+            GetKPOrbDescriptor(keypoints[i],                //要计算描述子的特征点
+                               image,                    //以及其图像
+                               &pattern[0],                //随机点集的首地址
+                               descriptors.ptr((int) i));    //提取出来的描述子的保存位置
     }
 
 /**
@@ -1474,11 +979,11 @@ namespace ORB_SLAM3 {
  * 
  * @param[in] _image                    输入原始图的图像
  * @param[in] _mask                     掩膜mask
- * @param[in & out] _keypoints                存储特征点关键点的向量
- * @param[in & out] _descriptors              存储特征点描述子的矩阵
+ * @param[in & out] vOutKPs                存储特征点关键点的向量
+ * @param[in & out] OutDescriptors              存储特征点描述子的矩阵
  */
-    int ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoint> &_keypoints,
-                                 OutputArray _descriptors, std::vector<int> &vLappingArea) {
+    int ORBextractor::operator()(InputArray _image, InputArray _mask, vector<KeyPoint> &vOutKPs,
+                                 OutputArray OutDescriptors, std::vector<int> &vLappingArea) {
         // Step 1 检查图像有效性。如果图像为空，那么就直接返回
         if (_image.empty())
             return -1;
@@ -1490,122 +995,116 @@ namespace ORB_SLAM3 {
 
         // Pre-compute the scale pyramid
         // Step 2 构建图像金字塔
-        ComputePyramid(image);
+        DividePyramid(image);
 
         // Step 3 计算图像的特征点，并且将特征点进行均匀化。均匀的特征点可以提高位姿计算精度
         // 存储所有的特征点，注意此处为二维的vector，第一维存储的是金字塔的层数，第二维存储的是那一层金字塔图像里提取的所有特征点
-        vector<vector<KeyPoint> > vvKeyPointInLay;
+        vector<vector<KeyPoint> > vvKPsInLayer;
         //使用四叉树的方式计算每层图像的特征点并进行分配
-        ComputeKeyPointsOctTree(vvKeyPointInLay);
+        DistributeKPsByOctTree(vvKPsInLayer);
 
         //使用传统的方法提取并平均分配图像的特征点，作者并未使用
-        //ComputeKeyPointsOld(vvKeyPointInLay);
+        //ComputeKeyPointsOld(vvKPsInLayer);
 
 
         // Step 4 拷贝图像描述子到新的矩阵descriptors
-        Mat descriptors;
+        Mat TmpDescriptors;
 
         //统计整个图像金字塔中的特征点
-        int nkeypoints = 0;
+        int nKPs = 0;
         //开始遍历每层图像金字塔，并且累加每层的特征点个数
-        for (int level = 0; level < nLevels; ++level)
-            nkeypoints += (int) vvKeyPointInLay[level].size();
+        for (int level = 0; level < mnLevels; ++level)
+            nKPs += (int) vvKPsInLayer[level].size();
 
         //如果本图像金字塔中没有任何的特征点
-        if (nkeypoints == 0)
+        if (nKPs == 0)
             //通过调用cv::mat类的.realse方法，强制清空矩阵的引用计数，这样就可以强制释放矩阵的数据了
             //参考[https://blog.csdn.net/giantchen547792075/article/details/9107877]
-            _descriptors.release();
+            OutDescriptors.release();
         else {
             //如果图像金字塔中有特征点，那么就创建这个存储描述子的矩阵，注意这个矩阵是存储整个图像金字塔中特征点的描述子的
-            _descriptors.create(nkeypoints,        //矩阵的行数，对应为特征点的总个数
+            OutDescriptors.create(nKPs,        //矩阵的行数，对应为特征点的总个数
                                 32,            //矩阵的列数，对应为使用32*8=256位描述子
                                 CV_8U);            //矩阵元素的格式
             //获取这个描述子的矩阵信息
             // ?为什么不是直接在参数_descriptors上对矩阵内容进行修改，而是重新新建了一个变量，复制矩阵后，在这个新建变量的基础上进行修改？
-            descriptors = _descriptors.getMat();
+            TmpDescriptors = OutDescriptors.getMat();
         }
 
-        //_keypoints.clear();
-        //_keypoints.reserve(nkeypoints);
-        _keypoints = vector<cv::KeyPoint>(nkeypoints);
+        //vOutKPs.clear();
+        //vOutKPs.reserve(nKPs);
+        vOutKPs = vector<cv::KeyPoint>(nKPs);
         //因为遍历是一层一层进行的，但是描述子那个矩阵是存储整个图像金字塔中特征点的描述子，所以在这里设置了Offset变量来保存“寻址”时的偏移量，
         //辅助进行在总描述子mat中的定位
-        int offset = 0;
+        int nOffset = 0;
         //Modified for speeding up stereo fisheye matching
-        int monoIndex = 0, stereoIndex = nkeypoints - 1;
-        for (int level = 0; level < nLevels; ++level) {
+        int DesRowInOut = 0, stereoIndex = nKPs - 1;
+        for (int level = 0; level < mnLevels; ++level) {
             //获取在allKeypoints中当前层特征点容器的句柄
-            vector<KeyPoint> &keypoints = vvKeyPointInLay[level];
+            vector<KeyPoint> &vKPsInLevel = vvKPsInLayer[level];
             //本层的特征点数
-            int nkeypointsLevel = (int) keypoints.size();
+            int nKPsInLevel = (int) vKPsInLevel.size();
 
-            if (nkeypointsLevel == 0)
+            if (nKPsInLevel == 0)
                 continue;
 
             // preprocess the resized image
             //  Step 5 对图像进行高斯模糊
             // 深拷贝当前金字塔所在层级的图像
-            Mat workingMat = mvImagePyramid[level].clone();
+            Mat ImgInLevel = mvImagePyramid[level].clone();
 
             // 注意：提取特征点的时候，使用的是清晰的原图像；这里计算描述子的时候，为了避免图像噪声的影响，使用了高斯模糊
-            GaussianBlur(workingMat,        //源图像
-                         workingMat,        //输出图像
+            GaussianBlur(ImgInLevel,        //源图像
+                         ImgInLevel,        //输出图像
                          Size(7, 7),        //高斯滤波器kernel大小，必须为正的奇数
                          2,                //高斯滤波在x方向的标准差
                          2,                //高斯滤波在y方向的标准差
                          BORDER_REFLECT_101);//边缘拓展点插值类型
 
-            // Compute the descriptors
+            // Compute the TmpDescriptors
             // desc存储当前图层的描述子
-            //Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
-            Mat desc = cv::Mat(nkeypointsLevel, 32, CV_8U);
+            //Mat DescriInLevel = TmpDescriptors.rowRange(nOffset, nOffset + nKPsInLevel);
+            Mat DescriInLevel = cv::Mat(nKPsInLevel, 32, CV_8U);
             // Step 6 计算高斯模糊后图像的描述子
-            computeDescriptors(workingMat,    //高斯模糊之后的图层图像
-                               keypoints,    //当前图层中的特征点集合
-                               desc,        //存储计算之后的描述子
-                               pattern);    //随机采样点集
+            GetFeatureDescriptors(ImgInLevel,    //高斯模糊之后的图层图像
+                                  vKPsInLevel,    //当前图层中的特征点集合
+                                  DescriInLevel,        //存储计算之后的描述子
+                                  pattern);    //随机采样点集
 
             // 更新偏移量的值
-            offset += nkeypointsLevel;
+            nOffset += nKPsInLevel;
 
             // Scale keypoint coordinates
             // Step 6 对非第0层图像中的特征点的坐标恢复到第0层图像（原图像）的坐标系下
             // ? 得到所有层特征点在第0层里的坐标放到_keypoints里面
             // 对于第0层的图像特征点，他们的坐标就不需要再进行恢复了
-            float scale = mvfScaleFactor[level]; //getScale(level, firstLevel, fScaleFactor);
-            int i = 0;
-            for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
-                         keypointEnd = keypoints.end(); keypoint != keypointEnd; ++keypoint) {
+            float scale = mvfScaleFactor[level]; //getScale(level, firstLevel, mfScaleFactor);
+            int DesRowInLevel = 0;
+            for (vector<KeyPoint>::iterator KPit = vKPsInLevel.begin(),
+                         keypointEnd = vKPsInLevel.end(); KPit != keypointEnd; ++KPit) {
 
-                // Scale keypoint coordinates
+                // Scale KPit coordinates
                 if (level != 0) {
                     // 特征点本身直接乘缩放倍数就可以了
-                    keypoint->pt *= scale;
+                    KPit->pt *= scale;
                 }
-                // ?TODO vLappingArea 
-                if (keypoint->pt.x >= vLappingArea[0] && keypoint->pt.x <= vLappingArea[1]) {
-                    _keypoints.at(stereoIndex) = (*keypoint);
-                    desc.row(i).copyTo(descriptors.row(stereoIndex));
-                    stereoIndex--;
-                } else {
-                    _keypoints.at(monoIndex) = (*keypoint);
-                    desc.row(i).copyTo(descriptors.row(monoIndex));
-                    monoIndex++;
-                }
-                i++;
+                // vLappingArea={0,0}
+                vOutKPs.at(DesRowInOut) = (*KPit);
+                DescriInLevel.row(DesRowInLevel).copyTo(TmpDescriptors.row(DesRowInOut));
+                DesRowInOut++;
+                DesRowInLevel++;
             }
         }
-        //cout << "[ORBextractor]: extracted " << _keypoints.size() << " KeyPoints" << endl;
-        return monoIndex;
+//        cout << "[ORBextractor]: extracted " << vOutKPs.size() << " KeyPoints" << endl;
+        return DesRowInOut;
     }
 
     /**
      * 构建图像金字塔
      * @param image 输入原图像，这个输入图像所有像素都是有效的，也就是说都是可以在其上提取出FAST角点的
      */
-    void ORBextractor::ComputePyramid(cv::Mat image) {
-        for (int level = 0; level < nLevels; ++level) {
+    void ORBextractor::DividePyramid(cv::Mat image) {
+        for (int level = 0; level < mnLevels; ++level) {
             float scale = mvfInvScaleFactor[level];
             Size sz(cvRound((float) image.cols * scale), cvRound((float) image.rows * scale));
             Size wholeSize(sz.width + EDGE_THRESHOLD * 2, sz.height + EDGE_THRESHOLD * 2);

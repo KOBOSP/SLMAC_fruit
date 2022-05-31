@@ -57,7 +57,8 @@ protected:
     // Info of the frame to be drawn
     cv::Mat mImgLeft, mImgRight;
     int mnCurKPsLeft;
-    vector<cv::KeyPoint> mvCurKPsLeft, mvCurKPsRight, mvIniKPsLeft;
+    vector<cv::KeyPoint> mvCurKPsLeft, mvIniKPsLeft;
+    vector<float> mvfCurXInRight;
     vector<bool> mvbMap, mvbVO;
     bool mbOnlyTracking;
     int mnTrackedMap, mnTrackedVO;
