@@ -57,23 +57,22 @@ namespace ORB_SLAM3 {
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnBAGlobalForKF(0),
               mnPlaceRecognitionQuery(0), mnPlaceRecognitionWords(0), mPlaceRecognitionScore(0),
               fx(F.fx), fy(F.fy), cx(F.cx), cy(F.cy), invfx(F.invfx), invfy(F.invfy),
-              mfBaselineFocal(F.mfBaselineFocal), mfBaseline(F.mfBaseline), mfThDepth(F.mfThDepth),
+              mfBaselineFocal(F.mfBaselineFocal), mfBaseline(F.mfBaseline), mfThDepth(F.mfThCloseFar),
               mnKPsLeftNum(F.mnKPsLeftNum), mvKPsLeft(F.mvKPsLeft), mvKPsUn(F.mvKPsUn),
               mvfXInRight(F.mvfXInRight), mvfMPDepth(F.mvfMPDepth), mDescriptors(F.mDescriptorsLeft.clone()),
               mBowVec(F.mBowVec), mFeatVec(F.mFeatVec), mnScaleLevels(F.mnScaleLevels), mfScaleFactor(F.mfScaleFactor),
               mfLogScaleFactor(F.mfLogScaleFactor), mvScaleFactors(F.mvfScaleFactors), mvfLevelSigma2(F.mvfLevelSigma2),
               mvfInvLevelSigma2(F.mvfInvLevelSigma2), mnMinX(F.mfMinX), mnMinY(F.mfMinY), mnMaxX(F.mfMaxX),
-              mnMaxY(F.mfMaxY), mEigenK(F.mEigenK), mPrevKF(NULL), mNextKF(NULL), mpImuPreintegrated(F.mpImuPreintegrated),
+              mnMaxY(F.mfMaxY), mEigenK(F.mEigenK), mPrevKF(NULL), mNextKF(NULL), mpImuPreintegrated(F.mpImuFromPrevKF),
               mImuCalib(F.mImuCalib), mvpMapPoints(F.mvpMPs), mpKeyFrameDB(pKFDB),
-              mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mDistCoef(F.mDistCoef),
-              mbNotErase(false), mnDataset(F.mnDataset),
+              mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL),
+              mbNotErase(false),
               mbToBeErased(false), mbBad(false), mHalfBaseline(F.mfBaseline / 2), mpMap(pMap),
               mbCurrentPlaceRecognition(false),
               mnMergeCorrectedForKF(0),
-              mpCamera(F.mpCamera), mpCamera2(F.mpCamera2),
-              mvLeftToRightMatch(F.mvLeftToRightMatch), mvRightToLeftMatch(F.mvRightToLeftMatch),
-              mTlr(F.GetRelativePoseTlr()),
-              mvKPsRight(F.mvKPsRight), mTrl(F.GetRelativePoseTrl()),
+              mpCamera(F.mpCamera),
+              mTlr(F.GetStereoTlr()),
+              mvKPsRight(F.mvKPsRight), mTrl(F.GetStereoTrl()),
               mnNumberOfOpt(0), mbHasVelocity(false) {
         mnId = nNextId++;
 
@@ -82,7 +81,7 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < mnGridCols; i++) {
             mGrid[i].resize(mnGridRows);
             for (int j = 0; j < mnGridRows; j++) {
-                mGrid[i][j] = F.mGrid[i][j];
+                mGrid[i][j] = F.mGridLeft[i][j];
             }
         }
 
@@ -96,7 +95,6 @@ namespace ORB_SLAM3 {
 
         mImuBias = F.mImuBias;
         SetPose(F.GetPose());
-
         mnOriginMapId = pMap->GetId();
     }
 
@@ -860,7 +858,7 @@ namespace ORB_SLAM3 {
             if (mvpMapPoints[i]) {
                 MapPoint *pMP = mvpMapPoints[i];
                 Eigen::Vector3f x3Dw = pMP->GetWorldPos();
-                float z = Rcw2.dot(x3Dw) + zcw;  // (R*x3Dw+t)的第三行，即z
+                float z = Rcw2.dot(x3Dw) + zcw;  // (R*x3Dw+mTs)的第三行，即z
                 vDepths.push_back(z);
             }
         }
@@ -879,12 +877,12 @@ namespace ORB_SLAM3 {
 
     Eigen::Vector3f KeyFrame::GetGyroBias() {
         unique_lock<mutex> lock(mMutexPose);
-        return Eigen::Vector3f(mImuBias.bwx, mImuBias.bwy, mImuBias.bwz);
+        return Eigen::Vector3f(mImuBias.mBGX, mImuBias.mBGY, mImuBias.mBGZ);
     }
 
     Eigen::Vector3f KeyFrame::GetAccBias() {
         unique_lock<mutex> lock(mMutexPose);
-        return Eigen::Vector3f(mImuBias.bax, mImuBias.bay, mImuBias.baz);
+        return Eigen::Vector3f(mImuBias.mBAX, mImuBias.mBAY, mImuBias.mBAZ);
     }
 
     IMU::Bias KeyFrame::GetImuBias() {
@@ -1044,98 +1042,6 @@ namespace ORB_SLAM3 {
         mvBackupLoopEdgesId.clear();
 
         UpdateBestCovisibles();
-    }
-
-    bool KeyFrame::ProjectPointDistort(MapPoint *pMP, cv::Point2f &kp, float &u, float &v) {
-
-        // 3D in absolute coordinates
-        Eigen::Vector3f P = pMP->GetWorldPos();
-
-        // 3D in camera coordinates
-        Eigen::Vector3f Pc = mRcw * P + mTcw.translation();
-        float &PcX = Pc(0);
-        float &PcY = Pc(1);
-        float &PcZ = Pc(2);
-
-        // Check positive depth
-        if (PcZ < 0.0f) {
-            cout << "Negative depth: " << PcZ << endl;
-            return false;
-        }
-
-        // Project in image and check it is not outside
-        float invz = 1.0f / PcZ;
-        u = fx * PcX * invz + cx;
-        v = fy * PcY * invz + cy;
-
-        // cout << "c";
-
-        if (u < mnMinX || u > mnMaxX)
-            return false;
-        if (v < mnMinY || v > mnMaxY)
-            return false;
-
-        float x = (u - cx) * invfx;
-        float y = (v - cy) * invfy;
-        float r2 = x * x + y * y;
-        float k1 = mDistCoef.at<float>(0);
-        float k2 = mDistCoef.at<float>(1);
-        float p1 = mDistCoef.at<float>(2);
-        float p2 = mDistCoef.at<float>(3);
-        float k3 = 0;
-        if (mDistCoef.total() == 5) {
-            k3 = mDistCoef.at<float>(4);
-        }
-
-        // Radial distorsion
-        float x_distort = x * (1 + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2);
-        float y_distort = y * (1 + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2);
-
-        // Tangential distorsion
-        x_distort = x_distort + (2 * p1 * x * y + p2 * (r2 + 2 * x * x));
-        y_distort = y_distort + (p1 * (r2 + 2 * y * y) + 2 * p2 * x * y);
-
-        float u_distort = x_distort * fx + cx;
-        float v_distort = y_distort * fy + cy;
-
-        u = u_distort;
-        v = v_distort;
-
-        kp = cv::Point2f(u, v);
-
-        return true;
-    }
-
-    bool KeyFrame::ProjectPointUnDistort(MapPoint *pMP, cv::Point2f &kp, float &u, float &v) {
-
-        // 3D in absolute coordinates
-        Eigen::Vector3f P = pMP->GetWorldPos();
-
-        // 3D in camera coordinates
-        Eigen::Vector3f Pc = mRcw * P + mTcw.translation();
-        float &PcX = Pc(0);
-        float &PcY = Pc(1);
-        float &PcZ = Pc(2);
-
-        // Check positive depth
-        if (PcZ < 0.0f) {
-            cout << "Negative depth: " << PcZ << endl;
-            return false;
-        }
-
-        // Project in image and check it is not outside
-        const float invz = 1.0f / PcZ;
-        u = fx * PcX * invz + cx;
-        v = fy * PcY * invz + cy;
-
-        if (u < mnMinX || u > mnMaxX)
-            return false;
-        if (v < mnMinY || v > mnMaxY)
-            return false;
-
-        kp = cv::Point2f(u, v);
-
-        return true;
     }
 
     Sophus::SE3f KeyFrame::GetRelativePoseTrl() {

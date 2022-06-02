@@ -492,7 +492,7 @@ namespace ORB_SLAM3 {
             const float b2 = f21 * u1 + f22 * v1 + f23;
             const float c2 = f31 * u1 + f32 * v1 + f33;
 
-            // 计算误差 e = (a * p2.x + b * p2.y + c) /  sqrt(a * a + b * b)
+            // 计算误差 e = (a * p2.x + mBiasOri * p2.y + c) /  sqrt(a * a + mBiasOri * mBiasOri)
             const float num2 = a2 * u2 + b2 * v2 + c2;
 
             const float squareDist1 = num2 * num2 / (a2 * a2 + b2 * b2);
@@ -643,31 +643,31 @@ namespace ORB_SLAM3 {
     }
 
 /**
- * @brief 从H恢复R t
+ * @brief 从H恢复R mTs
  * H矩阵分解常见有两种方法：Faugeras SVD-based decomposition 和 Zhang SVD-based decomposition
  * 参考文献：Motion and structure from motion in a piecewise plannar environment
  * 这篇参考文献和下面的代码使用了Faugeras SVD-based decomposition算法
  * @see
  * - Faugeras et al, Motion and structure from motion in a piecewise planar environment. International Journal of Pattern Recognition and Artificial Intelligence, 1988.
  * - Deeper understanding of the homography decomposition for vision-based control
- * 设平面法向量 n = (a, b, c)^t 有一点(x, y, z)在平面上，则ax + by + cz = d  即 1/d * n^t * x = 1 其中d表示
- * x' = R*x + t  从下面开始x 与 x'都表示归一化坐标
- * λ2*x' = R*(λ1*x) + t = R*(λ1*x) + t * 1/d * n^t * (λ1*x)
- * x' = λ*(R + t * 1/d * n^t) * x = H^ * x
+ * 设平面法向量 n = (a, mBiasOri, c)^mTs 有一点(x, y, z)在平面上，则ax + by + cz = d  即 1/d * n^mTs * x = 1 其中d表示
+ * x' = R*x + mTs  从下面开始x 与 x'都表示归一化坐标
+ * λ2*x' = R*(λ1*x) + mTs = R*(λ1*x) + mTs * 1/d * n^mTs * (λ1*x)
+ * x' = λ*(R + mTs * 1/d * n^mTs) * x = H^ * x
  * 对应图像坐标   u' = G * u   G = KH^K.inv
- * H^ ~=  d*R + t * n^t = U∧V^t    ∧ = U^t * H^ * V = d*U^t * R * V + (U^t * t) * (V^t * n)^t
- * s = det(U) * det(V)  s 有可能是 1 或 -1  ∧ = s^2 * d*U^t * R * V + (U^t * t) * (V^t * n)^t = (s*d) * s * U^t * R * V + (U^t * t) * (V^t * n)^t
- * 令 R' = s * U^t * R * V      t' = U^t * t   n' = V^t * n    d' = s * d
- * ∧ = d' * R' + t' * n'^t    所以∧也可以认为是一个单应矩阵，其中加入s只为说明有符号相反的可能 
- * 设∧ = | d1, 0, 0 |    取e1 = (1, 0, 0)^t   e2 = (0, 1, 0)^t   e3 = (0, 0, 1)^t
+ * H^ ~=  d*R + mTs * n^mTs = U∧V^mTs    ∧ = U^mTs * H^ * V = d*U^mTs * R * V + (U^mTs * mTs) * (V^mTs * n)^mTs
+ * s = det(U) * det(V)  s 有可能是 1 或 -1  ∧ = s^2 * d*U^mTs * R * V + (U^mTs * mTs) * (V^mTs * n)^mTs = (s*d) * s * U^mTs * R * V + (U^mTs * mTs) * (V^mTs * n)^mTs
+ * 令 R' = s * U^mTs * R * V      mTs' = U^mTs * mTs   n' = V^mTs * n    d' = s * d
+ * ∧ = d' * R' + mTs' * n'^mTs    所以∧也可以认为是一个单应矩阵，其中加入s只为说明有符号相反的可能
+ * 设∧ = | d1, 0, 0 |    取e1 = (1, 0, 0)^mTs   e2 = (0, 1, 0)^mTs   e3 = (0, 0, 1)^mTs
  *      | 0, d2, 0 |
  *      | 0, 0, d3 |
- * n' = (a1, 0, 0)^t + (0, b1, 0)^t + (0, 0, c1)^t = a1*e1 + b1*e2 + c1*e3
+ * n' = (a1, 0, 0)^mTs + (0, b1, 0)^mTs + (0, 0, c1)^mTs = a1*e1 + b1*e2 + c1*e3
  * 
- * ∧ = [d1*e1, d2*e2, d3*e3] = [d' * R' * e1, d' * R' * e2, d' * R' * e3] + [t' * a1, t' * b1, t' * c1]
- * ==> d1*e1 = d' * R' * e1 + t' * a1
- *     d2*e2 = d' * R' * e2 + t' * b1
- *     d3*e3 = d' * R' * e3 + t' * c1
+ * ∧ = [d1*e1, d2*e2, d3*e3] = [d' * R' * e1, d' * R' * e2, d' * R' * e3] + [mTs' * a1, mTs' * b1, mTs' * c1]
+ * ==> d1*e1 = d' * R' * e1 + mTs' * a1
+ *     d2*e2 = d' * R' * e2 + mTs' * b1
+ *     d3*e3 = d' * R' * e3 + mTs' * c1
  * 
  * 
  * 上面式子每两个消去t可得
@@ -690,7 +690,7 @@ namespace ORB_SLAM3 {
  * 能够求得a1 = ε1 * sqrt((d1^2 - d2^2) / (d1^2 - d3^2))
  *       b1 = 0
  *       c1 = ε2 * sqrt((d2^2 - d3^2) / (d1^2 - d3^2))  其中ε1 ε2  可以为正负1
- * 结果带入 d2*e2 = d' * R' * e2 + t' * b1    => R' * e2 = e2
+ * 结果带入 d2*e2 = d' * R' * e2 + mTs' * b1    => R' * e2 = e2
  *           | cosθ 0 -sinθ |
  * ==> R' =  |  0   1   0   |      n'  与   R' 带入  d'R'(a1e3 - c1e1) = d3a1e3 - d1c1e1
  *           | sinθ 0  cosθ |
@@ -698,11 +698,11 @@ namespace ORB_SLAM3 {
  * d' * |  0   1   0   | * |  0  | =  |   0   |   能够解出 sinθ  与 cosθ
  *      | sinθ 0  cosθ |   |  a1 |    |  d3a1 |
  * 
- * 到此为止得到了 R'   再根据 d1*e1 = d' * R' * e1 + t' * a1
- *                         d2*e2 = d' * R' * e2 + t' * b1
- *                         d3*e3 = d' * R' * e3 + t' * c1
+ * 到此为止得到了 R'   再根据 d1*e1 = d' * R' * e1 + mTs' * a1
+ *                         d2*e2 = d' * R' * e2 + mTs' * b1
+ *                         d3*e3 = d' * R' * e3 + mTs' * c1
  * 
- * 求得 t' = (d1 - d3) * (a1, 0, c1)^t
+ * 求得 mTs' = (d1 - d3) * (a1, 0, c1)^mTs
  * @param vbMatchesInliers 匹配是否合法，大小为mvMatches12
  * @param H21 顾名思义
  * @param K 相机内参
@@ -769,7 +769,7 @@ namespace ORB_SLAM3 {
         float ctheta = (d2 * d2 + d1 * d3) / ((d1 + d3) * d2);
         float stheta[] = {aux_stheta, -aux_stheta, -aux_stheta, aux_stheta};
 
-        // step3.2：计算四种旋转矩阵R，t
+        // step3.2：计算四种旋转矩阵R，mTs
         // 计算旋转矩阵 R‘，计算ppt中公式18
         //      | ctheta      0   -aux_stheta|       | aux1|
         // Rp = |    0        1       0      |  tp = |  0  |
@@ -805,7 +805,7 @@ namespace ORB_SLAM3 {
             tp *= d1 - d3;
 
             // 这里虽然对t有归一化，并没有决定单目整个SLAM过程的尺度
-            // 因为CreateInitialMapMonocular函数对3D点深度会缩放，然后反过来对 t 有改变
+            // 因为CreateInitialMapMonocular函数对3D点深度会缩放，然后反过来对 mTs 有改变
             Eigen::Vector3f t = U * tp;
             vt.push_back(t / t.norm());
 
@@ -827,7 +827,7 @@ namespace ORB_SLAM3 {
         float cphi = (d1 * d3 - d2 * d2) / ((d1 - d3) * d2);
         float sphi[] = {aux_sphi, -aux_sphi, -aux_sphi, aux_sphi};
 
-        // step3.4：计算四种旋转矩阵R，t
+        // step3.4：计算四种旋转矩阵R，mTs
         // 计算旋转矩阵 R‘
         for (int i = 0; i < 4; i++) {
             Eigen::Matrix3f Rp;
@@ -870,7 +870,7 @@ namespace ORB_SLAM3 {
 
         // Instead of applying the visibility constraints proposed in the Faugeras' paper (which could fail for points seen with low parallax)
         // We reconstruct all hypotheses and check in terms of triangulated points and parallax
-        // step4：d'=d2和d'=-d2分别对应8组(R t)，通过恢复3D点并判断是否在相机正前方的方法来确定最优解
+        // step4：d'=d2和d'=-d2分别对应8组(R mTs)，通过恢复3D点并判断是否在相机正前方的方法来确定最优解
         for (size_t i = 0; i < 8; i++) {
             float parallaxi;
             vector<cv::Point3f> vP3Di;
@@ -1000,7 +1000,7 @@ namespace ORB_SLAM3 {
         Eigen::Vector3f O1;
         O1.setZero();
 
-        // Camera 2 Projection Matrix K[R|t]
+        // Camera 2 Projection Matrix K[R|mTs]
         // 步骤2：得到第二个相机的投影矩阵
         Eigen::Matrix<float, 3, 4> P2;
         P2.block<3, 3>(0, 0) = R;
@@ -1114,10 +1114,10 @@ namespace ORB_SLAM3 {
  * @brief 分解Essential矩阵
  * 解释的比较好的博客：https://blog.csdn.net/weixin_44580210/article/details/90344511
  * F矩阵通过结合内参可以得到Essential矩阵，分解E矩阵将得到4组解
- * 这4组解分别为[R1,t],[R1,-t],[R2,t],[R2,-t]
+ * 这4组解分别为[R1,mTs],[R1,-mTs],[R2,mTs],[R2,-mTs]
  * ## 反对称矩阵性质
  * 多视图几何上定义：一个3×3的矩阵是本质矩阵的充要条件是它的奇异值中有两个相等而第三个是0，为什么呢？
- * 首先我们知道 E=[t]×​R=SR其中S为反对称矩阵，反对称矩阵有什么性质呢？
+ * 首先我们知道 E=[mTs]×​R=SR其中S为反对称矩阵，反对称矩阵有什么性质呢？
  * 结论1：如果 S 是实的反对称矩阵，那么S=UBU^T，其中 B 为形如diag(a1​Z，a2​Z...am​Z，0，0...0)的分块对角阵，其中 Z = [0, 1; -1, 0]
  * 反对称矩阵的特征矢量都是纯虚数并且奇数阶的反对称矩阵必是奇异的
  * 那么根据这个结论我们可以将 S 矩阵写成 S=kUZU^⊤，而 Z 为
@@ -1138,7 +1138,7 @@ namespace ORB_SLAM3 {
  * 则有 ZX = diag(1,1,0)，因此 x=W或者 X=W^T
  * 结论：如果 E 的SVD分解为 Udiag(1,1,0)V^⊤，E = SR有两种分解形式，分别是： S = UZU^⊤    R = UWVTor UW^TV^⊤
 
- * 接着分析，又因为St=0（自己和自己叉乘肯定为0嘛）以及∥t∥=1（对两个摄像机矩阵的基线的一种常用归一化），因此 t = U(0,0,1)^T = u3​，
+ * 接着分析，又因为St=0（自己和自己叉乘肯定为0嘛）以及∥mTs∥=1（对两个摄像机矩阵的基线的一种常用归一化），因此 mTs = U(0,0,1)^T = u3​，
  * 即矩阵 U 的最后一列，这样的好处是不用再去求S了，应为t的符号不确定，R矩阵有两种可能，因此其分解有如下四种情况：
  * P′=[UWV^T ∣ +u3​] or [UWV^T ∣ −u3​] or [UW^TV^T ∣ +u3​] or [UW^TV^T ∣ −u3​]
  * @param E  Essential Matrix
@@ -1152,8 +1152,8 @@ namespace ORB_SLAM3 {
 
         Eigen::JacobiSVD<Eigen::Matrix3f> svd(E, Eigen::ComputeFullU | Eigen::ComputeFullV);
 
-        // 对 t 有归一化，但是这个地方并没有决定单目整个SLAM过程的尺度
-        // 因为CreateInitialMapMonocular函数对3D点深度会缩放，然后反过来对 t 有改变
+        // 对 mTs 有归一化，但是这个地方并没有决定单目整个SLAM过程的尺度
+        // 因为CreateInitialMapMonocular函数对3D点深度会缩放，然后反过来对 mTs 有改变
         Eigen::Matrix3f U = svd.matrixU();
         Eigen::Matrix3f Vt = svd.matrixV().transpose();
 

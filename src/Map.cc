@@ -27,7 +27,7 @@ namespace ORB_SLAM3 {
     Map::Map()
             : mnMaxKFid(0), mnBigChangeIdx(0), mbImuInitialized(false), mnMapChange(0),
               mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
-              mbFail(false), mIsInUse(false), mHasTumbnail(false), mbBad(false), mnMapChangeNotified(0),
+              mbFail(false), mIsInUse(false), mHasTumbnail(false), mbBad(false), mnMapChangeInTrack(0),
               mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false) {
         mnId = nNextId++;
         mThumbnail = static_cast<GLubyte *>(NULL);
@@ -38,7 +38,7 @@ namespace ORB_SLAM3 {
               mIsInUse(false),
               mHasTumbnail(false), mbBad(false), mbImuInitialized(false),
               mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
-              mnMapChange(0), mbFail(false), mnMapChangeNotified(0), mbIsInertial(false), mbIMU_BA1(false),
+              mnMapChange(0), mbFail(false), mnMapChangeInTrack(0), mbIsInertial(false), mbIMU_BA1(false),
               mbIMU_BA2(false) {
         mnId = nNextId++;
         mThumbnail = static_cast<GLubyte *>(NULL);
@@ -338,12 +338,12 @@ namespace ORB_SLAM3 {
 
     int Map::GetLastMapChange() {
         unique_lock<mutex> lock(mMutexMap);
-        return mnMapChangeNotified;
+        return mnMapChangeInTrack;
     }
 
     void Map::SetLastMapChange(int currentChangeId) {
         unique_lock<mutex> lock(mMutexMap);
-        mnMapChangeNotified = currentChangeId;
+        mnMapChangeInTrack = currentChangeId;
     }
 
 /** 预保存，也就是把想保存的信息保存到备份的变量中

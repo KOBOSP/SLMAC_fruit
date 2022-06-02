@@ -106,7 +106,6 @@ namespace ORB_SLAM3 {
         float mfImgFps;
         bool mbRGB;
 
-        bool mbNeedToUndistort;
         bool mbNeedToRectify;
         bool mbNeedToResize;
 

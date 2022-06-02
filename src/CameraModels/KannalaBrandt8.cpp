@@ -478,7 +478,7 @@ float KannalaBrandt8::TriangulateMatches(
 
     // 4. 三角化
     Triangulate(p11, p22, Tcw1, Tcw2, x3D);
-    // cv::Mat x3Dt = x3D.t();
+    // cv::Mat x3Dt = x3D.mTs();
 
     // 深度值是否正常
     float z1 = x3D(2);

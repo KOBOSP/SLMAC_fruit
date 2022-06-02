@@ -124,9 +124,7 @@ namespace ORB_SLAM3 {
         }
     }
 
-    Settings::Settings(const std::string &configFile, const int& sensor) :
-            mbNeedToUndistort(false), mbNeedToRectify(false), mbNeedToResize(false) {
-
+    Settings::Settings(const std::string &configFile, const int& sensor) : mbNeedToRectify(false), mbNeedToResize(false) {
         mSensor = sensor;
         //Open settings file
         cv::FileStorage fSettings(configFile, cv::FileStorage::READ);

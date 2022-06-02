@@ -177,7 +177,7 @@ protected:
     bool mbImuInitialized;
 
     int mnMapChange;
-    int mnMapChangeNotified;
+    int mnMapChangeInTrack;
 
     long unsigned int mnInitKFid;
     long unsigned int mnMaxKFid;

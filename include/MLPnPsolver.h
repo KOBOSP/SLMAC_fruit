@@ -114,8 +114,8 @@ namespace ORB_SLAM3{
         typedef Eigen::Matrix3d rotation_t;
 
         /** A 3x4 transformation matrix containing rotation \f$ \mathbf{R} \f$ and
-         *  translation \f$ \mathbf{t} \f$ as follows:
-         *  \f$ \left( \begin{array}{cc} \mathbf{R} & \mathbf{t} \end{array} \right) \f$
+         *  translation \f$ \mathbf{mTs} \f$ as follows:
+         *  \f$ \left( \begin{array}{cc} \mathbf{R} & \mathbf{mTs} \end{array} \right) \f$
          */
         typedef Eigen::Matrix<double,3,4> transformation_t;
 

@@ -63,7 +63,6 @@ namespace ORB_SLAM3 {
         mbFarPoints = true;
         mfThFarPoints = settings->mfThFarPoints;
         cout << "Discard points further than " << mfThFarPoints << " m from current camera" << endl;
-
     }
 
 /**
@@ -699,7 +698,7 @@ namespace ORB_SLAM3 {
                 mpCurrentKeyFrame->AddMapPoint(pMP, idx1);
                 pKF2->AddMapPoint(pMP, idx2);
 
-                // b.该MapPoint的描述子
+                // mBiasOri.该MapPoint的描述子
                 pMP->ComputeDistinctiveDescriptors();
 
                 // c.该MapPoint的平均观测方向和深度范围
@@ -1313,11 +1312,11 @@ namespace ORB_SLAM3 {
                     continue;
 
                 have_imu_num++;
-                // 初始化时关于速度的预积分定义Ri.t()*(s*Vj - s*Vi - Rwg*g*tij)
+                // 初始化时关于速度的预积分定义Ri.mTs()*(s*Vj - s*Vi - Rwg*g*tij)
                 dirG -= (*itKF)->mPrevKF->GetImuRotation() * (*itKF)->mpImuPreintegrated->GetUpdatedDeltaVelocity();
                 // 求取实际的速度，位移/时间
                 Eigen::Vector3f _vel = ((*itKF)->GetImuPosition() - (*itKF)->mPrevKF->GetImuPosition()) /
-                                       (*itKF)->mpImuPreintegrated->dT;
+                                       (*itKF)->mpImuPreintegrated->mfTs;
                 (*itKF)->SetVelocity(_vel);
                 (*itKF)->mPrevKF->SetVelocity(_vel);
             }
@@ -1329,7 +1328,7 @@ namespace ORB_SLAM3 {
                 return;
             }
 
-            // dirG = sV1 - sVn + n*Rwg*g*t
+            // dirG = sV1 - sVn + n*Rwg*g*mTs
             // 归一化
             dirG = dirG / dirG.norm();
             // 原本的重力方向
@@ -1404,7 +1403,6 @@ namespace ORB_SLAM3 {
         if (!mpAtlas->isImuInitialized()) {
             // ! 重要！标记初始化成功
             mpAtlas->SetImuInitialized();
-            mpTracker->t0IMU = mpTracker->mCurFrame.mdTimestamp;
             mpCurrentKeyFrame->bImu = true;
         }
 
@@ -1624,7 +1622,7 @@ namespace ORB_SLAM3 {
 
         double t_inertial_only = std::chrono::duration_cast<std::chrono::duration<double> >(t1 - t0).count();
 
-        // To perform pose-inertial opt w.r.t. last keyframe
+        // To perform pose-inertial opt mGyr.r.mTs. last keyframe
         mpCurrentKeyFrame->GetMap()->IncreaseChangeIndex();
 
         return;

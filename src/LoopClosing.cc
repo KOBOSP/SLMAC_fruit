@@ -943,7 +943,7 @@ namespace ORB_SLAM3 {
                 }
                 /*else
             {
-                Verbose::PrintMess("BoW candidate: it don't match with the current one", Verbose::VERBOSITY_DEBUG);
+                Verbose::PrintMess("BoW candidate: it don'mTs match with the current one", Verbose::VERBOSITY_DEBUG);
             }*/
             }
             index++;
@@ -1227,7 +1227,7 @@ namespace ORB_SLAM3 {
                     // 矫正过程本质上也是基于当前关键帧的优化后的位姿展开的
                     // 将该未校正的eigP3Dw先从世界坐标系映射到未校正的pKFi相机坐标系，然后再反映射到校正后的世界坐标系下
                     Eigen::Vector3d P3Dw = pMPi->GetWorldPos().cast<double>();
-                    // map(P) 内部做了变换 R*P +t
+                    // map(P) 内部做了变换 R*P +mTs
                     // 下面变换是：eigP3Dw： world →g2oSiw→ i →g2oCorrectedSwi→ world
                     Eigen::Vector3d eigCorrectedP3Dw = g2oCorrectedSwi.map(g2oSiw.map(P3Dw));
 
@@ -1617,7 +1617,7 @@ namespace ORB_SLAM3 {
             }
 
             if (pKFi->GetMap() != pCurrentMap)
-                Verbose::PrintMess("Other map KF, this should't happen", Verbose::VERBOSITY_DEBUG);
+                Verbose::PrintMess("Other map KF, this should'mTs happen", Verbose::VERBOSITY_DEBUG);
 
             // 确保这些共视关键帧在当前地图下
             // 保存第i个共视关键帧融合矫正后的初始位姿

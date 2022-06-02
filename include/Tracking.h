@@ -88,17 +88,7 @@ public:
     }
 
     void CreateMapInAtlas();
-    //std::mutex mMutexTracks;
-
-    //--
-    void NewDataset();
-    int GetNumberDataset();
     int GetMatchesInliers();
-
-    //DEBUG
-    void SaveSubTrajectory(string strNameFile_frames, string strNameFile_kf, string strFolder="");
-    void SaveSubTrajectory(string strNameFile_frames, string strNameFile_kf, Map* pMap);
-
     float GetImageScale();
 
 public:
@@ -117,31 +107,24 @@ public:
     eTrackingState mState;
     eTrackingState mLastProcessedState;
 
-    // Input sensor
     int mSensor;
 
-    // Current Frame
     Frame mCurFrame;
     Frame mLastFrame;
-
-
-
-    // Initialization Variables (Monocular)
-    std::vector<int> mvIniLastMatches;
-    std::vector<int> mvIniMatches;
-    std::vector<cv::Point2f> mvbPrevMatched;
-    std::vector<cv::Point3f> mvIniP3D;
     Frame mInitialFrame;
+
+
+    std::vector<int> mvIniMatches;
 
     // Lists used to recover the full camera trajectory at the end of the execution.
     // Basically we store the reference keyframe for each frame and its relative transformation
     list<Sophus::SE3f> mlRelativeFramePoses;
-    list<KeyFrame*> mlpReferences;
-    list<double> mlFrameTimes;
+    list<KeyFrame*> mlpRefKFs;
+    list<double> mlTimestamp;
     list<bool> mlbLost;
 
     // frames with estimated pose
-    int mTrackedFr;
+    int mTrackedFrame;
     bool mbDoNext;
 
     // True if local mapping is deactivated and we are performing only localization
@@ -149,19 +132,7 @@ public:
 
     void ResetThread(bool bLocMap = false);
     void ResetActiveMap(bool bLocMap = false);
-
-    float mMeanTrack;
-    bool mbInitWith3KFs;
-    double t0; // time-stamp of first read frame
-    double t0vis; // time-stamp of first inserted keyframe
-    double t0IMU; // time-stamp of IMU initialization
-    bool mFastInit = false;
-
-
     vector<MapPoint*> GetLocalMapMPs();
-
-    bool mbWriteStats;
-
 
 protected:
 
@@ -171,25 +142,20 @@ protected:
     // Map initialization for stereo and RGB-D
     void StereoInitialization();
 
-    // Map initialization for monocular
-    void MonocularInitialization();
-    //void CreateNewMapPoints();
-    void CreateInitialMapMonocular();
-
     void CheckReplacedInLastFrame();
     bool TrackReferenceKeyFrame();
-    void UpdateLastFrame();
+    void UpdateLastFramePose();
     bool TrackWithMotionModel();
     bool PredictStateIMU();
 
     bool Relocalization();
 
     void UpdateLocalMap();
-    void UpdateLocalPoints();
+    void UpdateLocalMapPoints();
     void UpdateLocalKeyFrames();
 
     bool TrackLocalMap();
-    void SearchLocalPoints();
+    void MatchLocalPointsToCurFrame();
 
     bool NeedNewKeyFrame();
     void CreateNewKeyFrame();
@@ -218,12 +184,6 @@ protected:
     // Last Bias Estimation (at keyframe creation)
     IMU::Bias mLastBias;
 
-    // In case of performing only localization, this flag is true when there are no matches to
-    // points in the map. Still tracking will continue if there are enough matches with temporal points.
-    // In that case we are doing visual odometry. The system will try to do relocalization to recover
-    // "zero-drift" localization to the map.
-    bool mbVO;
-
     //Other Thread Pointers
     LocalMapping* mpLocalMapper;
     LoopClosing* mpLoopClosing;
@@ -234,10 +194,6 @@ protected:
     //BoW
     ORBVocabulary* mpORBVocabulary;
     KeyFrameDatabase* mpKeyFrameDB;
-
-    // Initalization (only for monocular)
-    bool mbReadyToInitializate;
-    bool mbSetInit;
 
     //Local Map
     KeyFrame* mpReferenceKF;
@@ -259,28 +215,23 @@ protected:
     //Calibration matrix
     cv::Mat mCvK;
     Eigen::Matrix3f mEigenK;
-    cv::Mat mDistCoef;
     float mfBaselineFocal;
     float mImageScale;
 
     float mImuFreq;
     double mImuInterval;
     bool mInsertKFsLost;
+    int mnFramesToResetIMU;
 
     //New KeyFrame rules (according to fps)
     int mMinFrames;
-    int mMaxFrames;
+    int mnMaxFrames;
 
-    int mnFirstImuFrameId;
-    int mnFramesToResetIMU;
 
     // Threshold close/far points
     // Points seen as close by the stereo/RGBD sensor are considered reliable
     // and inserted from just one frame. Far points requiere a match in two keyframes.
     float mfThDepth;
-
-    // For RGB-D inputs only. For some datasets (e.g. TUM) the depthmap values are scaled.
-    float mDepthMapFactor;
 
     //Current matches in frame
     int mnMatchesInliers;
@@ -290,7 +241,7 @@ protected:
     unsigned int mnLastKeyFrameId;
     unsigned int mnLastRelocFrameId;
     double mTimeStampLost;
-    double mdTimeRecentLost;
+    double mdThTimeRescueLost;
 
     unsigned int mnFirstFrameId;
     unsigned int mnInitialFrameId;
@@ -301,28 +252,7 @@ protected:
     //Motion Model
     bool mbVelocity{false};
     Sophus::SE3f mVelocity;
-
-
-    list<MapPoint*> mlpTemporalPoints;
-
-    //int nMapChangeIndex;
-
-    int mnNumDataset;
-
-    ofstream f_track_stats;
-
-    ofstream f_track_times;
-    double mTime_PreIntIMU;
-    double mTime_PosePred;
-    double mTime_LocalMapTrack;
-    double mTime_NewKF_Dec;
-
-    GeometricCamera* mpCamera, *mpCamera2;
-
-    int initID, lastID;
-
-    Sophus::SE3f mTlr;
-
+    GeometricCamera* mpCamera;
     void LoadParameter(Settings* settings);
 
 public:

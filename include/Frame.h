@@ -62,17 +62,13 @@ namespace ORB_SLAM3 {
 
         // Constructor for stereo cameras.
         Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp, ORBextractor *ExtractorLeft,
-              ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &cvK, cv::Mat &DistCoef, const float &fBaselineFocal,
+              ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &cvK, const float &fBaselineFocal,
               const float &fThDepth, GeometricCamera *pCamera, Frame *pPrevF = static_cast<Frame *>(NULL),
               const IMU::Calib &ImuCalib = IMU::Calib());
 
-        // Destructor
-        // ~Frame();
 
-        // Extract ORB on the image. 0 for left image and 1 for right image.
         void ExtractORB(int flag, const cv::Mat &im, const int x0, const int x1);
 
-        // Compute Bag of Words representation.
         void ComputeBoW();
 
         // Set the camera pose. (Imu pose is not modified!)
@@ -86,19 +82,19 @@ namespace ORB_SLAM3 {
         // Set IMU pose and velocity (implicitly changes camera pose)
         void SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb);
 
-        Eigen::Matrix<float, 3, 1> GetImuPosition() const;
+        Eigen::Matrix<float, 3, 1> GetImuTcbTranslation() const;
 
-        Eigen::Matrix<float, 3, 3> GetImuRotation();
+        Eigen::Matrix<float, 3, 3> GetImuTcbRotation();
 
-        Sophus::SE3<float> GetImuPose();
+        Sophus::SE3<float> GetImuTcb();
 
-        Sophus::SE3f GetRelativePoseTrl();
+        Sophus::SE3f GetStereoTrl();
 
-        Sophus::SE3f GetRelativePoseTlr();
+        Sophus::SE3f GetStereoTlr();
 
-        Eigen::Matrix3f GetRelativePoseTlr_rotation();
+        Eigen::Matrix3f GetStereoTlrRotation();
 
-        Eigen::Vector3f GetRelativePoseTlr_translation();
+        Eigen::Vector3f GetStereoTlrTranslation();
 
         void SetNewBias(const IMU::Bias &b);
 
@@ -106,9 +102,6 @@ namespace ORB_SLAM3 {
         // and fill variables of the MapPoint to be used by the tracking
         bool isInFrustum(MapPoint *pMP, float viewingCosLimit);
 
-        bool ProjectPointDistort(MapPoint *pMP, cv::Point2f &kp, float &u, float &v);
-
-        Eigen::Vector3f inRefCoordinates(Eigen::Vector3f pCw);
 
         // Compute the cell of a keypoint (return false if outside the grid)
         bool PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY);
@@ -129,42 +122,20 @@ namespace ORB_SLAM3 {
 
         void setIntegrated();
 
-        bool isSet() const;
+        bool HasPose() const;
 
         // Computes rotation, translation and camera center matrices from the camera pose.
         void UpdatePoseMatrices();
 
-        // Returns the camera center.
-        inline Eigen::Vector3f GetCameraCenter() {
-            return mOw;
-        }
-
-        // Returns inverse of rotation
-        inline Eigen::Matrix3f GetRotationInverse() {
-            return mRwc;
-        }
 
         inline Sophus::SE3<float> GetPose() const {
             //TODO: can the Frame pose be accsessed from several threads? should this be protected somehow?
             return mTcw;
         }
 
-        inline Eigen::Matrix3f GetRwc() const {
-            return mRwc;
-        }
-
-        inline Eigen::Vector3f GetOw() const {
-            return mOw;
-        }
-
-        inline bool HasPose() const {
-            return mbHasPose;
-        }
-
         inline bool HasVelocity() const {
             return mbHasVelocity;
         }
-
 
     private:
         //Sophus/Eigen migration
@@ -182,7 +153,6 @@ namespace ORB_SLAM3 {
         Sophus::SE3<float> mTlr, mTrl;
         Eigen::Matrix<float, 3, 3> mRlr;
         Eigen::Vector3f mtlr;
-
 
         // IMU linear velocity
         Eigen::Vector3f mVw;
@@ -209,68 +179,48 @@ namespace ORB_SLAM3 {
         static float cy;
         static float invfx;
         static float invfy;
-        cv::Mat mDistCoef;
 
         // Stereo baseline multiplied by fx.
         float mfBaselineFocal;
-
-        // Stereo baseline in meters.
         float mfBaseline;
 
         // Threshold close/far points. Close points are inserted from 1 view.
         // Far points are inserted as in the monocular case from 2 views.
-        float mfThDepth;
+        float mfThCloseFar;
 
-        // Number of KeyPoints.
         int mnKPsLeftNum;
-
-        // Vector of keypoints (original for visualization) and undistorted (actually used by the system).
-        // In the stereo case, mvKPsUn is redundant as images must be rectified.
-        // In the RGB-D case, RGB images can be distorted.
         std::vector<cv::KeyPoint> mvKPsLeft, mvKPsRight;
         std::vector<cv::KeyPoint> mvKPsUn;
-
-        // Corresponding stereo coordinate and depth for each keypoint.
         std::vector<MapPoint *> mvpMPs;
-        // "Monocular" keypoints have a negative value.
         std::vector<float> mvfXInRight;
         std::vector<float> mvfMPDepth;
 
-        // Bag of Words Vector structures.
         DBoW2::BowVector mBowVec;
         DBoW2::FeatureVector mFeatVec;
 
         // ORB descriptor, each row associated to a keypoint.
         cv::Mat mDescriptorsLeft, mDescriptorsRight;
 
-        // MapPoints associated to keypoints, NULL pointer if no association.
-        // Flag to identify outlier associations.
         std::vector<bool> mvbOutlier;
         int mnCloseMPs;
 
-        // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
         static float mfGridElementWidthInv;
         static float mfGridElementHeightInv;
-        std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
+        std::vector<std::size_t> mGridLeft[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
-        IMU::Bias mPredBias;
-
-        // IMU bias
         IMU::Bias mImuBias;
-
-        // Imu calibration
         IMU::Calib mImuCalib;
 
         // Imu preintegration from last keyframe
-        IMU::Preintegrated *mpImuPreintegrated;
-        KeyFrame *mpLastKeyFrame;
+        KeyFrame *mpPrevKeyFrame;
+        IMU::Preintegrated *mpImuFromPrevKF;
 
         // Pointer to previous frame
         Frame *mpPrevFrame;
-        IMU::Preintegrated *mpImuPreintegratedFrame;
+        IMU::Preintegrated *mpImuFromPrevFrame;
 
         // Current and Next Frame id.
-        static long unsigned int nNextId;
+        static long unsigned int mnNextId;
         long unsigned int mnId;
 
         // Reference Keyframe.
@@ -294,66 +244,27 @@ namespace ORB_SLAM3 {
         static bool mbInitialComputations;
 
         map<long unsigned int, cv::Point2f> mmProjectPoints;
-        map<long unsigned int, cv::Point2f> mmMatchedInImage;
-
-        int mnDataset;
 
 
     private:
-
-        // Undistort keypoints given OpenCV distortion parameters.
-        // Only for the RGB-D case. Stereo must be already rectified!
-        // (called in the constructor).
-        void UndistortKeyPoints();
-
-        // Computes image bounds for the undistorted image (called in the constructor).
         void ComputeImageBounds(const cv::Mat &imLeft);
 
-        // Assign keypoints to the grid for speed up feature matching (called in the constructor).
         void AssignFeaturesToGrid();
-
-        bool mbIsSet;
 
         bool mbImuPreintegrated;
 
         std::mutex *mpMutexImu;
 
     public:
-        GeometricCamera *mpCamera, *mpCamera2;
+        GeometricCamera *mpCamera;
         //Number of Non Lapping Keypoints
-        int monoLeft, monoRight;
-
-        //For stereo matching
-        std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch;
-
-        //For stereo fisheye matching
-        static cv::BFMatcher BFmatcher;
-
-        //Triangulated stereo observations using as reference the left camera. These are
-        //computed during ComputeStereoFishEyeMatches
-        std::vector<Eigen::Vector3f> mvStereo3Dpoints;
+        int mnImgLeftKPs, mnImgRightKPs;
 
         //Grid for the right image
         std::vector<std::size_t> mGridRight[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
-
         bool isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight = false);
 
-        Eigen::Vector3f UnprojectStereoFishEye(const int &i);
-
-        cv::Mat imgLeft, imgRight;
-
-        void PrintPointDistribution() {
-            int left = 0, right = 0;
-            int Nlim = mnKPsLeftNum;
-            for (int i = 0; i < mnKPsLeftNum; i++) {
-                if (mvpMPs[i] && !mvbOutlier[i]) {
-                    if (i < Nlim) left++;
-                    else right++;
-                }
-            }
-            cout << "Point distribution in Frame: left-> " << left << " --- right-> " << right << endl;
-        }
 
     };
 

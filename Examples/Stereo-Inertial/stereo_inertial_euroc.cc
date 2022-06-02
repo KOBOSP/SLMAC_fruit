@@ -162,17 +162,17 @@ int main(int argc, char **argv) {
             SLAM.ChangeDataset();
         }
     }
+    cv::waitKey(0);
     if(!SLAM.CheckShutDowned()){
         SLAM.ShutDownSystem();
     }
 
     // Save camera trajectory
     string sSaveFileName = string(argv[argc - 1]);
-    cout << "sSaveFileName: " << sSaveFileName << endl;
-    const string kf_file = "Camera" + sSaveFileName + ".txt";
-    const string f_file = "KeyFrame" + sSaveFileName + ".txt";
-    SLAM.SaveTrajectoryEuRoC(f_file);
-    SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
+    const string FrameFile = "Frame" + sSaveFileName + ".txt";
+    const string KeyFrameFile = "KeyFrame" + sSaveFileName + ".txt";
+    SLAM.SaveFrameTrajectoryEuRoC(FrameFile);
+    SLAM.SaveKeyFrameTrajectoryEuRoC(KeyFrameFile);
 
     return 0;
 }

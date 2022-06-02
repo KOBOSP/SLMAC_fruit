@@ -26,7 +26,7 @@ namespace ORB_SLAM3 {
     long unsigned int MapPoint::nNextId = 0;
     mutex MapPoint::mGlobalMutex;
 
-/** 
+/**
  * @brief 构造函数
  */
     MapPoint::MapPoint() :
@@ -47,64 +47,9 @@ namespace ORB_SLAM3 {
             mpReplaced(static_cast<MapPoint *>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
             mnOriginMapId(pMap->GetId()) {
         SetWorldPos(Pos);
-
         mNormalVector.setZero();
-
         mbTrackInRightView = false;
         mbTrackInLeftView = false;
-
-        // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
-        unique_lock<mutex> lock(mpMap->mMutexPointCreation);
-        mnId = nNextId++;
-    }
-
-/** 
- * @brief 构造函数
- */
-    MapPoint::MapPoint(const double invDepth, cv::Point2f uv_init, KeyFrame *pRefKF, KeyFrame *pHostKF, Map *pMap) :
-            mnFirstKFid(pRefKF->mnId), mnFirstFrame(pRefKF->mnFrameId), nObs(0), mnTrackReferenceForFrame(0),
-            mnLastFrameSeen(0), mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
-            mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(pRefKF), mnVisible(1), mnFound(1), mbBad(false),
-            mpReplaced(static_cast<MapPoint *>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
-            mnOriginMapId(pMap->GetId()) {
-        mInvDepth = invDepth;
-        mInitU = (double) uv_init.x;
-        mInitV = (double) uv_init.y;
-        mpHostKF = pHostKF;
-
-        mNormalVector.setZero();
-
-        // Worldpos is not set
-        // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
-        unique_lock<mutex> lock(mpMap->mMutexPointCreation);
-        mnId = nNextId++;
-    }
-
-/** 
- * @brief 构造函数
- */
-    MapPoint::MapPoint(const Eigen::Vector3f &Pos, Map *pMap, Frame *pFrame, const int &idxF) :
-            mnFirstKFid(-1), mnFirstFrame(pFrame->mnId), nObs(0), mnTrackReferenceForFrame(0), mnLastFrameSeen(0),
-            mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
-            mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(static_cast<KeyFrame *>(NULL)), mnVisible(1),
-            mnFound(1), mbBad(false), mpReplaced(NULL), mpMap(pMap), mnOriginMapId(pMap->GetId()) {
-        SetWorldPos(Pos);
-
-        Eigen::Vector3f Ow;
-        Ow = pFrame->GetCameraCenter();
-        mNormalVector = mWorldPos - Ow;
-        mNormalVector = mNormalVector / mNormalVector.norm();
-
-        Eigen::Vector3f PC = mWorldPos - Ow;
-        const float dist = PC.norm();
-        const int level = pFrame->mvKPsUn[idxF].octave;
-        const float levelScaleFactor = pFrame->mvfScaleFactors[level];
-        const int nLevels = pFrame->mnScaleLevels;
-
-        mfMaxDistance = dist * levelScaleFactor;
-        mfMinDistance = mfMaxDistance / pFrame->mvfScaleFactors[nLevels - 1];
-
-        pFrame->mDescriptorsLeft.row(idxF).copyTo(mDescriptor);
 
         // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.
         unique_lock<mutex> lock(mpMap->mMutexPointCreation);
@@ -458,7 +403,6 @@ namespace ORB_SLAM3 {
             sort(vDists.begin(), vDists.end());
             // 获得中值
             int median = vDists[0.5 * (N - 1)];
-
             // 寻找最小的中值
             if (median < BestMedian) {
                 BestMedian = median;

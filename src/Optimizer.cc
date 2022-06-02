@@ -683,11 +683,8 @@ namespace ORB_SLAM3 {
     int Optimizer::PoseOptimization(Frame *pFrame) {
         g2o::SparseOptimizer optimizer;
         g2o::BlockSolver_6_3::LinearSolverType *linearSolver;
-
         linearSolver = new g2o::LinearSolverDense<g2o::BlockSolver_6_3::PoseMatrixType>();
-
         g2o::BlockSolver_6_3 *solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
-
         g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
         optimizer.setAlgorithm(solver);
 
@@ -703,26 +700,14 @@ namespace ORB_SLAM3 {
 
         // Set MapPoint vertices
         const int N = pFrame->mnKPsLeftNum;
-
-        vector<ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose *> vpEdgesMono;
-        vector<ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody *> vpEdgesMono_FHR;
-        vector<size_t> vnIndexEdgeMono, vnIndexEdgeRight;
-        vpEdgesMono.reserve(N);
-        vpEdgesMono_FHR.reserve(N);
-        vnIndexEdgeMono.reserve(N);
-        vnIndexEdgeRight.reserve(N);
-
         vector<g2o::EdgeStereoSE3ProjectXYZOnlyPose *> vpEdgesStereo;
         vector<size_t> vnIndexEdgeStereo;
         vpEdgesStereo.reserve(N);
         vnIndexEdgeStereo.reserve(N);
-
-        const float deltaMono = sqrt(5.991);
         const float deltaStereo = sqrt(7.815);
 
         {
             unique_lock<mutex> lock(MapPoint::mGlobalMutex);
-
             for (int i = 0; i < N; i++) {
                 MapPoint *pMP = pFrame->mvpMPs[i];
                 if (pMP) {
@@ -730,15 +715,15 @@ namespace ORB_SLAM3 {
                     pFrame->mvbOutlier[i] = false;
 
                     Eigen::Matrix<double, 3, 1> obs;
-                    const cv::KeyPoint &kpUn = pFrame->mvKPsUn[i];
-                    const float &kp_ur = pFrame->mvfXInRight[i];
-                    obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+                    const cv::KeyPoint &KPL = pFrame->mvKPsUn[i];
+                    const float &KPRX = pFrame->mvfXInRight[i];
+                    obs << KPL.pt.x, KPL.pt.y, KPRX;
 
                     g2o::EdgeStereoSE3ProjectXYZOnlyPose *e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
 
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(0)));
                     e->setMeasurement(obs);
-                    const float invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave];
+                    const float invSigma2 = pFrame->mvfInvLevelSigma2[KPL.octave];
                     Eigen::Matrix3d Info = Eigen::Matrix3d::Identity() * invSigma2;
                     e->setInformation(Info);
 
@@ -752,9 +737,7 @@ namespace ORB_SLAM3 {
                     e->cy = pFrame->cy;
                     e->bf = pFrame->mfBaselineFocal;
                     e->Xw = pMP->GetWorldPos().cast<double>();
-
                     optimizer.addEdge(e);
-
                     vpEdgesStereo.push_back(e);
                     vnIndexEdgeStereo.push_back(i);
                 }
@@ -774,70 +757,16 @@ namespace ORB_SLAM3 {
         for (size_t it = 0; it < 4; it++) {
             Tcw = pFrame->GetPose();
             vSE3->setEstimate(g2o::SE3Quat(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>()));
-
             optimizer.initializeOptimization(0);
             optimizer.optimize(its[it]);
-
             nBad = 0;
-            for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-                ORB_SLAM3::EdgeSE3ProjectXYZOnlyPose *e = vpEdgesMono[i];
-
-                const size_t idx = vnIndexEdgeMono[i];
-
-                if (pFrame->mvbOutlier[idx]) {
-                    e->computeError();
-                }
-
-                const float chi2 = e->chi2();
-
-                if (chi2 > chi2Mono[it]) {
-                    pFrame->mvbOutlier[idx] = true;
-                    e->setLevel(1);
-                    nBad++;
-                } else {
-                    pFrame->mvbOutlier[idx] = false;
-                    e->setLevel(0);
-                }
-
-                if (it == 2)
-                    e->setRobustKernel(0);
-            }
-
-            for (size_t i = 0, iend = vpEdgesMono_FHR.size(); i < iend; i++) {
-                ORB_SLAM3::EdgeSE3ProjectXYZOnlyPoseToBody *e = vpEdgesMono_FHR[i];
-
-                const size_t idx = vnIndexEdgeRight[i];
-
-                if (pFrame->mvbOutlier[idx]) {
-                    e->computeError();
-                }
-
-                const float chi2 = e->chi2();
-
-                if (chi2 > chi2Mono[it]) {
-                    pFrame->mvbOutlier[idx] = true;
-                    e->setLevel(1);
-                    nBad++;
-                } else {
-                    pFrame->mvbOutlier[idx] = false;
-                    e->setLevel(0);
-                }
-
-                if (it == 2)
-                    e->setRobustKernel(0);
-            }
-
             for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
                 g2o::EdgeStereoSE3ProjectXYZOnlyPose *e = vpEdgesStereo[i];
-
                 const size_t idx = vnIndexEdgeStereo[i];
-
                 if (pFrame->mvbOutlier[idx]) {
                     e->computeError();
                 }
-
                 const float chi2 = e->chi2();
-
                 if (chi2 > chi2Stereo[it]) {
                     pFrame->mvbOutlier[idx] = true;
                     e->setLevel(1);
@@ -846,11 +775,9 @@ namespace ORB_SLAM3 {
                     e->setLevel(0);
                     pFrame->mvbOutlier[idx] = false;
                 }
-
                 if (it == 2)
                     e->setRobustKernel(0);
             }
-
             if (optimizer.edges().size() < 10)
                 break;
         }
@@ -858,10 +785,8 @@ namespace ORB_SLAM3 {
         // Recover optimized pose and return number of inliers
         g2o::VertexSE3Expmap *vSE3_recov = static_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(0));
         g2o::SE3Quat SE3quat_recov = vSE3_recov->estimate();
-        Sophus::SE3<float> pose(SE3quat_recov.rotation().cast<float>(),
-                                SE3quat_recov.translation().cast<float>());
+        Sophus::SE3<float> pose(SE3quat_recov.rotation().cast<float>(), SE3quat_recov.translation().cast<float>());
         pFrame->SetPose(pose);
-
         return nInitialCorrespondences - nBad;
     }
 
@@ -1420,7 +1345,7 @@ namespace ORB_SLAM3 {
         optimizer.computeActiveErrors();
         unique_lock<mutex> lock(pMap->mMutexMapUpdate);
 
-        // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
+        // SE3 Pose Recovering. Sim3:[sR mTs;0 1] -> SE3:[R mTs/s;0 1]
         for (size_t i = 0; i < vpKFs.size(); i++) {
             KeyFrame *pKFi = vpKFs[i];
 
@@ -1726,7 +1651,7 @@ namespace ORB_SLAM3 {
 
         unique_lock<mutex> lock(pMap->mMutexMapUpdate);
 
-        // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
+        // SE3 Pose Recovering. Sim3:[sR mTs;0 1] -> SE3:[R mTs/s;0 1]
         for (KeyFrame *pKFi : vpNonFixedKFs) {
             if (pKFi->isBad())
                 continue;
@@ -1868,7 +1793,7 @@ namespace ORB_SLAM3 {
             } else {
                 nMatchWithoutMP++;
 
-                //TODO The 3D position in KF1 doesn't exist
+                //TODO The 3D position in KF1 doesn'mTs exist
                 if (!pMP2->isBad()) {
                     g2o::VertexSBAPointXYZ *vPoint2 = new g2o::VertexSBAPointXYZ();
                     Eigen::Vector3f P3D2w = pMP2->GetWorldPos();
@@ -2536,7 +2461,7 @@ namespace ORB_SLAM3 {
     Eigen::MatrixXd Optimizer::Marginalize(const Eigen::MatrixXd &H, const int &start, const int &end) {
         // Goal
         // a  | ab | ac       a*  | 0 | ac*
-        // ba | b  | bc  -->  0   | 0 | 0
+        // ba | mBiasOri  | bc  -->  0   | 0 | 0
         // ca | cb | c        ca* | 0 | c*
 
         // Size of block before block to marginalize
@@ -2548,8 +2473,8 @@ namespace ORB_SLAM3 {
 
         // Reorder as follows:
         // a  | ab | ac       a  | ac | ab
-        // ba | b  | bc  -->  ca | c  | cb
-        // ca | cb | c        ba | bc | b
+        // ba | mBiasOri  | bc  -->  ca | c  | cb
+        // ca | cb | c        ba | bc | mBiasOri
 
         Eigen::MatrixXd Hn = Eigen::MatrixXd::Zero(H.rows(), H.cols());
         if (a > 0) {
@@ -4097,7 +4022,7 @@ namespace ORB_SLAM3 {
         }
         nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
 
-        KeyFrame *pKF = pFrame->mpLastKeyFrame;
+        KeyFrame *pKF = pFrame->mpPrevKeyFrame;
         VertexPose *VPk = new VertexPose(pKF);
         VPk->setId(4);
         VPk->setFixed(true);
@@ -4115,7 +4040,7 @@ namespace ORB_SLAM3 {
         VAk->setFixed(true);
         optimizer.addVertex(VAk);
 
-        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuPreintegrated);
+        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuFromPrevKF);
 
         ei->setVertex(0, VPk);
         ei->setVertex(1, VVk);
@@ -4128,14 +4053,14 @@ namespace ORB_SLAM3 {
         EdgeGyroRW *egr = new EdgeGyroRW();
         egr->setVertex(0, VGk);
         egr->setVertex(1, VG);
-        Eigen::Matrix3d InfoG = pFrame->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
+        Eigen::Matrix3d InfoG = pFrame->mpImuFromPrevKF->C.block<3, 3>(9, 9).cast<double>().inverse();
         egr->setInformation(InfoG);
         optimizer.addEdge(egr);
 
         EdgeAccRW *ear = new EdgeAccRW();
         ear->setVertex(0, VAk);
         ear->setVertex(1, VA);
-        Eigen::Matrix3d InfoA = pFrame->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
+        Eigen::Matrix3d InfoA = pFrame->mpImuFromPrevKF->C.block<3, 3>(12, 12).cast<double>().inverse();
         ear->setInformation(InfoA);
         optimizer.addEdge(ear);
 
@@ -4441,7 +4366,7 @@ namespace ORB_SLAM3 {
         VAk->setFixed(false);
         optimizer.addVertex(VAk);
 
-        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuPreintegratedFrame);
+        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuFromPrevFrame);
 
         ei->setVertex(0, VPk);
         ei->setVertex(1, VVk);
@@ -4454,14 +4379,14 @@ namespace ORB_SLAM3 {
         EdgeGyroRW *egr = new EdgeGyroRW();
         egr->setVertex(0, VGk);
         egr->setVertex(1, VG);
-        Eigen::Matrix3d InfoG = pFrame->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
+        Eigen::Matrix3d InfoG = pFrame->mpImuFromPrevKF->C.block<3, 3>(9, 9).cast<double>().inverse();
         egr->setInformation(InfoG);
         optimizer.addEdge(egr);
 
         EdgeAccRW *ear = new EdgeAccRW();
         ear->setVertex(0, VAk);
         ear->setVertex(1, VA);
-        Eigen::Matrix3d InfoA = pFrame->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
+        Eigen::Matrix3d InfoA = pFrame->mpImuFromPrevKF->C.block<3, 3>(12, 12).cast<double>().inverse();
         ear->setInformation(InfoA);
         optimizer.addEdge(ear);
 
@@ -4901,7 +4826,7 @@ namespace ORB_SLAM3 {
 
         unique_lock<mutex> lock(pMap->mMutexMapUpdate);
 
-        // SE3 Pose Recovering. Sim3:[sR t;0 1] -> SE3:[R t/s;0 1]
+        // SE3 Pose Recovering. Sim3:[sR mTs;0 1] -> SE3:[R mTs/s;0 1]
         for (size_t i = 0; i < vpKFs.size(); i++) {
             KeyFrame *pKFi = vpKFs[i];
 

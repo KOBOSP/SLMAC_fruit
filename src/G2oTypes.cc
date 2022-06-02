@@ -64,8 +64,8 @@ ImuCamPose::ImuCamPose(KeyFrame *pKF):its(0)
 ImuCamPose::ImuCamPose(Frame *pF):its(0)
 {
     // Load IMU pose
-    twb = pF->GetImuPosition().cast<double>();
-    Rwb = pF->GetImuRotation().cast<double>();
+    twb = pF->GetImuTcbTranslation().cast<double>();
+    Rwb = pF->GetImuTcbRotation().cast<double>();
 
     // Load camera poses
     int num_cams=1;
@@ -491,7 +491,7 @@ VertexGyroBias::VertexGyroBias(KeyFrame *pKF)
 VertexGyroBias::VertexGyroBias(Frame *pF)
 {
     Eigen::Vector3d bg;
-    bg << pF->mImuBias.bwx, pF->mImuBias.bwy,pF->mImuBias.bwz;
+    bg << pF->mImuBias.mBGX, pF->mImuBias.mBGY,pF->mImuBias.mBGZ;
     setEstimate(bg);
 }
 
@@ -503,7 +503,7 @@ VertexAccBias::VertexAccBias(KeyFrame *pKF)
 VertexAccBias::VertexAccBias(Frame *pF)
 {
     Eigen::Vector3d ba;
-    ba << pF->mImuBias.bax, pF->mImuBias.bay,pF->mImuBias.baz;
+    ba << pF->mImuBias.mBAX, pF->mImuBias.mBAY,pF->mImuBias.mBAZ;
     setEstimate(ba);
 }
 
@@ -514,7 +514,7 @@ VertexAccBias::VertexAccBias(Frame *pF)
  */
 EdgeInertial::EdgeInertial(IMU::Preintegrated *pInt):JRg(pInt->JRg.cast<double>()),
     JVg(pInt->JVg.cast<double>()), JPg(pInt->JPg.cast<double>()), JVa(pInt->JVa.cast<double>()),
-    JPa(pInt->JPa.cast<double>()), mpInt(pInt), dt(pInt->dT)
+    JPa(pInt->JPa.cast<double>()), mpInt(pInt), dt(pInt->mfTs)
 {
     // 准备工作，把预积分类里面的值先取出来，包含信息的是两帧之间n多个imu信息预积分来的
     // This edge links 6 vertices
@@ -577,10 +577,10 @@ void EdgeInertial::linearizeOplus()
     const IMU::Bias b1(VA1->estimate()[0],VA1->estimate()[1],VA1->estimate()[2],VG1->estimate()[0],VG1->estimate()[1],VG1->estimate()[2]);
     const IMU::Bias db = mpInt->GetDeltaBias(b1);
     Eigen::Vector3d dbg;
-    dbg << db.bwx, db.bwy, db.bwz;
+    dbg << db.mBGX, db.mBGY, db.mBGZ;
 
     const Eigen::Matrix3d Rwb1 = VP1->estimate().Rwb;  // Ri
-    const Eigen::Matrix3d Rbw1 = Rwb1.transpose();     // Ri.t()
+    const Eigen::Matrix3d Rbw1 = Rwb1.transpose();     // Ri.mTs()
     const Eigen::Matrix3d Rwb2 = VP2->estimate().Rwb;  // Rj
 
     const Eigen::Matrix3d dR = mpInt->GetDeltaRotation(b1).cast<double>();
@@ -640,7 +640,7 @@ void EdgeInertial::linearizeOplus()
 // localmapping中imu初始化所用的边，除了正常的几个优化变量外还优化了重力方向与尺度
 EdgeInertialGS::EdgeInertialGS(IMU::Preintegrated *pInt):JRg(pInt->JRg.cast<double>()),
     JVg(pInt->JVg.cast<double>()), JPg(pInt->JPg.cast<double>()), JVa(pInt->JVa.cast<double>()),
-    JPa(pInt->JPa.cast<double>()), mpInt(pInt), dt(pInt->dT)
+    JPa(pInt->JPa.cast<double>()), mpInt(pInt), dt(pInt->mfTs)
 {
     // 准备工作，把预积分类里面的值先取出来，包含信息的是两帧之间n多个imu信息预积分来的
     // This edge links 8 vertices
@@ -710,10 +710,10 @@ void EdgeInertialGS::linearizeOplus()
 
     // 陀螺仪的偏置改变量
     Eigen::Vector3d dbg;
-    dbg << db.bwx, db.bwy, db.bwz;
+    dbg << db.mBGX, db.mBGY, db.mBGZ;
 
     const Eigen::Matrix3d Rwb1 = VP1->estimate().Rwb;   // Ri
-    const Eigen::Matrix3d Rbw1 = Rwb1.transpose();      // Ri.t()
+    const Eigen::Matrix3d Rbw1 = Rwb1.transpose();      // Ri.mTs()
     const Eigen::Matrix3d Rwb2 = VP2->estimate().Rwb;   // Rj
     const Eigen::Matrix3d Rwg = VGDir->estimate().Rwg;  // Rwg
     Eigen::MatrixXd Gm = Eigen::MatrixXd::Zero(3,2);
@@ -832,7 +832,7 @@ void EdgePriorPoseImu::linearizeOplus()
     _jacobianOplus[0].setZero();
     // LOG(Rbw*R*EXP(φ)) = LOG(EXP(LOG(Rbw*R) + Jr(-1)*φ)) = LOG(Rbw*R) + Jr(-1)*φ
     _jacobianOplus[0].block<3,3>(0,0) = InverseRightJacobianSO3(er);   // Jr(-1)
-    // Rbw*(t + R*δt - twb) = Rbw*(t - twb) + Rbw*R*δt
+    // Rbw*(mTs + R*δt - twb) = Rbw*(mTs - twb) + Rbw*R*δt
     _jacobianOplus[0].block<3,3>(3,3) = Rwb.transpose()*VP->estimate().Rwb;  // Rbw*R
     _jacobianOplus[1].setZero();
     _jacobianOplus[1].block<3,3>(6,0) = Eigen::Matrix3d::Identity();

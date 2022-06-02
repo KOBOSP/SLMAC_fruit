@@ -117,7 +117,6 @@ class KeyFrame
         ar & const_cast<float&>(mfBaselineFocal);
         ar & const_cast<float&>(mfBaseline);
         ar & const_cast<float&>(mfThDepth);
-        serializeMatrix(ar, mDistCoef, version);
         // Number of Keypoints
         ar & const_cast<int&>(mnKPsLeftNum);
         // KeyPoints
@@ -171,8 +170,6 @@ class KeyFrame
         ar & mnBackupIdCamera;
 
         // Fisheye variables
-        ar & mvLeftToRightMatch;
-        ar & mvRightToLeftMatch;
         serializeSophusSE3<Archive>(ar, mTlr, version);
         serializeVectorKeyPoints<Archive>(ar, mvKPsRight, version);
         ar & mGridRight;
@@ -290,8 +287,6 @@ public:
 
     IMU::Bias GetImuBias();
 
-    bool ProjectPointDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v);
-    bool ProjectPointUnDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v);
 
     void PreSave(set<KeyFrame*>& spKF,set<MapPoint*>& spMP, set<GeometricCamera*>& spCam);
     void PostLoad(map<long unsigned int, KeyFrame*>& mpKFid, map<long unsigned int, MapPoint*>& mpMPid, map<unsigned int, GeometricCamera*>& mpCamId);
@@ -361,15 +356,12 @@ public:
     Eigen::Vector3f mVwbBefMerge;
     IMU::Bias mBiasMerge;
     long unsigned int mnMergeCorrectedForKF;
-    long unsigned int mnMergeForKF;
-    float mfScaleMerge;
     long unsigned int mnBALocalForMerge;
 
     float mfScale;
 
     // Calibration parameters
     const float fx, fy, cx, cy, invfx, invfy, mfBaselineFocal, mfBaseline, mfThDepth;
-    cv::Mat mDistCoef;
 
     // Number of KeyPoints
     const int mnKPsLeftNum;
@@ -410,10 +402,6 @@ public:
     IMU::Calib mImuCalib;
 
     unsigned int mnOriginMapId;
-
-    string mNameFile;
-
-    int mnDataset;
 
     std::vector <KeyFrame*> mvpLoopCandKFs;
     std::vector <KeyFrame*> mvpMergeCandKFs;
@@ -499,10 +487,7 @@ protected:
     std::mutex mMutexMap;
 
 public:
-    GeometricCamera* mpCamera, *mpCamera2;
-
-    //Indexes of stereo observations correspondences
-    std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch;
+    GeometricCamera* mpCamera;
 
     Sophus::SE3f GetRelativePoseTrl();
     Sophus::SE3f GetRelativePoseTlr();

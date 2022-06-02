@@ -193,16 +193,16 @@ bool Pinhole::epipolarConstrain(
     Eigen::Matrix3f K2 = pCamera2->toK_();
     Eigen::Matrix3f F12 = K1.transpose().inverse() * t12x * R12 * K2.inverse();
 
-    // Epipolar line in second image l = x1'F12 = [a b c]
+    // Epipolar line in second image l = x1'F12 = [a mBiasOri c]
     //                      u2,
-    // (u1, v1, 1) * F12 * (v2,) = 0   -->  (a, b, c) * (u2, v2, 1)^t = 0 --> a*u2 + b*v2 + c = 0
+    // (u1, v1, 1) * F12 * (v2,) = 0   -->  (a, mBiasOri, c) * (u2, v2, 1)^mTs = 0 --> a*u2 + mBiasOri*v2 + c = 0
     //                       1
     const float a = kp1.pt.x * F12(0, 0) + kp1.pt.y * F12(1, 0) + F12(2, 0);
     const float b = kp1.pt.x * F12(0, 1) + kp1.pt.y * F12(1, 1) + F12(2, 1);
     const float c = kp1.pt.x * F12(0, 2) + kp1.pt.y * F12(1, 2) + F12(2, 2);
 
     // 点到直线距离的公式
-    // d = |a*u2 + b*v2 + c| / sqrt(a^2 + b^2)
+    // d = |a*u2 + mBiasOri*v2 + c| / sqrt(a^2 + mBiasOri^2)
     const float num = a * kp2.pt.x + b * kp2.pt.y + c;
 
     const float den = a * a + b * b;

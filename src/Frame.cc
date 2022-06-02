@@ -33,7 +33,7 @@
 namespace ORB_SLAM3 {
 
 // 下一个生成的帧的ID,这里是初始化类的静态成员变量
-    long unsigned int Frame::nNextId = 0;
+    long unsigned int Frame::mnNextId = 0;
 
 // 是否要进行初始化操作的标志
 // 这里给这个标志置位的操作是在最初系统开始加载到内存的时候进行的，下一帧就是整个系统的第一帧，所以这个标志要置位
@@ -42,11 +42,9 @@ namespace ORB_SLAM3 {
     float Frame::mfMinX, Frame::mfMinY, Frame::mfMaxX, Frame::mfMaxY;
     float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
 
-//For stereo fisheye matching
-    cv::BFMatcher Frame::BFmatcher = cv::BFMatcher(cv::NORM_HAMMING);
 
-    Frame::Frame() : mpcpi(NULL), mpImuPreintegrated(NULL), mpPrevFrame(NULL), mpImuPreintegratedFrame(NULL),
-                     mpReferenceKF(static_cast<KeyFrame *>(NULL)), mbIsSet(false), mbImuPreintegrated(false),
+    Frame::Frame() : mpcpi(NULL), mpImuFromPrevKF(NULL), mpPrevFrame(NULL), mpImuFromPrevFrame(NULL),
+                     mpReferenceKF(static_cast<KeyFrame *>(NULL)), mbImuPreintegrated(false),
                      mbHasPose(false), mbHasVelocity(false) {
 
     }
@@ -57,29 +55,27 @@ namespace ORB_SLAM3 {
             : mpcpi(frame.mpcpi), mpORBvocabulary(frame.mpORBvocabulary), mpORBextractorLeft(frame.mpORBextractorLeft),
               mpORBextractorRight(frame.mpORBextractorRight),
               mdTimestamp(frame.mdTimestamp), mcvK(frame.mcvK.clone()), mEigenK(Converter::toMatrix3f(frame.mcvK)),
-              mDistCoef(frame.mDistCoef.clone()),
-              mfBaselineFocal(frame.mfBaselineFocal), mfBaseline(frame.mfBaseline), mfThDepth(frame.mfThDepth), mnKPsLeftNum(frame.mnKPsLeftNum), mvKPsLeft(frame.mvKPsLeft),
+              mfBaselineFocal(frame.mfBaselineFocal), mfBaseline(frame.mfBaseline), mfThCloseFar(frame.mfThCloseFar), mnKPsLeftNum(frame.mnKPsLeftNum), mvKPsLeft(frame.mvKPsLeft),
               mvKPsRight(frame.mvKPsRight), mvKPsUn(frame.mvKPsUn), mvfXInRight(frame.mvfXInRight),
               mvfMPDepth(frame.mvfMPDepth), mBowVec(frame.mBowVec), mFeatVec(frame.mFeatVec),
               mDescriptorsLeft(frame.mDescriptorsLeft.clone()), mDescriptorsRight(frame.mDescriptorsRight.clone()),
               mvpMPs(frame.mvpMPs), mvbOutlier(frame.mvbOutlier), mImuCalib(frame.mImuCalib),
               mnCloseMPs(frame.mnCloseMPs),
-              mpImuPreintegrated(frame.mpImuPreintegrated), mpImuPreintegratedFrame(frame.mpImuPreintegratedFrame),
+              mpImuFromPrevKF(frame.mpImuFromPrevKF), mpImuFromPrevFrame(frame.mpImuFromPrevFrame),
               mImuBias(frame.mImuBias),
               mnId(frame.mnId), mpReferenceKF(frame.mpReferenceKF), mnScaleLevels(frame.mnScaleLevels),
               mfScaleFactor(frame.mfScaleFactor), mfLogScaleFactor(frame.mfLogScaleFactor),
-              mvfScaleFactors(frame.mvfScaleFactors), mvfInvScaleFactors(frame.mvfInvScaleFactors), mnDataset(frame.mnDataset),
+              mvfScaleFactors(frame.mvfScaleFactors), mvfInvScaleFactors(frame.mvfInvScaleFactors),
               mvfLevelSigma2(frame.mvfLevelSigma2), mvfInvLevelSigma2(frame.mvfInvLevelSigma2),
-              mpPrevFrame(frame.mpPrevFrame), mpLastKeyFrame(frame.mpLastKeyFrame),
-              mbIsSet(frame.mbIsSet), mbImuPreintegrated(frame.mbImuPreintegrated), mpMutexImu(frame.mpMutexImu),
-              mpCamera(frame.mpCamera), mpCamera2(frame.mpCamera2),
-              monoLeft(frame.monoLeft), monoRight(frame.monoRight), mvLeftToRightMatch(frame.mvLeftToRightMatch),
-              mvRightToLeftMatch(frame.mvRightToLeftMatch), mvStereo3Dpoints(frame.mvStereo3Dpoints),
+              mpPrevFrame(frame.mpPrevFrame), mpPrevKeyFrame(frame.mpPrevKeyFrame),
+              mbImuPreintegrated(frame.mbImuPreintegrated), mpMutexImu(frame.mpMutexImu),
+              mpCamera(frame.mpCamera),
+              mnImgLeftKPs(frame.mnImgLeftKPs), mnImgRightKPs(frame.mnImgRightKPs),
               mTlr(frame.mTlr), mRlr(frame.mRlr), mtlr(frame.mtlr), mTrl(frame.mTrl),
               mTcw(frame.mTcw), mbHasPose(false), mbHasVelocity(false) {
         for (int i = 0; i < FRAME_GRID_COLS; i++)
             for (int j = 0; j < FRAME_GRID_ROWS; j++) {
-                mGrid[i][j] = frame.mGrid[i][j];
+                mGridLeft[i][j] = frame.mGridLeft[i][j];
             }
 
         if (frame.mbHasPose)
@@ -90,23 +86,21 @@ namespace ORB_SLAM3 {
         }
 
         mmProjectPoints = frame.mmProjectPoints;
-        mmMatchedInImage = frame.mmMatchedInImage;
-
     }
 
 // 立体匹配模式下的双目
     Frame::Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp, ORBextractor *ExtractorLeft,
-                 ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &cvK, cv::Mat &DistCoef, const float &fBaselineFocal,
+                 ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &cvK, const float &fBaselineFocal,
                  const float &fThDepth, GeometricCamera *pCamera, Frame *pPrevF, const IMU::Calib &ImuCalib)
             : mpcpi(NULL), mpORBvocabulary(Voc), mpORBextractorLeft(ExtractorLeft), mpORBextractorRight(ExtractorRight),
-              mdTimestamp(dTimestamp), mcvK(cvK.clone()), mEigenK(Converter::toMatrix3f(cvK)), mDistCoef(DistCoef.clone()), mfBaselineFocal(fBaselineFocal),
-              mfThDepth(fThDepth),
-              mImuCalib(ImuCalib), mpImuPreintegrated(NULL), mpPrevFrame(pPrevF), mpImuPreintegratedFrame(NULL),
-              mpReferenceKF(static_cast<KeyFrame *>(NULL)), mbIsSet(false), mbImuPreintegrated(false),
-              mpCamera(pCamera), mpCamera2(nullptr), mbHasPose(false), mbHasVelocity(false) {
+              mdTimestamp(dTimestamp), mcvK(cvK.clone()), mEigenK(Converter::toMatrix3f(cvK)), mfBaselineFocal(fBaselineFocal),
+              mfThCloseFar(fThDepth),
+              mImuCalib(ImuCalib), mpImuFromPrevKF(NULL), mpPrevFrame(pPrevF), mpImuFromPrevFrame(NULL),
+              mpReferenceKF(static_cast<KeyFrame *>(NULL)), mbImuPreintegrated(false),
+              mpCamera(pCamera), mbHasPose(false), mbHasVelocity(false) {
         // Frame ID
         // Step 1 帧的ID 自增
-        mnId = nNextId++;
+        mnId = mnNextId++;
 
         // Scale Level Info
         // Step 2 计算图像金字塔的参数
@@ -143,7 +137,8 @@ namespace ORB_SLAM3 {
             return;
 
         // Step 4 用OpenCV的矫正函数、内参对提取到的特征点进行矫正
-        UndistortKeyPoints();
+        mvKPsUn = mvKPsLeft;
+
 
 
         // Step 5 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvfMPDepth
@@ -155,7 +150,6 @@ namespace ORB_SLAM3 {
         mvpMPs = vector<MapPoint *>(mnKPsLeftNum, static_cast<MapPoint *>(NULL));
         mvbOutlier = vector<bool>(mnKPsLeftNum, false);
         mmProjectPoints.clear();
-        mmMatchedInImage.clear();
 
 
         // This is done only for the first Frame (or after a change in the calibration)
@@ -191,15 +185,9 @@ namespace ORB_SLAM3 {
         } else {
             mVw.setZero();
         }
-
         mpMutexImu = new std::mutex();
-
-        //Set no stereo fisheye information
-        mvLeftToRightMatch = vector<int>(0);
-        mvRightToLeftMatch = vector<int>(0);
-        mvStereo3Dpoints = vector<Eigen::Vector3f>(0);
-        monoLeft = -1;
-        monoRight = -1;
+        mnImgLeftKPs = -1;
+        mnImgRightKPs = -1;
 
         // Step 6 将特征点分配到图像网格中
         // 上个版本这句话放在了new 锁那个上面，放在目前这个位置更合理，因为要把一些当前模式不用的参数赋值，函数里面要用
@@ -212,7 +200,7 @@ namespace ORB_SLAM3 {
  */
     void Frame::AssignFeaturesToGrid() {
         // Fill matrix with points
-        // Step 1  给存储特征点的网格数组 Frame::mGrid 预分配空间
+        // Step 1  给存储特征点的网格数组 Frame::mGridLeft 预分配空间
         const int nCells = FRAME_GRID_COLS * FRAME_GRID_ROWS;
 
         int nReserve = 0.5f * mnKPsLeftNum / (nCells);
@@ -220,7 +208,7 @@ namespace ORB_SLAM3 {
         // 开始对mGrid这个二维数组中的每一个vector元素遍历并预分配空间
         for (unsigned int i = 0; i < FRAME_GRID_COLS; i++){
             for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++) {
-                mGrid[i][j].reserve(nReserve);
+                mGridLeft[i][j].reserve(nReserve);
             }
         }
         // Step 2 遍历每个特征点，将每个特征点在mvKeysUn中的索引值放到对应的网格mGrid中
@@ -231,7 +219,7 @@ namespace ORB_SLAM3 {
             // 计算某个特征点所在网格的网格坐标，如果找到特征点所在的网格坐标，记录在nGridPosX,nGridPosY里，返回true，没找到返回false
             if (PosInGrid(kp, nGridPosX, nGridPosY)) {
                 // 如果找到特征点所在网格坐标，将这个特征点的索引添加到对应网格的数组mGrid中
-                mGrid[nGridPosX][nGridPosY].push_back(i);
+                mGridLeft[nGridPosX][nGridPosY].push_back(i);
             }
         }
     }
@@ -246,16 +234,18 @@ namespace ORB_SLAM3 {
     void Frame::ExtractORB(int flag, const cv::Mat &im, const int x0, const int x1) {
         vector<int> vLapping = {x0, x1};
         // 判断是左图还是右图
-        if (flag == 0)
+        if (flag == 0){
             // 左图的话就套使用左图指定的特征点提取器，并将提取结果保存到对应的变量中
-            monoLeft = (*mpORBextractorLeft)(im, cv::Mat(), mvKPsLeft, mDescriptorsLeft, vLapping);
-        else
+            mnImgLeftKPs = (*mpORBextractorLeft)(im, cv::Mat(), mvKPsLeft, mDescriptorsLeft, vLapping);
+        }
+        else{
             // 右图的话就需要使用右图指定的特征点提取器，并将提取结果保存到对应的变量中
-            monoRight = (*mpORBextractorRight)(im, cv::Mat(), mvKPsRight, mDescriptorsRight, vLapping);
+            mnImgRightKPs = (*mpORBextractorRight)(im, cv::Mat(), mvKPsRight, mDescriptorsRight, vLapping);
+        }
     }
 
-    bool Frame::isSet() const {
-        return mbIsSet;
+    bool Frame::HasPose() const {
+        return mbHasPose;
     }
 
 /** 
@@ -264,9 +254,7 @@ namespace ORB_SLAM3 {
  */
     void Frame::SetPose(const Sophus::SE3<float> &Tcw) {
         mTcw = Tcw;
-
         UpdatePoseMatrices();
-        mbIsSet = true;
         mbHasPose = true;
     }
 
@@ -276,8 +264,8 @@ namespace ORB_SLAM3 {
  */
     void Frame::SetNewBias(const IMU::Bias &b) {
         mImuBias = b;
-        if (mpImuPreintegrated)
-            mpImuPreintegrated->SetNewBias(b);
+        if (mpImuFromPrevKF)
+            mpImuFromPrevKF->SetNewBias(b);
     }
 
 /** 
@@ -302,14 +290,10 @@ namespace ORB_SLAM3 {
     void Frame::SetImuPoseVelocity(const Eigen::Matrix3f &Rwb, const Eigen::Vector3f &twb, const Eigen::Vector3f &Vwb) {
         mVw = Vwb;
         mbHasVelocity = true;
-
         Sophus::SE3f Twb(Rwb, twb);
         Sophus::SE3f Tbw = Twb.inverse();
-
         mTcw = mImuCalib.mTcb * Tbw;
-
         UpdatePoseMatrices();
-        mbIsSet = true;
         mbHasPose = true;
     }
 
@@ -327,49 +311,49 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 获得imu的平移
  */
-    Eigen::Matrix<float, 3, 1> Frame::GetImuPosition() const {
+    Eigen::Matrix<float, 3, 1> Frame::GetImuTcbTranslation() const {
         return mRwc * mImuCalib.mTcb.translation() + mOw;
     }
 
 /** 
  * @brief 获得imu的旋转
  */
-    Eigen::Matrix<float, 3, 3> Frame::GetImuRotation() {
+    Eigen::Matrix<float, 3, 3> Frame::GetImuTcbRotation() {
         return mRwc * mImuCalib.mTcb.rotationMatrix();
     }
 
 /** 
  * @brief 获得imu的位姿
  */
-    Sophus::SE3<float> Frame::GetImuPose() {
+    Sophus::SE3<float> Frame::GetImuTcb() {
         return mTcw.inverse() * mImuCalib.mTcb;
     }
 
 /** 
  * @brief 获得左右目的相对位姿
  */
-    Sophus::SE3f Frame::GetRelativePoseTrl() {
+    Sophus::SE3f Frame::GetStereoTrl() {
         return mTrl;
     }
 
 /** 
  * @brief 获得左右目的相对位姿
  */
-    Sophus::SE3f Frame::GetRelativePoseTlr() {
+    Sophus::SE3f Frame::GetStereoTlr() {
         return mTlr;
     }
 
 /** 
  * @brief 获得左右目的相对旋转
  */
-    Eigen::Matrix3f Frame::GetRelativePoseTlr_rotation() {
+    Eigen::Matrix3f Frame::GetStereoTlrRotation() {
         return mTlr.rotationMatrix();
     }
 
 /** 
  * @brief 获得左右目的相对平移
  */
-    Eigen::Vector3f Frame::GetRelativePoseTlr_translation() {
+    Eigen::Vector3f Frame::GetStereoTlrTranslation() {
         return mTlr.translation();
     }
 
@@ -480,77 +464,6 @@ namespace ORB_SLAM3 {
     }
 
 /** 
- * @brief 暂没用到
- */
-    bool Frame::ProjectPointDistort(MapPoint *pMP, cv::Point2f &kp, float &u, float &v) {
-
-        // 3D in absolute coordinates
-        Eigen::Vector3f P = pMP->GetWorldPos();
-
-        // 3D in camera coordinates
-        const Eigen::Vector3f Pc = mRcw * P + mtcw;
-        const float &PcX = Pc(0);
-        const float &PcY = Pc(1);
-        const float &PcZ = Pc(2);
-
-        // Check positive depth
-        if (PcZ < 0.0f) {
-            cout << "Negative depth: " << PcZ << endl;
-            return false;
-        }
-
-        // Project in image and check it is not outside
-        const float invz = 1.0f / PcZ;
-        u = fx * PcX * invz + cx;
-        v = fy * PcY * invz + cy;
-
-        if (u < mfMinX || u > mfMaxX)
-            return false;
-        if (v < mfMinY || v > mfMaxY)
-            return false;
-
-        float u_distort, v_distort;
-
-        float x = (u - cx) * invfx;
-        float y = (v - cy) * invfy;
-        float r2 = x * x + y * y;
-        float k1 = mDistCoef.at<float>(0);
-        float k2 = mDistCoef.at<float>(1);
-        float p1 = mDistCoef.at<float>(2);
-        float p2 = mDistCoef.at<float>(3);
-        float k3 = 0;
-        if (mDistCoef.total() == 5) {
-            k3 = mDistCoef.at<float>(4);
-        }
-
-        // Radial distorsion
-        float x_distort = x * (1 + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2);
-        float y_distort = y * (1 + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2);
-
-        // Tangential distorsion
-        x_distort = x_distort + (2 * p1 * x * y + p2 * (r2 + 2 * x * x));
-        y_distort = y_distort + (p1 * (r2 + 2 * y * y) + 2 * p2 * x * y);
-
-        u_distort = x_distort * fx + cx;
-        v_distort = y_distort * fy + cy;
-
-
-        u = u_distort;
-        v = v_distort;
-
-        kp = cv::Point2f(u, v);
-
-        return true;
-    }
-
-/** 
- * @brief 暂没用到
- */
-    Eigen::Vector3f Frame::inRefCoordinates(Eigen::Vector3f pCw) {
-        return mRcw * pCw + mtcw;
-    }
-
-/** 
  * @brief 给定一个坐标，返回区域内所有特征点
  * @param x 给定点的x
  * @param y 给定点的y
@@ -605,13 +518,13 @@ namespace ORB_SLAM3 {
         // 检查需要搜索的图像金字塔层数范围是否符合要求
         //? 疑似bug。(minLevel>0) 后面条件 (maxLevel>=0)肯定成立
         //? 改为 const bool bCheckLevels = (minLevel>=0) || (maxLevel>=0);
-        const bool bCheckLevels = (minLevel > 0) || (maxLevel >= 0);
+        const bool bCheckLevels = (minLevel >= 0) || (maxLevel >= 0);
 
         // Step 2 遍历圆形区域内的所有网格，寻找满足条件的候选特征点，并将其index放到输出里
         for (int ix = nMinCellX; ix <= nMaxCellX; ix++) {
             for (int iy = nMinCellY; iy <= nMaxCellY; iy++) {
                 // 获取这个网格内的所有特征点在 Frame::mvKPsUn 中的索引
-                const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
+                const vector<size_t> vCell = (!bRight) ? mGridLeft[ix][iy] : mGridRight[ix][iy];
                 // 如果这个网格中没有特征点，那么跳过这个网格继续下一个
                 if (vCell.empty())
                     continue;
@@ -688,91 +601,16 @@ namespace ORB_SLAM3 {
     }
 
 /**
- * @brief 用内参对特征点去畸变，结果报存在mvKeysUn中
- * 
- */
-    void Frame::UndistortKeyPoints() {
-        // Step 1 如果第一个畸变参数为0，不需要矫正。第一个畸变参数k1是最重要的，一般不为0，为0的话，说明畸变参数都是0
-        // 变量mDistCoef中存储了opencv指定格式的去畸变参数，格式为：(k1,k2,p1,p2,k3)
-        if (mDistCoef.at<float>(0) == 0.0) {
-            mvKPsUn = mvKPsLeft;
-            return;
-        }
-
-        // Fill matrix with points
-        // Step 2 如果畸变参数不为0，用OpenCV函数进行畸变矫正
-        // Fill matrix with points
-        // N为提取的特征点数量，为满足OpenCV函数输入要求，将N个特征点保存在N*2的矩阵中
-        cv::Mat mat(mnKPsLeftNum, 2, CV_32F);
-
-        // 遍历每个特征点，并将它们的坐标保存到矩阵中
-        for (int i = 0; i < mnKPsLeftNum; i++) {
-            // 然后将这个特征点的横纵坐标分别保存
-            mat.at<float>(i, 0) = mvKPsLeft[i].pt.x;
-            mat.at<float>(i, 1) = mvKPsLeft[i].pt.y;
-        }
-
-        // Undistort points
-        // 函数reshape(int cn,int rows=0) 其中cn为更改后的通道数，rows=0表示这个行将保持原来的参数不变
-        // 为了能够直接调用opencv的函数来去畸变，需要先将矩阵调整为2通道（对应坐标x,y）
-        // cv::undistortPoints最后一个矩阵为空矩阵时，得到的点为归一化坐标点
-        mat = mat.reshape(2);
-        cv::undistortPoints(mat, mat, static_cast<Pinhole *>(mpCamera)->toK(), mDistCoef, cv::Mat(), mcvK);
-        // 调整回只有一个通道，回归我们正常的处理方式
-        mat = mat.reshape(1);
-
-
-        // Fill undistorted keypoint vector
-        // Step 3 存储校正后的特征点
-        mvKPsUn.resize(mnKPsLeftNum);
-        for (int i = 0; i < mnKPsLeftNum; i++) {
-            // 根据索引获取这个特征点
-            // 注意之所以这样做而不是直接重新声明一个特征点对象的目的是，能够得到源特征点对象的其他属性
-            cv::KeyPoint kp = mvKPsLeft[i];
-            // 读取校正后的坐标并覆盖老坐标
-            kp.pt.x = mat.at<float>(i, 0);
-            kp.pt.y = mat.at<float>(i, 1);
-            mvKPsUn[i] = kp;
-        }
-    }
-
-/**
  * @brief 计算去畸变图像的边界
  * 
  * @param[in] imLeft            需要计算边界的图像
  */
     void Frame::ComputeImageBounds(const cv::Mat &imLeft) {
-        // 如果畸变参数不为0，用OpenCV函数进行畸变矫正
-        if (mDistCoef.at<float>(0) != 0.0) {
-            // 保存矫正前的图像四个边界点坐标： (0,0) (cols,0) (0,rows) (cols,rows)
-            cv::Mat mat(4, 2, CV_32F);
-            mat.at<float>(0, 0) = 0.0;
-            mat.at<float>(0, 1) = 0.0;
-            mat.at<float>(1, 0) = imLeft.cols;
-            mat.at<float>(1, 1) = 0.0;
-            mat.at<float>(2, 0) = 0.0;
-            mat.at<float>(2, 1) = imLeft.rows;
-            mat.at<float>(3, 0) = imLeft.cols;
-            mat.at<float>(3, 1) = imLeft.rows;
-
-            // 和前面校正特征点一样的操作，将这几个边界点作为输入进行校正
-            mat = mat.reshape(2);
-            cv::undistortPoints(mat, mat, static_cast<Pinhole *>(mpCamera)->toK(), mDistCoef, cv::Mat(), mcvK);
-            mat = mat.reshape(1);
-
-            // Undistort corners
-            // 校正后的四个边界点已经不能够围成一个严格的矩形，因此在这个四边形的外侧加边框作为坐标的边界
-            mfMinX = min(mat.at<float>(0, 0), mat.at<float>(2, 0));  // 左上和左下横坐标最小的
-            mfMaxX = max(mat.at<float>(1, 0), mat.at<float>(3, 0));  // 右上和右下横坐标最大的
-            mfMinY = min(mat.at<float>(0, 1), mat.at<float>(1, 1));  // 左上和右上纵坐标最小的
-            mfMaxY = max(mat.at<float>(2, 1), mat.at<float>(3, 1));  // 左下和右下纵坐标最小的
-        } else {
-            // 如果畸变参数为0，就直接获得图像边界
-            mfMinX = 0.0f;
-            mfMaxX = imLeft.cols;
-            mfMinY = 0.0f;
-            mfMaxY = imLeft.rows;
-        }
+        // 如果畸变参数为0，就直接获得图像边界
+        mfMinX = 0.0f;
+        mfMaxX = imLeft.cols;
+        mfMinY = 0.0f;
+        mfMaxY = imLeft.rows;
     }
 
 /*
@@ -942,7 +780,7 @@ namespace ORB_SLAM3 {
                 // 计算滑动窗口滑动范围的边界，因为是块匹配，还要算上图像块的尺寸
                 // 列方向起点 IniX = r0 + 最大窗口滑动范围 - 图像块尺寸
                 // 列方向终点 eniu = r0 + 最大窗口滑动范围 + 图像块尺寸 + 1
-                // 此次 + 1 和下面的提取图像块是列坐标+1是一样的，保证提取的图像块的宽是2 * w + 1
+                // 此次 + 1 和下面的提取图像块是列坐标+1是一样的，保证提取的图像块的宽是2 * mGyr + 1
                 const float IniX = XR0Scaled + L - w;
                 const float EndX = XR0Scaled + L + w + 1;
                 // 判断搜索是否越界
@@ -1142,13 +980,6 @@ namespace ORB_SLAM3 {
         pMP->mTrackDepth = Pc_dist;
 
         return true;
-    }
-
-/** 
- * @brief 根据位姿将第i个点投到世界坐标系下
- */
-    Eigen::Vector3f Frame::UnprojectStereoFishEye(const int &i) {
-        return mRwc * mvStereo3Dpoints[i] + mOw;
     }
 
 } //namespace ORB_SLAM

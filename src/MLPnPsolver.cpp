@@ -354,7 +354,7 @@ void MLPnPsolver::SetRansacParameters(double probability, int minInliers, int ma
 }
 
 /**
- * @brief 通过之前求解的(R t)检查哪些3D-2D点对属于inliers
+ * @brief 通过之前求解的(R mTs)检查哪些3D-2D点对属于inliers
  */
 void MLPnPsolver::CheckInliers()
 {
@@ -779,7 +779,7 @@ void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, cons
         //       |r13 r23 r33|
         tmp.transposeInPlace();
 
-        // 平移部分 t 只表示了正确的方向，没有尺度，需要求解 scale, 先求系数
+        // 平移部分 mTs 只表示了正确的方向，没有尺度，需要求解 scale, 先求系数
         double scale = 1.0 / std::sqrt(std::abs(tmp.col(1).norm() * tmp.col(2).norm()));
         // find best rotation matrix in frobenius sense
         // 利用Frobenious范数计算最佳的旋转矩阵，利用公式(19)， R = U_R*V_R^T
@@ -800,8 +800,8 @@ void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, cons
         // 注意eigenRot之前已经转置过了transposeInPlace()，所以这里Rout1在之前也转置了，即tmp.transposeInPlace()
         Rout1 = eigenRot.transpose() * Rout1;
 
-        // 估计最终的平移矩阵，带尺度信息的，根据公式(17)，t = t^ / three-party(||r1||*||r2||*||r3||)
-        // 这里是 t = t^ / sqrt(||r1||*||r2||)
+        // 估计最终的平移矩阵，带尺度信息的，根据公式(17)，mTs = mTs^ / three-party(||r1||*||r2||*||r3||)
+        // 这里是 mTs = mTs^ / sqrt(||r1||*||r2||)
         translation_t t = scale * translation_t(result1(6, 0), result1(7, 0), result1(8, 0));
 
         // 把之前转置过来的矩阵再转回去，变成公式里面的形态:
@@ -829,10 +829,10 @@ void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, cons
         R2.col(1) = -Rout1.col(1);
         R2.col(2) = Rout1.col(2);
 
-        //      |R1  t|
-        // Ts = |R1 -t|
-        //      |R2  t|
-        //      |R2 -t|
+        //      |R1  mTs|
+        // Ts = |R1 -mTs|
+        //      |R2  mTs|
+        //      |R2 -mTs|
         vector<transformation_t, Eigen::aligned_allocator<transformation_t>> Ts(4);
         Ts[0].block<3, 3>(0, 0) = R1;
         Ts[0].block<3, 1>(0, 3) = t;
@@ -859,7 +859,7 @@ void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, cons
                 reproPt = reproPt / reproPt.norm();
                 // f[indices[p]] 是当前空间点的单位向量
                 // 利用欧氏距离来表示重投影向量(观测)和当前空间点向量(实际)的偏差
-                // 即两个n维向量a(x11,x12,…,x1n)与 b(x21,x22,…,x2n)间的欧氏距离
+                // 即两个n维向量a(x11,x12,…,x1n)与 mBiasOri(x21,x22,…,x2n)间的欧氏距离
                 norms += (1.0 - reproPt.transpose() * f[indices[p]]);
             }
             // 统计每种解的误差和，第i个解的误差和放入对应的变量normVal[i]
@@ -889,7 +889,7 @@ void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, cons
             result1(1, 0), result1(4, 0), result1(7, 0),
             result1(2, 0), result1(5, 0), result1(8, 0);
         // get the scale
-        // 计算尺度，根据公式(17)，t = t^ / three-party(||r1||*||r2||*||r3||)
+        // 计算尺度，根据公式(17)，mTs = mTs^ / three-party(||r1||*||r2||*||r3||)
         double scale = 1.0 /
                         std::pow(std::abs(tmp.col(0).norm() * tmp.col(1).norm() * tmp.col(2).norm()), 1.0 / 3.0);
 
@@ -905,15 +905,15 @@ void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, cons
             Rout *= -1.0;
 
         // scale translation
-        // 从相机坐标系到世界坐标系的转换关系是 lambda*v = R*pi+t
+        // 从相机坐标系到世界坐标系的转换关系是 lambda*v = R*pi+mTs
         // 从世界坐标系到相机坐标系的转换关系是 pi = R^T*v-R^Tt
         // 旋转矩阵的性质 R^-1 = R^T
-        // 所以，在下面的计算中，需要计算从世界坐标系到相机坐标系的转换，这里tout = -R^T*t，下面再计算前半部分R^T*v
+        // 所以，在下面的计算中，需要计算从世界坐标系到相机坐标系的转换，这里tout = -R^T*mTs，下面再计算前半部分R^T*v
         // 先恢复平移部分的尺度再计算
         tout = Rout * (scale * translation_t(result1(9, 0), result1(10, 0), result1(11, 0)));
 
         // find correct direction in terms of reprojection error, just take the first 6 correspondences
-        // 非平面情况下，一共有2种解，R,t和R,-t
+        // 非平面情况下，一共有2种解，R,t和R,-mTs
         // 利用前6个点计算重投影误差，选择残差最小的一个解
         vector<double> error(2);
         vector<Eigen::Matrix4d, Eigen::aligned_allocator<Eigen::Matrix4d>> Ts(2);
@@ -1001,7 +1001,7 @@ void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, cons
     tout = translation_t(minx[3], minx[4], minx[5]);
 
     // result inverse as opengv uses this convention
-    // 这里是用来计算世界坐标系到相机坐标系的转换，所以是Pc=R^T*Pw-R^T*t，反变换
+    // 这里是用来计算世界坐标系到相机坐标系的转换，所以是Pc=R^T*Pw-R^T*mTs，反变换
     result.block<3, 3>(0, 0) = Rout; // Rout.transpose();
     result.block<3, 1>(0, 3) = tout; //-result.block<3, 3>(0, 0) * tout;
 }

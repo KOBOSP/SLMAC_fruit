@@ -56,8 +56,8 @@ Eigen::Matrix3f GeometricTools::ComputeF12(KeyFrame* &pKF1, KeyFrame* &pKF2)
  * @brief 三角化获得三维点
  * @param x_c1 点在关键帧1下的归一化坐标
  * @param x_c2 点在关键帧2下的归一化坐标
- * @param Tc1w 关键帧1投影矩阵  [K*R | K*t]
- * @param Tc2w 关键帧2投影矩阵  [K*R | K*t]
+ * @param Tc1w 关键帧1投影矩阵  [K*R | K*mTs]
+ * @param Tc2w 关键帧2投影矩阵  [K*R | K*mTs]
  * @param x3D 三维点坐标，作为结果输出
  */
 bool GeometricTools::Triangulate(

@@ -132,12 +132,10 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> lock(mMutexMode);
             if (mbActivateLocalizationMode) {
                 mpLocalMapper->RequestPause();
-
                 // Wait until Local Mapping has effectively stopped
                 while (!mpLocalMapper->CheckPaused()) {
                     usleep(500);
                 }
-
                 mpTracker->InformOnlyTracking(true);
                 mbActivateLocalizationMode = false;
             }
@@ -167,12 +165,12 @@ namespace ORB_SLAM3 {
 
         cv::Mat ImgLeftToTrack, ImgRightToTrack;
         if (mSettings && mSettings->mbNeedToRectify) {
-            cv::Mat M1l = mSettings->Map1X;
-            cv::Mat M2l = mSettings->Map1Y;
-            cv::Mat M1r = mSettings->Map2X;
-            cv::Mat M2r = mSettings->Map2Y;
-            cv::remap(ImgLeft, ImgLeftToTrack, M1l, M2l, cv::INTER_LINEAR);
-            cv::remap(ImgRight, ImgRightToTrack, M1r, M2r, cv::INTER_LINEAR);
+            cv::Mat MXL = mSettings->Map1X;
+            cv::Mat MYL = mSettings->Map1Y;
+            cv::Mat MXR = mSettings->Map2X;
+            cv::Mat MYR = mSettings->Map2Y;
+            cv::remap(ImgLeft, ImgLeftToTrack, MXL, MYL, cv::INTER_LINEAR);
+            cv::remap(ImgRight, ImgRightToTrack, MXR, MYR, cv::INTER_LINEAR);
         } else if (mSettings && mSettings->mbNeedToResize) {
             cv::resize(ImgLeft, ImgLeftToTrack, mSettings->mImgSize);
             cv::resize(ImgRight, ImgRightToTrack, mSettings->mImgSize);
@@ -272,10 +270,8 @@ namespace ORB_SLAM3 {
         }
 
         if (!msSaveAtlasToFile.empty()) {
-            std::cout << "开始保存地图" << std::endl;
             Verbose::PrintMess("Atlas saving to file " + msSaveAtlasToFile, Verbose::VERBOSITY_NORMAL);
             SaveAtlas(FileType::BINARY_FILE);
-
         }
         cout << "System Finished" << endl;
     }
@@ -286,9 +282,9 @@ namespace ORB_SLAM3 {
     }
 
 
-    void System::SaveTrajectoryEuRoC(const string &filename) {
+    void System::SaveFrameTrajectoryEuRoC(const string &filename) {
 
-        cout << endl << "Saving trajectory to " << filename << " ..." << endl;
+        cout << endl << "Saving Frame Trajectory to " << filename << " ..." << endl;
 
         vector<Map *> vpMaps = mpAtlas->GetAllMaps();
         int numMaxKFs = 0;
@@ -308,35 +304,35 @@ namespace ORB_SLAM3 {
 
         // Transform all keyframes so that the first keyframe is at the origin.
         // After a loop closure the first keyframe might not be at the origin.
-        Sophus::SE3f Twb; // Can be word to cam0 or world to b depending on IMU or not.
+        Sophus::SE3f Twb; // Can be word to cam0 or world to mBiasOri depending on IMU or not.
         Twb = vpKFs[0]->GetImuPose();
 
-        ofstream f;
-        f.open(filename.c_str());
+        ofstream fFPose;
+        fFPose.open(filename.c_str());
         // cout << "file open" << endl;
-        f << fixed;
+        fFPose << fixed;
 
         // Frame pose is stored relative to its reference keyframe (which is optimized by BA and pose graph).
         // We need to get first the keyframe pose and then concatenate the relative transformation.
         // Frames not localized (tracking failure) are not saved.
 
-        // For each frame we have a reference keyframe (lRit), the timestamp (lT) and a flag
+        // For each frame we have a reference keyframe (lRKFit), the timestamp (lFT) and a flag
         // which is true when tracking failed (lbL).
-        list<ORB_SLAM3::KeyFrame *>::iterator lRit = mpTracker->mlpReferences.begin();
-        list<double>::iterator lT = mpTracker->mlFrameTimes.begin();
+        list<ORB_SLAM3::KeyFrame *>::iterator lRKFit = mpTracker->mlpRefKFs.begin();
+        list<double>::iterator lFT = mpTracker->mlTimestamp.begin();
         list<bool>::iterator lbL = mpTracker->mlbLost.begin();
 
-        //cout << "size mlpReferences: " << mpTracker->mlpReferences.size() << endl;
+        //cout << "size mlpRefKFs: " << mpTracker->mlpRefKFs.size() << endl;
         //cout << "size mlRelativeFramePoses: " << mpTracker->mlRelativeFramePoses.size() << endl;
-        //cout << "size mpTracker->mlFrameTimes: " << mpTracker->mlFrameTimes.size() << endl;
+        //cout << "size mpTracker->mlTimestamp: " << mpTracker->mlTimestamp.size() << endl;
         //cout << "size mpTracker->mlbLost: " << mpTracker->mlbLost.size() << endl;
 
 
         for (auto lit = mpTracker->mlRelativeFramePoses.begin(),
-                     lend = mpTracker->mlRelativeFramePoses.end(); lit != lend; lit++, lRit++, lT++, lbL++) {
+                     lend = mpTracker->mlRelativeFramePoses.end(); lit != lend; lit++, lRKFit++, lFT++, lbL++) {
             if (*lbL)
                 continue;
-            KeyFrame *pKF = *lRit;
+            KeyFrame *pKF = *lRKFit;
             //cout << "KF: " << pKF->mnId << endl;
 
             Sophus::SE3f Trw;
@@ -360,103 +356,16 @@ namespace ORB_SLAM3 {
             Sophus::SE3f Twb = (pKF->mImuCalib.mTbc * (*lit) * Trw).inverse();
             Eigen::Quaternionf q = Twb.unit_quaternion();
             Eigen::Vector3f twb = Twb.translation();
-            f << setprecision(6) << 1e9 * (*lT) << " " << setprecision(9) << twb(0) << " " << twb(1) << " " << twb(2)
+            fFPose << setprecision(6) << 1e9 * (*lFT) << " " << setprecision(9) << twb(0) << " " << twb(1) << " " << twb(2)
               << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
         }
-        f.close();
-        cout << endl << "End of saving trajectory to " << filename << " ..." << endl;
-    }
-
-    void System::SaveTrajectoryEuRoC(const string &filename, Map *pMap) {
-
-        cout << endl << "Saving trajectory of map " << pMap->GetId() << " to " << filename << " ..." << endl;
-
-
-        int numMaxKFs = 0;
-
-        vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
-        sort(vpKFs.begin(), vpKFs.end(), KeyFrame::lId);
-
-        // Transform all keyframes so that the first keyframe is at the origin.
-        // After a loop closure the first keyframe might not be at the origin.
-        Sophus::SE3f Twb; // Can be word to cam0 or world to b dependingo on IMU or not.
-        Twb = vpKFs[0]->GetImuPose();
-
-
-        ofstream f;
-        f.open(filename.c_str());
-        // cout << "file open" << endl;
-        f << fixed;
-
-        // Frame pose is stored relative to its reference keyframe (which is optimized by BA and pose graph).
-        // We need to get first the keyframe pose and then concatenate the relative transformation.
-        // Frames not localized (tracking failure) are not saved.
-
-        // For each frame we have a reference keyframe (lRit), the timestamp (lT) and a flag
-        // which is true when tracking failed (lbL).
-        list<ORB_SLAM3::KeyFrame *>::iterator lRit = mpTracker->mlpReferences.begin();
-        list<double>::iterator lT = mpTracker->mlFrameTimes.begin();
-        list<bool>::iterator lbL = mpTracker->mlbLost.begin();
-
-        //cout << "size mlpReferences: " << mpTracker->mlpReferences.size() << endl;
-        //cout << "size mlRelativeFramePoses: " << mpTracker->mlRelativeFramePoses.size() << endl;
-        //cout << "size mpTracker->mlFrameTimes: " << mpTracker->mlFrameTimes.size() << endl;
-        //cout << "size mpTracker->mlbLost: " << mpTracker->mlbLost.size() << endl;
-
-
-        for (auto lit = mpTracker->mlRelativeFramePoses.begin(),
-                     lend = mpTracker->mlRelativeFramePoses.end(); lit != lend; lit++, lRit++, lT++, lbL++) {
-            //cout << "1" << endl;
-            if (*lbL)
-                continue;
-
-
-            KeyFrame *pKF = *lRit;
-            //cout << "KF: " << pKF->mnId << endl;
-
-            Sophus::SE3f Trw;
-
-            // If the reference keyframe was culled, traverse the spanning tree to get a suitable keyframe.
-            if (!pKF)
-                continue;
-
-            //cout << "2.5" << endl;
-
-            while (pKF->isBad()) {
-                //cout << " 2.bad" << endl;
-                Trw = Trw * pKF->mTcp;
-                pKF = pKF->GetParent();
-                //cout << "--Parent KF: " << pKF->mnId << endl;
-            }
-
-            if (!pKF || pKF->GetMap() != pMap) {
-                //cout << "--Parent KF is from another map" << endl;
-                continue;
-            }
-
-            //cout << "3" << endl;
-
-            Trw = Trw * pKF->GetPose() * Twb; // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
-
-            // cout << "4" << endl;
-
-            Sophus::SE3f Twb = (pKF->mImuCalib.mTbc * (*lit) * Trw).inverse();
-            Eigen::Quaternionf q = Twb.unit_quaternion();
-            Eigen::Vector3f twb = Twb.translation();
-            f << setprecision(6) << 1e9 * (*lT) << " " << setprecision(9) << twb(0) << " " << twb(1) << " " << twb(2)
-              << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
-
-
-            // cout << "5" << endl;
-        }
-        //cout << "end saving trajectory" << endl;
-        f.close();
-        cout << endl << "End of saving trajectory to " << filename << " ..." << endl;
+        fFPose.close();
+        cout << endl << "Done" << endl;
     }
 
 
     void System::SaveKeyFrameTrajectoryEuRoC(const string &filename) {
-        cout << endl << "Saving keyframe trajectory to " << filename << " ..." << endl;
+        cout << endl << "Saving KeyFrame Trajectory to " << filename << " ..." << endl;
 
         vector<Map *> vpMaps = mpAtlas->GetAllMaps();
         Map *pBiggerMap;
@@ -478,9 +387,9 @@ namespace ORB_SLAM3 {
 
         // Transform all keyframes so that the first keyframe is at the origin.
         // After a loop closure the first keyframe might not be at the origin.
-        ofstream f;
-        f.open(filename.c_str());
-        f << fixed;
+        ofstream fKFPose;
+        fKFPose.open(filename.c_str());
+        fKFPose << fixed;
 
         for (size_t i = 0; i < vpKFs.size(); i++) {
             KeyFrame *pKF = vpKFs[i];
@@ -492,94 +401,12 @@ namespace ORB_SLAM3 {
             Sophus::SE3f Twb = pKF->GetImuPose();
             Eigen::Quaternionf q = Twb.unit_quaternion();
             Eigen::Vector3f twb = Twb.translation();
-            f << setprecision(6) << 1e9 * pKF->mdTimestamp << " " << setprecision(9)
+            fKFPose << setprecision(6) << 1e9 * pKF->mdTimestamp << " " << setprecision(9)
               << twb(0) << " " << twb(1) << " " << twb(2) << " "
               << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
         }
-        f.close();
-    }
-
-    void System::SaveKeyFrameTrajectoryEuRoC(const string &filename, Map *pMap) {
-        cout << endl << "Saving keyframe trajectory of map " << pMap->GetId() << " to " << filename << " ..." << endl;
-
-        vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
-        sort(vpKFs.begin(), vpKFs.end(), KeyFrame::lId);
-
-        // Transform all keyframes so that the first keyframe is at the origin.
-        // After a loop closure the first keyframe might not be at the origin.
-        ofstream f;
-        f.open(filename.c_str());
-        f << fixed;
-
-        for (size_t i = 0; i < vpKFs.size(); i++) {
-            KeyFrame *pKF = vpKFs[i];
-
-            if (!pKF || pKF->isBad())
-                continue;
-            Sophus::SE3f Twb = pKF->GetImuPose();
-            Eigen::Quaternionf q = Twb.unit_quaternion();
-            Eigen::Vector3f twb = Twb.translation();
-            f << setprecision(6) << 1e9 * pKF->mdTimestamp << " " << setprecision(9)
-              << twb(0) << " " << twb(1) << " " << twb(2) << " "
-              << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
-
-        }
-        f.close();
-    }
-
-
-    void System::SaveDebugData(const int &initIdx) {
-        // 0. Save initialization trajectory
-        SaveTrajectoryEuRoC(
-                "init_FrameTrajectoy_" + to_string(mpLocalMapper->mInitSect) + "_" + to_string(initIdx) + ".txt");
-
-        // 1. Save scale
-        ofstream f;
-        f.open("init_Scale_" + to_string(mpLocalMapper->mInitSect) + ".txt", ios_base::app);
-        f << fixed;
-        f << mpLocalMapper->mScale << endl;
-        f.close();
-
-        // 2. Save gravity direction
-        f.open("init_GDir_" + to_string(mpLocalMapper->mInitSect) + ".txt", ios_base::app);
-        f << fixed;
-        f << mpLocalMapper->mRwg(0, 0) << "," << mpLocalMapper->mRwg(0, 1) << "," << mpLocalMapper->mRwg(0, 2) << endl;
-        f << mpLocalMapper->mRwg(1, 0) << "," << mpLocalMapper->mRwg(1, 1) << "," << mpLocalMapper->mRwg(1, 2) << endl;
-        f << mpLocalMapper->mRwg(2, 0) << "," << mpLocalMapper->mRwg(2, 1) << "," << mpLocalMapper->mRwg(2, 2) << endl;
-        f.close();
-
-        // 3. Save computational cost
-        f.open("init_CompCost_" + to_string(mpLocalMapper->mInitSect) + ".txt", ios_base::app);
-        f << fixed;
-        f << mpLocalMapper->mCostTime << endl;
-        f.close();
-
-        // 4. Save biases
-        f.open("init_Biases_" + to_string(mpLocalMapper->mInitSect) + ".txt", ios_base::app);
-        f << fixed;
-        f << mpLocalMapper->mbg(0) << "," << mpLocalMapper->mbg(1) << "," << mpLocalMapper->mbg(2) << endl;
-        f << mpLocalMapper->mba(0) << "," << mpLocalMapper->mba(1) << "," << mpLocalMapper->mba(2) << endl;
-        f.close();
-
-        // 5. Save covariance matrix
-        f.open("init_CovMatrix_" + to_string(mpLocalMapper->mInitSect) + "_" + to_string(initIdx) + ".txt",
-               ios_base::app);
-        f << fixed;
-        for (int i = 0; i < mpLocalMapper->mcovInertial.rows(); i++) {
-            for (int j = 0; j < mpLocalMapper->mcovInertial.cols(); j++) {
-                if (j != 0)
-                    f << ",";
-                f << setprecision(15) << mpLocalMapper->mcovInertial(i, j);
-            }
-            f << endl;
-        }
-        f.close();
-
-        // 6. Save initialization time
-        f.open("init_Time_" + to_string(mpLocalMapper->mInitSect) + ".txt", ios_base::app);
-        f << fixed;
-        f << mpLocalMapper->mInitTime << endl;
-        f.close();
+        fKFPose.close();
+        cout << endl << "Done" << endl;
     }
 
 
@@ -628,7 +455,6 @@ namespace ORB_SLAM3 {
         } else {
             mpTracker->CreateMapInAtlas();
         }
-        mpTracker->NewDataset();
     }
 
     float System::GetImageScale() {
@@ -724,7 +550,7 @@ namespace ORB_SLAM3 {
             //Check if the vocabulary is the same
             string sInputVocabularyChecksum = CalculateCheckSum(msVocabularyFilePath, TEXT_FILE);
             if (sInputVocabularyChecksum.compare(sVocChecksum) != 0) {
-                cout << "The vocabulary load isn't the same which the load session was created " << endl;
+                cout << "The vocabulary load isn'mTs the same which the load session was created " << endl;
                 cout << "-Vocabulary name: " << sFileVoc << endl;
                 return false; // Both are differents
             }
