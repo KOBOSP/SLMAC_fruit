@@ -109,3 +109,6 @@ Viewer.MapHeight: 768.0
 
 LoopClosing.OpenLoop: 1
 System.thFarPoints: 100.0
+LocalMapping.StrongCovisTh: 15
+LocalMapping.WeakCovisTh: 3
+LocalMapping.CullKFRedundantTh: 0.5

@@ -86,7 +86,7 @@ namespace ORB_SLAM3 {
 
                         // 如果Frame中的该兴趣点已经有对应的MapPoint了,则退出该次循环
                         if (F.mvpMPs[idx])
-                            if (F.mvpMPs[idx]->Observations() > 0)
+                            if (F.mvpMPs[idx]->GetObsTimes() > 0)
                                 continue;
 
                         //如果是双目数据
@@ -159,7 +159,7 @@ namespace ORB_SLAM3 {
      */
     int ORBmatcher::SearchKFAndFByBoW(KeyFrame *pKF, Frame &F, vector<MapPoint *> &vpMapPointMatches) {
         // 获取该关键帧的地图点
-        const vector<MapPoint *> vpMapPointsKF = pKF->GetMapPointMatches();
+        const vector<MapPoint *> vpMapPointsKF = pKF->GetMapPointsInKF();
 
         // 和普通帧F特征点的索引一致
         vpMapPointMatches = vector<MapPoint *>(F.mnKPsLeftNum, static_cast<MapPoint *>(NULL));
@@ -668,12 +668,12 @@ namespace ORB_SLAM3 {
         // Step 1 分别取出两个关键帧的特征点、BoW 向量、地图点、描述子
         const vector<cv::KeyPoint> &vKeysUn1 = pKF1->mvKPsUn;
         const DBoW2::FeatureVector &vFeatVec1 = pKF1->mFeatVec;
-        const vector<MapPoint *> vpMapPoints1 = pKF1->GetMapPointMatches();
+        const vector<MapPoint *> vpMapPoints1 = pKF1->GetMapPointsInKF();
         const cv::Mat &Descriptors1 = pKF1->mDescriptors;
 
         const vector<cv::KeyPoint> &vKeysUn2 = pKF2->mvKPsUn;
         const DBoW2::FeatureVector &vFeatVec2 = pKF2->mFeatVec;
-        const vector<MapPoint *> vpMapPoints2 = pKF2->GetMapPointMatches();
+        const vector<MapPoint *> vpMapPoints2 = pKF2->GetMapPointsInKF();
         const cv::Mat &Descriptors2 = pKF2->mDescriptors;
 
         // 保存匹配结果
@@ -791,9 +791,9 @@ namespace ORB_SLAM3 {
         return nmatches;
     }
 
-    int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2,
-                                           vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo,
-                                           const bool bCoarse) {
+    int ORBmatcher::SearchKFsByTriangulation(KeyFrame *pKF1, KeyFrame *pKF2,
+                                             vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo,
+                                             const bool bCoarse) {
         const DBoW2::FeatureVector &vFeatVec1 = pKF1->mFeatVec;
         const DBoW2::FeatureVector &vFeatVec2 = pKF2->mFeatVec;
 
@@ -865,15 +865,12 @@ namespace ORB_SLAM3 {
                     }
                     // 如果mvuRight中的值大于0，表示是双目，且该特征点有深度值
                     const bool bStereo1 = (pKF1->mvfXInRight[idx1] >= 0);
-
                     if (bOnlyStereo)
                         if (!bStereo1)
                             continue;
 
                     // Step 2.4：通过特征点索引idx1在pKF1中取出对应的特征点
                     const cv::KeyPoint &kp1 = pKF1->mvKPsUn[idx1];
-
-                    const bool bRight1 = false;
                     //if(bRight1) continue;
                     // 通过特征点索引idx1在pKF1中取出对应的特征点的描述子
                     const cv::Mat &d1 = pKF1->mDescriptors.row(idx1);
@@ -1001,7 +998,7 @@ namespace ORB_SLAM3 {
         return nmatches;
     }
 
-    int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight) {
+    int ORBmatcher::SearchKFAndMapPointsByProjection(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight) {
         GeometricCamera *pCamera;
         Sophus::SE3f Tcw;
         Eigen::Vector3f Ow;
@@ -1162,14 +1159,14 @@ namespace ORB_SLAM3 {
                 if (pMPinKF) {
                     // 如果最佳匹配点有对应有效地图点，选择被观测次数最多的那个替换
                     if (!pMPinKF->isBad()) {
-                        if (pMPinKF->Observations() > pMP->Observations())
+                        if (pMPinKF->GetObsTimes() > pMP->GetObsTimes())
                             pMP->Replace(pMPinKF);
                         else
                             pMPinKF->Replace(pMP);
                     }
                 } else {
                     // 如果最佳匹配点没有对应地图点，添加观测信息
-                    pMP->AddObservation(pKF, bestIdx);
+                    pMP->AddObsKFAndLRIdx(pKF, bestIdx);
                     pKF->AddMapPoint(pMP, bestIdx);
                 }
                 nFused++;
@@ -1306,7 +1303,7 @@ namespace ORB_SLAM3 {
                         vpReplacePoint[iMP] = pMPinKF;
                 } else {
                     // 如果这个地图点不存在，直接添加
-                    pMP->AddObservation(pKF, bestIdx);
+                    pMP->AddObsKFAndLRIdx(pKF, bestIdx);
                     pKF->AddMapPoint(pMP, bestIdx);
                 }
                 nFused++;
@@ -1347,10 +1344,10 @@ namespace ORB_SLAM3 {
         Sophus::Sim3f S21 = S12.inverse();
 
         // 取出关键帧中的地图点
-        const vector<MapPoint *> vpMapPoints1 = pKF1->GetMapPointMatches();
+        const vector<MapPoint *> vpMapPoints1 = pKF1->GetMapPointsInKF();
         const int N1 = vpMapPoints1.size();
 
-        const vector<MapPoint *> vpMapPoints2 = pKF2->GetMapPointMatches();
+        const vector<MapPoint *> vpMapPoints2 = pKF2->GetMapPointsInKF();
         const int N2 = vpMapPoints2.size();
 
         // pKF1中特征点的匹配情况，有匹配为true，否则false
@@ -1659,7 +1656,7 @@ namespace ORB_SLAM3 {
 
                         // 如果该特征点已经有对应的MapPoint了,则退出该次循环
                         if (CurrentFrame.mvpMPs[i2])
-                            if (CurrentFrame.mvpMPs[i2]->Observations() > 0)
+                            if (CurrentFrame.mvpMPs[i2]->GetObsTimes() > 0)
                                 continue;
 
                         if (CurrentFrame.mvfXInRight[i2] > 0) {
@@ -1748,7 +1745,7 @@ namespace ORB_SLAM3 {
         //! 原作者代码是 const float factor = 1.0f/HISTO_LENGTH; 是错误的，更改为下面代码
         const float factor = HISTO_LENGTH/360.0f;
 
-        const vector<MapPoint *> vpMPs = pKF->GetMapPointMatches();
+        const vector<MapPoint *> vpMPs = pKF->GetMapPointsInKF();
 
         // Step 2 遍历关键帧中的每个地图点，通过相机投影模型，得到投影到当前帧的像素坐标
         for (size_t i = 0, iend = vpMPs.size(); i < iend; i++) {

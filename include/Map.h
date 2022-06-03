@@ -85,8 +85,8 @@ public:
     std::vector<MapPoint*> GetAllMapPoints();
     std::vector<MapPoint*> GetReferenceMapPoints();
 
-    long unsigned int MapPointsInMap();
-    long unsigned  KeyFramesInMap();
+    long unsigned int GetMapPointsNumInMap();
+    long unsigned  GetKeyFramesNumInMap();
 
     long unsigned int GetId();
 

@@ -156,6 +156,8 @@ namespace ORB_SLAM3 {
         std::string msLoadFrom, msSaveTo;
         float mfThFarPoints;
         bool mbOpenLoop;
+        float mfCullKFRedundantTh;
+        int mnWeakCovisTh,mnStrongCovisTh;
     };
 };
 

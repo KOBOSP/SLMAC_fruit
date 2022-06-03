@@ -28,7 +28,7 @@ namespace ORB_SLAM3 {
     KeyFrame::KeyFrame()
             : mnFrameId(0), mdTimestamp(0), mnGridCols(FRAME_GRID_COLS), mnGridRows(FRAME_GRID_ROWS),
               mfGridElementWidthInv(0), mfGridElementHeightInv(0),
-              mnTrackReferenceForFrame(0), mnFuseTargetForKF(0), mnBALocalForKF(0), mnBAFixedForKF(0),
+              mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAFlagInLocalMapping(0), mnBAFixedForKF(0),
               mnBALocalForMerge(0),
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnMergeQuery(0), mnMergeWords(0),
               mnBAGlobalForKF(0),
@@ -52,7 +52,7 @@ namespace ORB_SLAM3 {
               mnGridCols(FRAME_GRID_COLS),
               mnGridRows(FRAME_GRID_ROWS),
               mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
-              mnTrackReferenceForFrame(0), mnFuseTargetForKF(0), mnBALocalForKF(0), mnBAFixedForKF(0),
+              mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAFlagInLocalMapping(0), mnBAFixedForKF(0),
               mnBALocalForMerge(0),
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnBAGlobalForKF(0),
               mnPlaceRecognitionQuery(0), mnPlaceRecognitionWords(0), mPlaceRecognitionScore(0),
@@ -286,7 +286,7 @@ namespace ORB_SLAM3 {
     }
 
 // 得到该关键帧与pKF的权重
-    int KeyFrame::GetWeight(KeyFrame *pKF) {
+    int KeyFrame::GetWeightBetweenKF(KeyFrame *pKF) {
         unique_lock<mutex> lock(mMutexConnections);
 
         // 没有连接的话权重也就是共视点个数就是0
@@ -366,7 +366,7 @@ namespace ORB_SLAM3 {
                 if (!pMP->isBad()) {
                     if (bCheckObs) {
                         // 满足输入阈值要求的地图点计数加1
-                        if (mvpMapPoints[i]->Observations() >= minObs){
+                        if (mvpMapPoints[i]->GetObsTimes() >= minObs){
                             nPoints++;
                         }
                     }
@@ -378,7 +378,7 @@ namespace ORB_SLAM3 {
     }
 
 // 获取当前关键帧的具体的地图点
-    vector<MapPoint *> KeyFrame::GetMapPointMatches() {
+    vector<MapPoint *> KeyFrame::GetMapPointsInKF() {
         unique_lock<mutex> lock(mMutexFeatures);
         return mvpMapPoints;
     }
@@ -398,11 +398,9 @@ namespace ORB_SLAM3 {
  * 3. 对这些连接按照权重从大到小进行排序，以方便将来的处理
  *    更新完covisibility图之后，如果没有初始化过，则初始化为连接权重最大的边（与其它关键帧共视程度最高的那个关键帧），类似于最大生成树
  */
-    void KeyFrame::UpdateConnections(bool upParent) {
+    void KeyFrame::UpdateCovisGraph(bool bShow) {
         map<KeyFrame *, int> KFcounter;
-
         vector<MapPoint *> vpMP;
-
         {
             // 获得该关键帧的所有3D点
             unique_lock<mutex> lockMPs(mMutexFeatures);
@@ -415,16 +413,12 @@ namespace ORB_SLAM3 {
         // Step 1 统计每一个地图点都有多少关键帧与当前关键帧存在共视关系，统计结果放在KFcounter
         for (vector<MapPoint *>::iterator vit = vpMP.begin(), vend = vpMP.end(); vit != vend; vit++) {
             MapPoint *pMP = *vit;
-
             if (!pMP)
                 continue;
-
             if (pMP->isBad())
                 continue;
-
             // 对于每一个MapPoint点，observations记录了可以观测到该MapPoint的所有关键帧
-            map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
-
+            map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
             for (map<KeyFrame *, tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
                  mit != mend; mit++) {
                 if (mit->first->mnId == mnId || mit->first->isBad() || mit->first->GetMap() != mpMap)
@@ -452,11 +446,11 @@ namespace ORB_SLAM3 {
         // pair<int,KeyFrame*>将关键帧的权重写在前面，关键帧写在后面方便后面排序
         vector<pair<int, KeyFrame *>> vPairs;
         vPairs.reserve(KFcounter.size());
-        if (!upParent)
+        if (!bShow)
             cout << "UPDATE_CONN: current KF " << mnId << endl;
         // Step 2 找到对应权重最大的关键帧（共视程度最高的关键帧）
         for (map<KeyFrame *, int>::iterator mit = KFcounter.begin(), mend = KFcounter.end(); mit != mend; mit++) {
-            if (!upParent)
+            if (!bShow)
                 cout << "  UPDATE_CONN: KF " << mit->first->mnId << " ; num matches: " << mit->second << endl;
             if (mit->second > nmax) {
                 nmax = mit->second;
@@ -684,7 +678,7 @@ namespace ORB_SLAM3 {
                         for (set<KeyFrame *>::iterator spcit = sParentCandidates.begin(), spcend = sParentCandidates.end();
                              spcit != spcend; spcit++) {
                             if (vpConnected[i]->mnId == (*spcit)->mnId) {
-                                int w = pKF->GetWeight(vpConnected[i]);
+                                int w = pKF->GetWeightBetweenKF(vpConnected[i]);
                                 // 寻找并更新权值最大的那个共视关系
                                 if (w > max) {
                                     pC = pKF;                   // 子关键帧

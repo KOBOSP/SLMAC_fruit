@@ -561,7 +561,7 @@ namespace ORB_SLAM3 {
                                           Converter::toVector3d(mScw.rowRange(0, 3).col(3)), 1.0);
 
                 vector<MapPoint *> vpMatchedMP;
-                vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint *>(NULL));
+                vpMatchedMP.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
 
                 // 再次通过优化后的Sim3搜索匹配点
                 nNumProjMatches = FindMatchesByProjection(pCurrentKF, pMatchedKF, gScw_estimation, spAlreadyMatchedMPs,
@@ -685,11 +685,11 @@ namespace ORB_SLAM3 {
 
             // 下面两个变量是为了sim3 solver准备的
             //记录窗口中的地图点能在当前关键帧中找到的匹配的点(数量的上限是当前关键帧地图点的数量)
-            std::vector<MapPoint *> vpMatchedPoints = std::vector<MapPoint *>(mpCurrentKF->GetMapPointMatches().size(),
+            std::vector<MapPoint *> vpMatchedPoints = std::vector<MapPoint *>(mpCurrentKF->GetMapPointsInKF().size(),
                                                                               static_cast<MapPoint *>(NULL));
             // 记录上面的地图点分别对应窗口中的关键帧(数量的上限是当前关键帧地图点的数量)
             std::vector<KeyFrame *> vpKeyFrameMatchedMP = std::vector<KeyFrame *>(
-                    mpCurrentKF->GetMapPointMatches().size(), static_cast<KeyFrame *>(NULL));
+                    mpCurrentKF->GetMapPointsInKF().size(), static_cast<KeyFrame *>(NULL));
 
             // 记录在W_km中有最多匹配点的帧的局部index, 这个后面没有用到
             int nIndexMostBoWMatchesKF = 0;
@@ -790,7 +790,7 @@ namespace ORB_SLAM3 {
                     // 遍历窗Wm内的所有关键帧
                     for (KeyFrame *pCovKFi : vpCovKFi) {
                         // 遍历窗口内每个关键帧的所有地图点
-                        for (MapPoint *pCovMPij : pCovKFi->GetMapPointMatches()) {
+                        for (MapPoint *pCovMPij : pCovKFi->GetMapPointsInKF()) {
                             // 如果指针为空或者改地图点被标记为bad
                             if (!pCovMPij || pCovMPij->isBad())
                                 continue;
@@ -819,9 +819,9 @@ namespace ORB_SLAM3 {
 
                     // 记录最后searchByProjection的结果
                     vector<MapPoint *> vpMatchedMP;
-                    vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint *>(NULL));
+                    vpMatchedMP.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
                     vector<KeyFrame *> vpMatchedKF;
-                    vpMatchedKF.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<KeyFrame *>(NULL));
+                    vpMatchedKF.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<KeyFrame *>(NULL));
                     // 3.3.1 重新利用之前计算的mScw信息, 通过投影寻找更多的匹配点
                     int numProjMatches = matcher.SearchByProjection(mpCurrentKF, mScw, vpMapPoints, vpKeyFrames,
                                                                     vpMatchedMP, vpMatchedKF, 8, 1.5);
@@ -847,7 +847,7 @@ namespace ORB_SLAM3 {
                             Sophus::Sim3f mScw = Converter::toSophus(gScw);
 
                             vector<MapPoint *> vpMatchedMP;
-                            vpMatchedMP.resize(mpCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint *>(NULL));
+                            vpMatchedMP.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
                             // 3.3.4 重新利用之前计算的mScw信息, 通过更小的半径和更严格的距离的投影寻找匹配点
                             // 5 : 半径的增益系数(对比之前下降了)---> 更小的半径, 1.0 , hamming distance 的阀值增益系数---> 允许更小的距离
                             int numProjOptMatches = matcher.SearchByProjection(mpCurrentKF, mScw, vpMapPoints,
@@ -1066,7 +1066,7 @@ namespace ORB_SLAM3 {
         // 对于窗口内每个关键帧
         for (KeyFrame *pKFi : vpCovKFm) {
             // 对于每个关键帧的地图点
-            for (MapPoint *pMPij : pKFi->GetMapPointMatches()) {
+            for (MapPoint *pMPij : pKFi->GetMapPointsInKF()) {
                 // 如果指针不是空,且点不是bad
                 if (!pMPij || pMPij->isBad())
                     continue;
@@ -1083,7 +1083,7 @@ namespace ORB_SLAM3 {
         ORBmatcher matcher(0.9, true);
 
         // 3. 初始化被匹配到的地图点容器, 匹配上限是当前帧的地图点数量
-        vpMatchedMapPoints.resize(pCurrentKF->GetMapPointMatches().size(), static_cast<MapPoint *>(NULL));
+        vpMatchedMapPoints.resize(pCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
         // 把窗口中的点向当前关键帧投影, 搜索匹配点, 注意验证的时候用的搜索半径是最小的
         int num_matches = matcher.SearchByProjection(pCurrentKF, mScw, vpMapPoints, vpMatchedMapPoints, 3, 1.5);
 
@@ -1129,7 +1129,7 @@ namespace ORB_SLAM3 {
         //assert(mpCurrentKF->GetMap()->CheckEssentialGraph());
         // Step 2. 根据共视关系更新当前关键帧与其它关键帧之间的连接关系
         // 因为之前闭环检测、计算Sim3中改变了该关键帧的地图点，所以需要更新
-        mpCurrentKF->UpdateConnections();
+        mpCurrentKF->UpdateCovisGraph();
         //assert(mpCurrentKF->GetMap()->CheckEssentialGraph());
 
         // Retrive keyframes connected to the current keyframe and compute corrected Sim3 pose by propagation
@@ -1211,7 +1211,7 @@ namespace ORB_SLAM3 {
                 /*Sophus::SE3d correctedTiw(g2oCorrectedSiw.rotation(),g2oCorrectedSiw.translation() / g2oCorrectedSiw.scale());
             pKFi->SetPose(correctedTiw.cast<float>());*/
 
-                vector<MapPoint *> vpMPsi = pKFi->GetMapPointMatches();
+                vector<MapPoint *> vpMPsi = pKFi->GetMapPointsInKF();
 
                 // 遍历待矫正共视关键帧中的每一个地图点
                 for (size_t iMP = 0, endMPi = vpMPsi.size(); iMP < endMPi; iMP++) {
@@ -1252,7 +1252,7 @@ namespace ORB_SLAM3 {
                 // Make sure connections are updated
                 // 3.3 根据共视关系更新当前帧与其它关键帧之间的连接
                 // 地图点的位置改变了,可能会引起共视关系\权值的改变
-                pKFi->UpdateConnections();
+                pKFi->UpdateCovisGraph();
             }
             // TODO Check this index increasement
             mpAtlas->GetCurrentMap()->IncreaseChangeIndex();
@@ -1277,7 +1277,7 @@ namespace ORB_SLAM3 {
                     else {
                         // 如果当前帧没有该MapPoint，则直接添加
                         mpCurrentKF->AddMapPoint(pLoopMP, i);
-                        pLoopMP->AddObservation(mpCurrentKF, i);
+                        pLoopMP->AddObsKFAndLRIdx(mpCurrentKF, i);
                         pLoopMP->ComputeDistinctiveDescriptors();
                     }
                 }
@@ -1287,7 +1287,7 @@ namespace ORB_SLAM3 {
 
         // Project MapPoints observed in the neighborhood of the loop keyframe
         // into the current keyframe and neighbors using corrected poses.
-        // Fuse duplications.
+        // SearchKFAndMapPointsByProjection duplications.
         // Step 5. 将闭环相连关键帧组mvpLoopMapPoints 投影到当前关键帧组中，进行匹配，融合，新增或替换当前关键帧组中KF的地图点
         // 因为 闭环相连关键帧组mvpLoopMapPoints 在地图中时间比较久经历了多次优化，认为是准确的
         // 而当前关键帧组中的关键帧的地图点是最近新计算的，可能有累积误差
@@ -1308,7 +1308,7 @@ namespace ORB_SLAM3 {
 
             // Update connections. Detect new links.
             // 6.3 更新一级相连关键帧的连接关系(会把当前关键帧添加进去,因为地图点已经更新和替换了)
-            pKFi->UpdateConnections();
+            pKFi->UpdateCovisGraph();
             // 6.4 取出该帧更新后的连接关系
             LoopConnections[pKFi] = pKFi->GetConnectedKeyFrames();
             // 6.5 从连接关系中去除闭环之前的二级连接关系，剩下的连接就是由闭环得到的连接关系
@@ -1348,7 +1348,7 @@ namespace ORB_SLAM3 {
 
         // Launch a new thread to perform Global Bundle Adjustment (Only if few keyframes, if not it would take too much time)
         // 闭环地图没有imu初始化或者 仅有一个地图且内部关键帧<200时才执行全局BA，否则太慢
-        if (!pLoopMap->isImuInitialized() || (pLoopMap->KeyFramesInMap() < 200 && mpAtlas->CountMaps() == 1)) {
+        if (!pLoopMap->isImuInitialized() || (pLoopMap->GetKeyFramesNumInMap() < 200 && mpAtlas->CountMaps() == 1)) {
             // Step 9. 新建一个线程用于全局BA优化
             // OptimizeEssentialGraph只是优化了一些主要关键帧的位姿，这里进行全局BA可以全局优化所有位姿和MapPoints
 
@@ -1433,7 +1433,7 @@ namespace ORB_SLAM3 {
 
         // Ensure current keyframe is updated
         // 先保证当前关键帧的链接关系是最新的
-        mpCurrentKF->UpdateConnections();
+        mpCurrentKF->UpdateCovisGraph();
 
         // Step 1 构建当前关键帧和融合关键帧的局部窗口(关键帧+地图点)
         //Get the current KF and its neighbors(visual->covisibles; inertial->temporal+covisibles)
@@ -1814,7 +1814,7 @@ namespace ORB_SLAM3 {
 
         //Update the connections between the local window
         // 更新融合帧局部的连接关系
-        mpMergeMatchedKF->UpdateConnections();
+        mpMergeMatchedKF->UpdateCovisGraph();
 
         // 重新拿到融合帧局部的共视帧窗窗口
         vpMergeConnectedKFs = mpMergeMatchedKF->GetVectorCovisibleKeyFrames();
@@ -1824,7 +1824,7 @@ namespace ORB_SLAM3 {
 
         // Project MapPoints observed in the neighborhood of the merge keyframe
         // into the current keyframe and neighbors using corrected poses.
-        // Fuse duplications.
+        // SearchKFAndMapPointsByProjection duplications.
         //std::cout << "[Merge]: start fuse points" << std::endl;
         // Step 5 把融合关键帧的共视窗口里的地图点投到当前关键帧的共视窗口里,把重复的点融合掉(以旧换新)
         SearchAndFuse(vCorrectedSim3, vpCheckFuseMapPoint);
@@ -1837,14 +1837,14 @@ namespace ORB_SLAM3 {
             if (!pKFi || pKFi->isBad())
                 continue;
 
-            pKFi->UpdateConnections();
+            pKFi->UpdateCovisGraph();
         }
         // 更新融合关键帧共视窗口内所有关键帧的连接
         for (KeyFrame *pKFi : spMergeConnectedKFs) {
             if (!pKFi || pKFi->isBad())
                 continue;
 
-            pKFi->UpdateConnections();
+            pKFi->UpdateCovisGraph();
         }
 
         //std::cout << "[Merge]: Start welding bundle adjustment" << std::endl;
@@ -1928,7 +1928,7 @@ namespace ORB_SLAM3 {
         // 这里没有imu, 所以isImuInitialized一定是false, 此时地图融合Atlas至少2个地图，所以第二个条件也一定是false
         // Step 9 全局BA
         if (bRelaunchBA &&
-            (!pCurrentMap->isImuInitialized() || (pCurrentMap->KeyFramesInMap() < 200 && mpAtlas->CountMaps() == 1))) {
+            (!pCurrentMap->isImuInitialized() || (pCurrentMap->GetKeyFramesNumInMap() < 200 && mpAtlas->CountMaps() == 1))) {
             // Launch a new thread to perform Global Bundle Adjustment
             mbRunningGBA = true;
             mbFinishedGBA = false;
@@ -2016,10 +2016,10 @@ namespace ORB_SLAM3 {
             // 锁住altas更新地图
             unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
 
-            //cout << "KFs before empty: " << mpAtlas->GetCurrentMap()->KeyFramesInMap() << endl;
+            //cout << "KFs before empty: " << mpAtlas->GetCurrentMap()->GetKeyFramesNumInMap() << endl;
             // 队列里还没来得及处理的关键帧清空
             mpLocalMapper->EmptyQueue();
-            //cout << "KFs after empty: " << mpAtlas->GetCurrentMap()->KeyFramesInMap() << endl;
+            //cout << "KFs after empty: " << mpAtlas->GetCurrentMap()->GetKeyFramesNumInMap() << endl;
 
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
             //cout << "updating active map to merge reference" << endl;
@@ -2039,7 +2039,7 @@ namespace ORB_SLAM3 {
 
         // Step 4 如果当前地图IMU没有完全初始化，帮助IMU快速优化；
         // 反正都要融合了，这里就拔苗助长完成IMU优化，回头直接全部放到融合地图里就好了
-        const int numKFnew = pCurrentMap->KeyFramesInMap();
+        const int numKFnew = pCurrentMap->GetKeyFramesNumInMap();
 
         if (!pCurrentMap->GetIniertialBA2()) {
             // Map is not completly initialized
@@ -2125,7 +2125,7 @@ namespace ORB_SLAM3 {
         cout << "BAD ESSENTIAL GRAPH!!" << endl;*/
 
         //cout << "Update essential graph" << endl;
-        // mpCurrentKF->UpdateConnections(); // to put at false mbFirstConnection
+        // mpCurrentKF->UpdateCovisGraph(); // to put at false mbFirstConnection
         // Step 6 融合新旧地图的生成树
         pMergeMap->GetOriginKF()->SetFirstConnection(false);
         pNewChild = mpMergeMatchedKF->GetParent(); // Old parent, it will be the new child of this KF
@@ -2165,7 +2165,7 @@ namespace ORB_SLAM3 {
     mvpMergeConnectedKFs.push_back(mpMergeMatchedKF);*/
 
         // 拿出当前关键帧的局部窗口, 确保最后是(1+5), 1: 融合帧自己 2: 5个共视关键帧
-        mpCurrentKF->UpdateConnections();
+        mpCurrentKF->UpdateCovisGraph();
         vpCurrentConnectedKFs.push_back(mpCurrentKF);
         /*vpCurrentConnectedKFs = mpCurrentKF->GetVectorCovisibleKeyFrames();
     vpCurrentConnectedKFs.push_back(mpCurrentKF);*/
@@ -2216,7 +2216,7 @@ namespace ORB_SLAM3 {
             if (!pKFi || pKFi->isBad())
                 continue;
 
-            pKFi->UpdateConnections();
+            pKFi->UpdateCovisGraph();
         }
 
         // 更新融合关键帧共视窗口内所有关键帧的连接
@@ -2224,7 +2224,7 @@ namespace ORB_SLAM3 {
             if (!pKFi || pKFi->isBad())
                 continue;
 
-            pKFi->UpdateConnections();
+            pKFi->UpdateCovisGraph();
         }
         //cout << "end update connections" << endl;
 
@@ -2277,7 +2277,7 @@ namespace ORB_SLAM3 {
                     continue;
                 }
 
-                map < KeyFrame * , tuple < int, int >> mMPijObs = pMPij->GetObservations();
+                map < KeyFrame * , tuple < int, int >> mMPijObs = pMPij->GetObsKFAndLRIdx();
                 for (KeyFrame *pKFi2 : spKFsMap2) {
                     if (mMPijObs.find(pKFi2) != mMPijObs.end()) {
                         if (mMatchedMP.find(pKFi2) != mMatchedMP.end()) {
@@ -2338,7 +2338,7 @@ namespace ORB_SLAM3 {
             const int nLP = vpMapPoints.size();
             for (int i = 0; i < nLP; i++) {
                 // vpReplacePoints如果存在新点，则替换成老点，这里注意如果老点已经在新点对应的kf中
-                // 也就是之前某次matcher.Fuse 把老点放入到新的关键帧中，下次遍历时，如果老点已经在被代替点的对应的某一个关键帧内
+                // 也就是之前某次matcher.SearchKFAndMapPointsByProjection 把老点放入到新的关键帧中，下次遍历时，如果老点已经在被代替点的对应的某一个关键帧内
                 MapPoint *pRep = vpReplacePoints[i];
                 if (pRep) {
 
@@ -2597,7 +2597,7 @@ namespace ORB_SLAM3 {
 
                     cv::cvtColor(imLeft, imLeft, CV_GRAY2BGR);
 
-                    vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
+                    vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointsInKF();
                     int num_MPs = 0;
                     for(int i=0; i<vpMapPointsKF.size(); ++i)
                     {
@@ -2606,7 +2606,7 @@ namespace ORB_SLAM3 {
                             continue;
                         }
                         num_MPs += 1;
-                        string strNumOBs = to_string(vpMapPointsKF[i]->Observations());
+                        string strNumOBs = to_string(vpMapPointsKF[i]->GetObsTimes());
                         cv::circle(imLeft, pKF->mvKPsLeft[i].pt, 2, cv::Scalar(0, 255, 0));
                         cv::putText(imLeft, strNumOBs, pKF->mvKPsLeft[i].pt, CV_FONT_HERSHEY_DUPLEX, 1, cv::Scalar(255, 0, 0));
                     }

@@ -44,7 +44,7 @@ namespace ORB_SLAM3 {
         mpKF1 = pKF1;
         mpKF2 = pKF2;
 
-        vector<MapPoint *> vpKeyFrameMP1 = pKF1->GetMapPointMatches();
+        vector<MapPoint *> vpKeyFrameMP1 = pKF1->GetMapPointsInKF();
 
         mN1 = vpMatched12.size();
 

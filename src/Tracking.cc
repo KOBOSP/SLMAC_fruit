@@ -559,8 +559,8 @@ namespace ORB_SLAM3 {
                 // Step 6.3 如果经过跟踪参考关键帧、恒速模型跟踪都失败的话，并满足一定条件就要标记为RECENTLY_LOST或LOST
                 if (!bOK) {
                     if ((mCurFrame.mnId > (mnLastRelocFrameId + mnFramesToResetIMU)) &&
-                        (pCurrentMap->KeyFramesInMap() > 10)) {
-                        // cout << "KF in map: " << pCurrentMap->KeyFramesInMap() << endl;
+                        (pCurrentMap->GetKeyFramesNumInMap() > 10)) {
+                        // cout << "KF in map: " << pCurrentMap->GetKeyFramesNumInMap() << endl;
                         // 条件1：当前地图中关键帧数目较多（大于10）
                         // 条件2（隐藏条件）：当前帧距离上次重定位帧超过1s或者非IMU模式
                         // 同时满足条件1，2，则将状态标记为RECENTLY_LOST，后面会结合IMU预测的位姿看看能不能拽回来
@@ -594,7 +594,7 @@ namespace ORB_SLAM3 {
                 // 开启一个新地图
                 Verbose::PrintMess("A new map is started...", Verbose::VERBOSITY_NORMAL);
 
-                if (pCurrentMap->KeyFramesInMap() < 10) {
+                if (pCurrentMap->GetKeyFramesNumInMap() < 10) {
                     mpSystem->ResetActiveMap();
                     Verbose::PrintMess("Reseting current map...", Verbose::VERBOSITY_NORMAL);
                 } else {
@@ -728,7 +728,7 @@ namespace ORB_SLAM3 {
                 for (int i = 0; i < mCurFrame.mnKPsLeftNum; i++) {
                     MapPoint *pMP = mCurFrame.mvpMPs[i];
                     if (pMP)
-                        if (pMP->Observations() < 1) {
+                        if (pMP->GetObsTimes() < 1) {
                             mCurFrame.mvbOutlier[i] = false;
                             mCurFrame.mvpMPs[i] = static_cast<MapPoint *>(NULL);
                         }
@@ -764,7 +764,7 @@ namespace ORB_SLAM3 {
             // Step 10 如果第二阶段跟踪失败，跟踪状态为LOST
             else if (mState == LOST) {
                 // 如果地图中关键帧小于10，重置当前地图，退出当前跟踪
-                if (pCurrentMap->KeyFramesInMap() <= 10)  // 上一个版本这里是5
+                if (pCurrentMap->GetKeyFramesNumInMap() <= 10)  // 上一个版本这里是5
                 {
                     mpSystem->ResetActiveMap();
                     return;
@@ -875,7 +875,7 @@ namespace ORB_SLAM3 {
                 // mBiasOri.该MapPoint的描述子
                 // c.该MapPoint的平均观测方向和深度范围
                 pKFini->AddMapPoint(pNewMP, i);
-                pNewMP->AddObservation(pKFini, i);
+                pNewMP->AddObsKFAndLRIdx(pKFini, i);
                 pNewMP->ComputeDistinctiveDescriptors();
                 pNewMP->UpdateNormalAndDepth();
                 mpAtlas->AddMapPoint(pNewMP);
@@ -951,7 +951,7 @@ namespace ORB_SLAM3 {
  * @brief 检查上一帧中的地图点是否需要被替换
  *
  * Local Mapping线程可能会将关键帧中某些地图点进行替换，由于tracking中需要用到上一帧地图点，所以这里检查并更新上一帧中被替换的地图点
- * @see LocalMapping::SearchInNeighbors()
+ * @see LocalMapping::FuseMapPointsInNeighbors()
  */
     void Tracking::CheckReplacedInLastFrame() {
         for (int i = 0; i < mLastFrame.mnKPsLeftNum; i++) {
@@ -1021,7 +1021,7 @@ namespace ORB_SLAM3 {
                     pMP->mbTrackInLeftView = false;
                     pMP->mnLastFrameSeen = mCurFrame.mnId;
                     nmatches--;
-                } else if (mCurFrame.mvpMPs[i]->Observations() > 0) {
+                } else if (mCurFrame.mvpMPs[i]->GetObsTimes() > 0) {
                     nmatchesMap++;
                 }
             }
@@ -1115,7 +1115,7 @@ namespace ORB_SLAM3 {
                     pMP->mbTrackInRightView = false;
                     pMP->mnLastFrameSeen = mCurFrame.mnId;
                     nmatches--;
-                } else if (mCurFrame.mvpMPs[i]->Observations() > 0)
+                } else if (mCurFrame.mvpMPs[i]->GetObsTimes() > 0)
                     // 累加成功匹配到的地图点数目
                     nmatchesMap++;
             }
@@ -1213,8 +1213,8 @@ namespace ORB_SLAM3 {
                     // 找到该点的帧数mnFound 加 1
                     mCurFrame.mvpMPs[i]->IncreaseFound();
                     // 如果该地图点被相机观测数目nObs大于0，匹配内点计数+1
-                    // nObs： 被观测到的相机数目，单目+1，双目或RGB-D则+2
-                    if (mCurFrame.mvpMPs[i]->Observations() > 0)
+                    // nTimesObs： 被观测到的相机数目，单目+1，双目或RGB-D则+2
+                    if (mCurFrame.mvpMPs[i]->GetObsTimes() > 0)
                         mnMatchesInliers++;
                 }
                 // 如果这个地图点是外点,并且当前相机输入还是双目的时候,就删除这个点
@@ -1224,7 +1224,6 @@ namespace ORB_SLAM3 {
 
         // Decide if the tracking was succesful
         // More restrictive if there was a relocalization recently
-        mpLocalMapper->mnMatchesInliers = mnMatchesInliers;
         // Step 5：根据跟踪匹配数目及重定位情况决定是否跟踪成功
         // 如果最近刚刚发生了重定位,那么至少成功匹配50个点才认为是成功跟踪
         if (mCurFrame.mnId < mnLastRelocFrameId + mnMaxFrames && mnMatchesInliers < 50)
@@ -1456,7 +1455,7 @@ namespace ORB_SLAM3 {
                 if (!pMP){
                     bCreateNew = true;
                 }
-                else if (pMP->Observations() < 1) {
+                else if (pMP->GetObsTimes() < 1) {
                     bCreateNew = true;
                     mCurFrame.mvpMPs[i] = static_cast<MapPoint *>(NULL);
                 }
@@ -1468,7 +1467,7 @@ namespace ORB_SLAM3 {
 
                     MapPoint *pNewMP = new MapPoint(x3D, pKF, mpAtlas->GetCurrentMap());
                     // 这些添加属性的操作是每次创建MapPoint后都要做的
-                    pNewMP->AddObservation(pKF, i);
+                    pNewMP->AddObsKFAndLRIdx(pKF, i);
 
                     pKF->AddMapPoint(pNewMP, i);
                     pNewMP->ComputeDistinctiveDescriptors();
@@ -1620,7 +1619,7 @@ namespace ORB_SLAM3 {
         for (vector<KeyFrame *>::const_reverse_iterator itKF = mvpLocalKeyFrames.rbegin(), itEndKF = mvpLocalKeyFrames.rend();
              itKF != itEndKF; ++itKF) {
             KeyFrame *pKF = *itKF;
-            const vector<MapPoint *> vpMPs = pKF->GetMapPointMatches();
+            const vector<MapPoint *> vpMPs = pKF->GetMapPointsInKF();
 
             // step 2：将局部关键帧的地图点添加到mvpLocalMapPoints
             for (vector<MapPoint *>::const_iterator itMP = vpMPs.begin(), itEndMP = vpMPs.end();
@@ -1663,7 +1662,7 @@ namespace ORB_SLAM3 {
                 if (pMP) {
                     if (!pMP->isBad()) {
                         // 得到观测到该地图点的关键帧和该地图点在关键帧中的索引
-                        const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
+                        const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
                         // 由于一个地图点可以被多个关键帧观测到,因此对于每一次观测,都对观测到这个地图点的关键帧进行累计投票
                         for (map<KeyFrame *, tuple<int, int>>::const_iterator it = observations.begin(), itend = observations.end();
                              it != itend; it++)
@@ -1685,7 +1684,7 @@ namespace ORB_SLAM3 {
                     if (!pMP)
                         continue;
                     if (!pMP->isBad()) {
-                        const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
+                        const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
                         for (map<KeyFrame *, tuple<int, int>>::const_iterator it = observations.begin(), itend = observations.end();
                              it != itend; it++)
                             keyframeCounter[it->first]++;

@@ -77,23 +77,14 @@ public:
 
     bool IsInitializing();
     double GetCurrKFTime();
-    KeyFrame* GetCurrKF();
 
-    std::mutex mMutexImuInit;
-
-    Eigen::MatrixXd mcovInertial;
     Eigen::Matrix3d mRwg;
     Eigen::Vector3d mbg;
     Eigen::Vector3d mba;
     double mScale;
-    double mInitTime;
-    double mCostTime;
 
-    unsigned int mInitSect;
     unsigned int mIdxInit;
-    unsigned int mnKFs;
     double mFirstTs;
-    int mnMatchesInliers;
     bool mbBadImu;
     // not consider far points (clouds)
     bool mbFarPoints;
@@ -106,7 +97,7 @@ protected:
     void CreateNewMapPoints();
 
     void MapPointCulling();
-    void SearchInNeighbors();
+    void FuseMapPointsInNeighbors();
     void KeyFrameCulling();
 
     System *mpSystem;
@@ -117,7 +108,6 @@ protected:
     void ResetIfRequested();
     bool mbResetRequested;
     bool mbResetRequestedActiveMap;
-    Map* mpMapToReset;
     std::mutex mMutexReset;
 
     bool CheckFinishRequest();
@@ -155,15 +145,9 @@ protected:
     bool bInitializing;
 
     Eigen::MatrixXd infoInertial;
-    int mNumLM;
-    int mNumKFCulling;
-
+    float mfCullKFRedundantTh;
     float mTinit;
-
-    int countRefinement;
-
-    //DEBUG
-    ofstream f_lm;
+    int mnWeakCovisTh,mnStrongCovisTh;
 
     };
 

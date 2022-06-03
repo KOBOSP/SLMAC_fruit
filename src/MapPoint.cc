@@ -30,8 +30,8 @@ namespace ORB_SLAM3 {
  * @brief 构造函数
  */
     MapPoint::MapPoint() :
-            mnFirstKFid(0), mnFirstFrame(0), nObs(0), mnTrackReferenceForFrame(0),
-            mnLastFrameSeen(0), mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
+            mnFirstKFid(0), mnFirstFrame(0), nTimesObs(0), mnTrackReferenceForFrame(0),
+            mnLastFrameSeen(0), mnBAFlagInLocalMapping(0), mnFuseFlagInLocalMapping(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
             mnCorrectedReference(0), mnBAGlobalForKF(0), mnVisible(1), mnFound(1), mbBad(false),
             mpReplaced(static_cast<MapPoint *>(NULL)) {
         mpReplaced = static_cast<MapPoint *>(NULL);
@@ -41,8 +41,8 @@ namespace ORB_SLAM3 {
  * @brief 构造函数
  */
     MapPoint::MapPoint(const Eigen::Vector3f &Pos, KeyFrame *pRefKF, Map *pMap) :
-            mnFirstKFid(pRefKF->mnId), mnFirstFrame(pRefKF->mnFrameId), nObs(0), mnTrackReferenceForFrame(0),
-            mnLastFrameSeen(0), mnBALocalForKF(0), mnFuseCandidateForKF(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
+            mnFirstKFid(pRefKF->mnId), mnFirstFrame(pRefKF->mnFrameId), nTimesObs(0), mnTrackReferenceForFrame(0),
+            mnLastFrameSeen(0), mnBAFlagInLocalMapping(0), mnFuseFlagInLocalMapping(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
             mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(pRefKF), mnVisible(1), mnFound(1), mbBad(false),
             mpReplaced(static_cast<MapPoint *>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
             mnOriginMapId(pMap->GetId()) {
@@ -97,12 +97,12 @@ namespace ORB_SLAM3 {
  * @param pKF KeyFrame
  * @param idx MapPoint在KeyFrame中的索引
  */
-    void MapPoint::AddObservation(KeyFrame *pKF, int idx) {
+    void MapPoint::AddObsKFAndLRIdx(KeyFrame *pKF, int idx) {
         unique_lock<mutex> lock(mMutexFeatures);
         tuple<int, int> indexes;
 
-        if (mObservations.count(pKF)) {
-            indexes = mObservations[pKF];
+        if (mObsKFAndLRIdx.count(pKF)) {
+            indexes = mObsKFAndLRIdx[pKF];
         } else {
             indexes = tuple<int, int>(-1, -1);
         }
@@ -110,12 +110,12 @@ namespace ORB_SLAM3 {
         get<0>(indexes) = idx;
 
         // 如果没有添加过观测，记录下能观测到该MapPoint的KF和该MapPoint在KF中的索引
-        mObservations[pKF] = indexes;
+        mObsKFAndLRIdx[pKF] = indexes;
 
         if (pKF->mvfXInRight[idx] >= 0)
-            nObs += 2;
+            nTimesObs += 2;
         else
-            nObs++;
+            nTimesObs++;
     }
 
 // 删除某个关键帧对当前地图点的观测
@@ -124,29 +124,29 @@ namespace ORB_SLAM3 {
         {
             unique_lock<mutex> lock(mMutexFeatures);
             // 查找这个要删除的观测,根据单目和双目类型的不同从其中删除当前地图点的被观测次数
-            if (mObservations.count(pKF)) {
-                tuple<int, int> indexes = mObservations[pKF];
+            if (mObsKFAndLRIdx.count(pKF)) {
+                tuple<int, int> indexes = mObsKFAndLRIdx[pKF];
                 int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
 
                 if (leftIndex != -1) {
                     if (pKF->mvfXInRight[leftIndex] >= 0)
-                        nObs -= 2;
+                        nTimesObs -= 2;
                     else
-                        nObs--;
+                        nTimesObs--;
                 }
                 if (rightIndex != -1) {
-                    nObs--;
+                    nTimesObs--;
                 }
 
-                mObservations.erase(pKF);
+                mObsKFAndLRIdx.erase(pKF);
 
                 // 如果该keyFrame是参考帧，该Frame被删除后重新指定RefFrame
                 if (mpRefKF == pKF)
-                    mpRefKF = mObservations.begin()->first;
+                    mpRefKF = mObsKFAndLRIdx.begin()->first;
 
                 // If only 2 observations or less, discard point
                 // 当观测到该点的相机数目少于2时，丢弃该点
-                if (nObs <= 2)
+                if (nTimesObs <= 2)
                     bBad = true;
             }
         }
@@ -156,18 +156,18 @@ namespace ORB_SLAM3 {
     }
 
 // 能够观测到当前地图点的所有关键帧及该地图点在KF中的索引
-    std::map<KeyFrame *, std::tuple<int, int>> MapPoint::GetObservations() {
+    std::map<KeyFrame *, std::tuple<int, int>> MapPoint::GetObsKFAndLRIdx() {
         unique_lock<mutex> lock(mMutexFeatures);
-        return mObservations;
+        return mObsKFAndLRIdx;
     }
 
 /**
  * @brief 返回被观测次数，双目一帧算两次，左右目各算各的
- * @return nObs
+ * @return nTimesObs
  */
-    int MapPoint::Observations() {
+    int MapPoint::GetObsTimes() {
         unique_lock<mutex> lock(mMutexFeatures);
-        return nObs;
+        return nTimesObs;
     }
 
 /**
@@ -181,9 +181,9 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> lock2(mMutexPos);
             mbBad = true;
             // 把mObservations转存到obs，obs和mObservations里存的是指针，赋值过程为浅拷贝
-            obs = mObservations;
+            obs = mObsKFAndLRIdx;
             // 把mObservations指向的内存释放，obs作为局部变量之后自动删除
-            mObservations.clear();
+            mObsKFAndLRIdx.clear();
         }
         for (map<KeyFrame *, tuple<int, int>>::iterator mit = obs.begin(), mend = obs.end(); mit != mend; mit++) {
             KeyFrame *pKF = mit->first;
@@ -231,9 +231,9 @@ namespace ORB_SLAM3 {
         {
             unique_lock<mutex> lock1(mMutexFeatures);
             unique_lock<mutex> lock2(mMutexPos);
-            obs = mObservations;
+            obs = mObsKFAndLRIdx;
             // 清除当前地图点的原有观测
-            mObservations.clear();
+            mObsKFAndLRIdx.clear();
             // 当前的地图点被删除了
             mbBad = true;
             // 暂存当前地图点的可视次数和被找到的次数
@@ -256,11 +256,11 @@ namespace ORB_SLAM3 {
                 // 如果不在，替换特征点与mp的匹配关系
                 if (leftIndex != -1) {
                     pKF->ReplaceMapPointMatch(leftIndex, pMP);
-                    pMP->AddObservation(pKF, leftIndex);
+                    pMP->AddObsKFAndLRIdx(pKF, leftIndex);
                 }
                 if (rightIndex != -1) {
                     pKF->ReplaceMapPointMatch(rightIndex, pMP);
-                    pMP->AddObservation(pKF, rightIndex);
+                    pMP->AddObsKFAndLRIdx(pKF, rightIndex);
                 }
             }
                 // 如果新的MP在之前MP对应的关键帧里面，就撞车了。
@@ -346,7 +346,7 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> lock1(mMutexFeatures);
             if (mbBad)
                 return;
-            observations = mObservations;
+            observations = mObsKFAndLRIdx;
         }
 
         if (observations.empty())
@@ -432,18 +432,18 @@ namespace ORB_SLAM3 {
  */
     tuple<int, int> MapPoint::GetIndexInKeyFrame(KeyFrame *pKF) {
         unique_lock<mutex> lock(mMutexFeatures);
-        if (mObservations.count(pKF))
-            return mObservations[pKF];
+        if (mObsKFAndLRIdx.count(pKF))
+            return mObsKFAndLRIdx[pKF];
         else
             return tuple<int, int>(-1, -1);
     }
 
 /**
- * @brief return (mObservations.count(pKF));
+ * @brief return (mObsKFAndLRIdx.count(pKF));
  */
     bool MapPoint::IsInKeyFrame(KeyFrame *pKF) {
         unique_lock<mutex> lock(mMutexFeatures);
-        return (mObservations.count(pKF));
+        return (mObsKFAndLRIdx.count(pKF));
     }
 
 /**
@@ -453,7 +453,7 @@ namespace ORB_SLAM3 {
  * 创建新的关键帧的时候会调用
  */
     void MapPoint::UpdateNormalAndDepth() {
-        map<KeyFrame *, tuple<int, int>> observations;
+        map<KeyFrame *, tuple<int, int>> ObsKFAndLRIdx;
         KeyFrame *pRefKF;
         Eigen::Vector3f Pos;
         {
@@ -461,12 +461,12 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> lock2(mMutexPos);
             if (mbBad)
                 return;
-            observations = mObservations; // 获得观测到该地图点的所有关键帧
+            ObsKFAndLRIdx = mObsKFAndLRIdx; // 获得观测到该地图点的所有关键帧
             pRefKF = mpRefKF;             // 观测到该点的参考关键帧（第一次创建时的关键帧）
             Pos = mWorldPos;              // 地图点在世界坐标系中的位置
         }
 
-        if (observations.empty())
+        if (ObsKFAndLRIdx.empty())
             return;
 
         // Step 2 计算该地图点的法线方向，也就是朝向等信息。
@@ -475,10 +475,9 @@ namespace ORB_SLAM3 {
         Eigen::Vector3f normal;
         normal.setZero();
         int n = 0;
-        for (map<KeyFrame *, tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
+        for (map<KeyFrame *, tuple<int, int>>::iterator mit = ObsKFAndLRIdx.begin(), mend = ObsKFAndLRIdx.end();
              mit != mend; mit++) {
             KeyFrame *pKF = mit->first;
-
             tuple<int, int> indexes = mit->second;
             int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
 
@@ -499,13 +498,13 @@ namespace ORB_SLAM3 {
         Eigen::Vector3f PC = Pos - pRefKF->GetCameraCenter();  // 参考关键帧相机指向地图点的向量（在世界坐标系下的表示）
         const float dist = PC.norm();  // 该点到参考关键帧相机的距离
 
-        tuple<int, int> indexes = observations[pRefKF];
+        tuple<int, int> indexes = ObsKFAndLRIdx[pRefKF];
         int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
         int level;
         level = pRefKF->mvKPsUn[leftIndex].octave;
 
 
-        //const int level = pRefKF->mvKPsUn[observations[pRefKF]].octave;
+        //const int level = pRefKF->mvKPsUn[ObsKFAndLRIdx[pRefKF]].octave;
         const float levelScaleFactor = pRefKF->mvScaleFactors[level];  // 当前金字塔层对应的缩放倍数
         const int nLevels = pRefKF->mnScaleLevels;  // 金字塔层数
 
@@ -603,7 +602,7 @@ namespace ORB_SLAM3 {
 
     void MapPoint::PrintObservations() {
         cout << "MP_OBS: MP " << mnId << endl;
-        for (map<KeyFrame *, tuple<int, int>>::iterator mit = mObservations.begin(), mend = mObservations.end();
+        for (map<KeyFrame *, tuple<int, int>>::iterator mit = mObsKFAndLRIdx.begin(), mend = mObsKFAndLRIdx.end();
              mit != mend; mit++) {
             KeyFrame *pKFi = mit->first;
             tuple<int, int> indexes = mit->second;
@@ -637,7 +636,7 @@ namespace ORB_SLAM3 {
         mBackupObservationsId1.clear();
         mBackupObservationsId2.clear();
         // Save the id and position in each KF who view it
-        for (std::map<KeyFrame *, std::tuple<int, int> >::const_iterator it = mObservations.begin(), end = mObservations.end();
+        for (std::map<KeyFrame *, std::tuple<int, int> >::const_iterator it = mObsKFAndLRIdx.begin(), end = mObsKFAndLRIdx.end();
              it != end; ++it) {
             KeyFrame *pKFi = it->first;
             if (spKF.find(pKFi) != spKF.end()) {
@@ -662,7 +661,7 @@ namespace ORB_SLAM3 {
         // 1. 根据保存的ID加载参考关键帧与替代点
         mpRefKF = mpKFid[mBackupRefKFId];
         if (!mpRefKF) {
-            cout << "ERROR: MP without KF reference " << mBackupRefKFId << "; Num obs: " << nObs << endl;
+            cout << "ERROR: MP without KF reference " << mBackupRefKFId << "; Num obs: " << nTimesObs << endl;
         }
         mpReplaced = static_cast<MapPoint *>(NULL);
         if (mBackupReplacedId >= 0) {
@@ -672,7 +671,7 @@ namespace ORB_SLAM3 {
         }
 
         // 2. 加载观测
-        mObservations.clear();
+        mObsKFAndLRIdx.clear();
 
         for (map<long unsigned int, int>::const_iterator it = mBackupObservationsId1.begin(), end = mBackupObservationsId1.end();
              it != end; ++it) {
@@ -680,7 +679,7 @@ namespace ORB_SLAM3 {
             map<long unsigned int, int>::const_iterator it2 = mBackupObservationsId2.find(it->first);
             std::tuple<int, int> indexes = tuple<int, int>(it->second, it2->second);
             if (pKFi) {
-                mObservations[pKFi] = indexes;
+                mObsKFAndLRIdx[pKFi] = indexes;
             }
         }
 

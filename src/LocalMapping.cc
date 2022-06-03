@@ -43,7 +43,7 @@ namespace ORB_SLAM3 {
             mbResetRequestedActiveMap(false), mbRequestFinish(false), mbFinished(true), mpAtlas(pAtlas),
             bInitializing(false),
             mbAbortBA(false), mbPaused(false), mbRequestPause(false), mbNotPauseOrFinish(false), mbAcceptKeyFrames(true),
-            mIdxInit(0), mScale(1.0), mInitSect(0), infoInertial(Eigen::MatrixXd::Zero(9, 9)) {
+            mIdxInit(0), mScale(1.0), infoInertial(Eigen::MatrixXd::Zero(9, 9)) {
 
         /*
          * mbRequestReset:    外部线程调用，为true，表示外部线程请求停止 local mapping
@@ -55,13 +55,13 @@ namespace ORB_SLAM3 {
          * mbRequestReset:   请求当前线程复位的标志。true，表示一直请求复位，但复位还未完成；表示复位完成为false
          * mbFinished:         判断最终LocalMapping::Run() 是否完成的标志。
          */
-        mnMatchesInliers = 0;
         mbBadImu = false;
         mTinit = 0.f;
-        mNumLM = 0;
-        mNumKFCulling = 0;
         mbFarPoints = true;
         mfThFarPoints = settings->mfThFarPoints;
+        mfCullKFRedundantTh = settings->mfCullKFRedundantTh;
+        mnWeakCovisTh=settings->mnWeakCovisTh;
+        mnStrongCovisTh=settings->mnStrongCovisTh;
         cout << "Discard points further than " << mfThFarPoints << " m from current camera" << endl;
     }
 
@@ -119,7 +119,7 @@ namespace ORB_SLAM3 {
                     //  Step 5 检查并融合当前关键帧与相邻关键帧帧（两级相邻）中重复的地图点
                     // 先完成相邻关键帧与当前关键帧的地图点的融合（在相邻关键帧中查找当前关键帧的地图点），
                     // 再完成当前关键帧与相邻关键帧的地图点的融合（在当前关键帧中查找当前相邻关键帧的地图点）
-                    SearchInNeighbors();
+                    FuseMapPointsInNeighbors();
                 }
 
                 bool b_doneLBA = false;
@@ -149,7 +149,6 @@ namespace ORB_SLAM3 {
                                     cout << "Not enough motion for initializing. Reseting..." << endl;
                                     unique_lock<mutex> lock(mMutexReset);
                                     mbResetRequestedActiveMap = true;
-                                    mpMapToReset = mpCurrentKeyFrame->GetMap();
                                     mbBadImu = true;  // 在跟踪线程里会重置当前活跃地图
                                 }
                             }
@@ -158,17 +157,17 @@ namespace ORB_SLAM3 {
                             bool bLarge = ((mpTracker->GetMatchesInliers() > 75) && mbMonocular) ||
                                           ((mpTracker->GetMatchesInliers() > 100) && !mbMonocular);
                             // 局部地图+IMU一起优化，优化关键帧位姿、地图点、IMU参数
-                            Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
-                                                       num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA, bLarge,
-                                                       !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
+                            Optimizer::LocalBAWithImu(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
+                                                      num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA, bLarge,
+                                                      !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                             b_doneLBA = true;
                         } else {
                             // Step 6.2 不是IMU模式或者当前关键帧所在的地图还未完成IMU初始化
                             // 局部地图BA，不包括IMU数据
                             // 注意这里的第二个参数是按地址传递的,当这里的 mbAbortBA 状态发生变化时，能够及时执行/停止BA
                             // 局部地图优化，不包括IMU信息。优化关键帧位姿、地图点
-                            Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
-                                                             num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA);
+                            Optimizer::LocalBAWithoutImu(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
+                                                         num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA);
                             b_doneLBA = true;
                         }
                     }
@@ -290,15 +289,15 @@ namespace ORB_SLAM3 {
         // Associate MapPoints to the new keyframe and update normal and descriptor
         // Step 3：当前处理关键帧中有效的地图点，更新normal，描述子等信息
         // TrackLocalMap中和当前帧新匹配上的地图点和当前关键帧进行关联绑定
-        const vector<MapPoint *> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
+        const vector<MapPoint *> vpMapPointsInKF = mpCurrentKeyFrame->GetMapPointsInKF();
         // 对当前处理的这个关键帧中的所有的地图点展开遍历
-        for (size_t i = 0; i < vpMapPointMatches.size(); i++) {
-            MapPoint *pMP = vpMapPointMatches[i];
+        for (size_t i = 0; i < vpMapPointsInKF.size(); i++) {
+            MapPoint *pMP = vpMapPointsInKF[i];
             if (pMP) {
                 if (!pMP->isBad()) {
                     if (!pMP->IsInKeyFrame(mpCurrentKeyFrame)) {
                         // 如果地图点不是来自当前帧的观测，为当前地图点添加观测
-                        pMP->AddObservation(mpCurrentKeyFrame, i);
+                        pMP->AddObsKFAndLRIdx(mpCurrentKeyFrame, i);
                         // 获得该点的平均观测方向和观测距离范围
                         pMP->UpdateNormalAndDepth();
                         // 更新地图点的最佳描述子
@@ -316,7 +315,7 @@ namespace ORB_SLAM3 {
 
         // Update links in the Covisibility Graph
         // Step 4：更新关键帧间的连接关系（共视图）
-        mpCurrentKeyFrame->UpdateConnections();
+        mpCurrentKeyFrame->UpdateCovisGraph();
 
         // Insert Keyframe in Map
         // Step 5：将该关键帧插入到地图中
@@ -341,22 +340,15 @@ namespace ORB_SLAM3 {
         const unsigned long int nCurrentKFid = mpCurrentKeyFrame->mnId;
 
         // Step 1：根据相机类型设置不同的观测阈值
-        int nThObs;
-        if (mbMonocular)
-            nThObs = 2;
-        else
-            nThObs = 3;
-        const int cnThObs = nThObs;
-
-        int borrar = mlpRecentAddedMapPoints.size();
+        const int cnThObs = 3;
         // Step 2：遍历检查的新添加的MapPoints
         while (lit != mlpRecentAddedMapPoints.end()) {
             MapPoint *pMP = *lit;
 
-            if (pMP->isBad())
+            if (pMP->isBad()){
                 // Step 2.1：已经是坏点的MapPoints直接从检查链表中删除
                 lit = mlpRecentAddedMapPoints.erase(lit);
-            else if (pMP->GetFoundRatio() < 0.25f) {
+            } else if (pMP->GetFoundRatio() < 0.25f) {
                 // Step 2.2：跟踪到该MapPoint的Frame数相比预计可观测到该MapPoint的Frame数的比例小于25%，删除
                 // (mnFound/mnVisible） < 25%
                 // mnFound ：地图点被多少帧（包括普通帧）看到，次数越多越好
@@ -364,7 +356,7 @@ namespace ORB_SLAM3 {
                 // (mnFound/mnVisible）：对于大FOV镜头这个比例会高，对于窄FOV镜头这个比例会低
                 pMP->SetBadFlag();
                 lit = mlpRecentAddedMapPoints.erase(lit);
-            } else if (((int) nCurrentKFid - (int) pMP->mnFirstKFid) >= 2 && pMP->Observations() <= cnThObs) {
+            } else if (((int) nCurrentKFid - (int) pMP->mnFirstKFid) >= 2 && pMP->GetObsTimes() <= cnThObs) {
                 // Step 2.3：从该点建立开始，到现在已经过了不小于2个关键帧
                 // 但是观测到该点的关键帧数却不超过cnThObs帧，那么删除该点
                 pMP->SetBadFlag();
@@ -376,7 +368,6 @@ namespace ORB_SLAM3 {
                 lit = mlpRecentAddedMapPoints.erase(lit);
             else {
                 lit++;
-                borrar--;
             }
         }
     }
@@ -389,10 +380,6 @@ namespace ORB_SLAM3 {
         // nn表示搜索最佳共视关键帧的数目
         // 不同传感器下要求不一样,单目的时候需要有更多的具有较好共视关系的关键帧来建立地图
         int nn = 10;
-        // For stereo inertial case 这具原注释有问题吧 应该是For Monocular case
-        // 0.4版本的这个参数为20
-        if (mbMonocular)
-            nn = 30;
         // Step 1：在当前关键帧的共视关键帧中找到共视程度最高的nn帧相邻关键帧
         vector<KeyFrame *> vpNeighKFs = mpCurrentKeyFrame->GetBestCovisibilityKeyFrames(nn);
 
@@ -458,21 +445,9 @@ namespace ORB_SLAM3 {
             const float baseline = vBaseline.norm();
 
             // Step 3：判断相机运动的基线是不是足够长
-            if (!mbMonocular) {
-                // 如果是双目相机，关键帧间距小于本身的基线时不生成3D点
-                // 因为太短的基线下能够恢复的地图点不稳定
-                if (baseline < pKF2->mfBaseline)
-                    continue;
-            } else {
-                // 单目相机情况
-                // 邻接关键帧的场景深度中值
-                const float medianDepthKF2 = pKF2->ComputeSceneMedianDepth(2);
-                // baseline与景深的比例
-                const float ratioBaselineDepth = baseline / medianDepthKF2;
-                // 如果特别远(比例特别小)，基线太短恢复3D点不准，那么跳过当前邻接的关键帧，不生成3D点
-                if (ratioBaselineDepth < 0.01)
-                    continue;
-            }
+            // 如果是双目相机，关键帧间距小于本身的基线时不生成3D点. 因为太短的基线下能够恢复的地图点不稳定
+            if (baseline < pKF2->mfBaseline)
+                continue;
 
             // Search matches that fullfil epipolar constraint
             // Step 4：通过BoW对两关键帧的未匹配的特征点快速匹配，用极线约束抑制离群点，生成新的匹配点对
@@ -482,7 +457,7 @@ namespace ORB_SLAM3 {
                            mpCurrentKeyFrame->GetMap()->GetIniertialBA2();
 
             // 通过极线约束的方式找到匹配点（且该点还没有成为MP，注意非单目已经生成的MP这里直接跳过不做匹配，所以最后并不会覆盖掉特征点对应的MP）
-            matcher.SearchForTriangulation(mpCurrentKeyFrame, pKF2, vMatchedIndices, false, bCoarse);
+            matcher.SearchKFsByTriangulation(mpCurrentKeyFrame, pKF2, vMatchedIndices, false, bCoarse);
 
             // 取出与mpCurrentKeyFrame共视关键帧的内外参信息
             Sophus::SE3<float> sophTcw2 = pKF2->GetPose();
@@ -552,7 +527,9 @@ namespace ORB_SLAM3 {
                     cosParallaxStereo2 = cos(2 * atan2(pKF2->mfBaseline / 2, pKF2->mvfMPDepth[idx2]));
 
                 // 统计用的
-                if (bStereo1 || bStereo2) totalStereoPts++;
+                if (bStereo1 || bStereo2){
+                    totalStereoPts++;
+                }
 
                 // 得到双目观测的视差角
                 cosParallaxStereo = min(cosParallaxStereo1, cosParallaxStereo2);
@@ -692,8 +669,8 @@ namespace ORB_SLAM3 {
 
                 // Step 6.1：为该MapPoint添加属性：
                 // a.观测到该MapPoint的关键帧
-                pMP->AddObservation(mpCurrentKeyFrame, idx1);
-                pMP->AddObservation(pKF2, idx2);
+                pMP->AddObsKFAndLRIdx(mpCurrentKeyFrame, idx1);
+                pMP->AddObsKFAndLRIdx(pKF2, idx2);
 
                 mpCurrentKeyFrame->AddMapPoint(pMP, idx1);
                 pKF2->AddMapPoint(pMP, idx2);
@@ -715,49 +692,46 @@ namespace ORB_SLAM3 {
 /**
  * @brief 检查并融合当前关键帧与相邻帧（两级相邻）重复的MapPoints
  */
-    void LocalMapping::SearchInNeighbors() {
+    void LocalMapping::FuseMapPointsInNeighbors() {
         // Retrieve neighbor keyframes
         // Step 1：获得当前关键帧在共视图中权重排名前nn的邻接关键帧
         // 开始之前先定义几个概念
         // 当前关键帧的邻接关键帧，称为一级相邻关键帧，也就是邻居
         // 与一级相邻关键帧相邻的关键帧，称为二级相邻关键帧，也就是邻居的邻居
 
-        // 单目情况要30个邻接关键帧,0.4版本是20个，又加了许多
         int nn = 10;
-        if (mbMonocular)
-            nn = 30;
 
         // 和当前关键帧相邻的关键帧，也就是一级相邻关键帧
         const vector<KeyFrame *> vpNeighKFs = mpCurrentKeyFrame->GetBestCovisibilityKeyFrames(nn);
         // Step 2：存储一级相邻关键帧及其二级相邻关键帧
-        vector<KeyFrame *> vpTargetKFs;
+        vector<KeyFrame *> vpProjectKFs;
         // 开始对所有候选的一级关键帧展开遍历：
         for (vector<KeyFrame *>::const_iterator vit = vpNeighKFs.begin(), vend = vpNeighKFs.end(); vit != vend; vit++) {
             KeyFrame *pKFi = *vit;
             // 没有和当前帧进行过融合的操作
-            if (pKFi->isBad() || pKFi->mnFuseTargetForKF == mpCurrentKeyFrame->mnId)
+            if (pKFi->isBad() || pKFi->mnFuseFlagInLocalMapping == mpCurrentKeyFrame->mnId)
                 continue;
             // 加入一级相邻关键帧
-            vpTargetKFs.push_back(pKFi);
+            vpProjectKFs.push_back(pKFi);
             // 标记已经加入
-            pKFi->mnFuseTargetForKF = mpCurrentKeyFrame->mnId;
+            pKFi->mnFuseFlagInLocalMapping = mpCurrentKeyFrame->mnId;
         }
 
         // Add some covisible of covisible
         // Extend to some second neighbors if abort is not requested
         // 以一级相邻关键帧的共视关系最好的5个相邻关键帧 作为二级相邻关键帧
-        for (int i = 0, imax = vpTargetKFs.size(); i < imax; i++) {
-            const vector<KeyFrame *> vpSecondNeighKFs = vpTargetKFs[i]->GetBestCovisibilityKeyFrames(20);
+        for (int i = 0, imax = vpProjectKFs.size(); i < imax; i++) {
+            const vector<KeyFrame *> vpSecondNeighKFs = vpProjectKFs[i]->GetBestCovisibilityKeyFrames(nn);
             // 遍历得到的二级相邻关键帧
             for (vector<KeyFrame *>::const_iterator vit2 = vpSecondNeighKFs.begin(), vend2 = vpSecondNeighKFs.end();
                  vit2 != vend2; vit2++) {
                 KeyFrame *pKFi2 = *vit2;
-                if (pKFi2->isBad() || pKFi2->mnFuseTargetForKF == mpCurrentKeyFrame->mnId ||
+                if (pKFi2->isBad() || pKFi2->mnFuseFlagInLocalMapping == mpCurrentKeyFrame->mnId ||
                     pKFi2->mnId == mpCurrentKeyFrame->mnId)
                     continue;
                 // 存入二级相邻关键帧
-                vpTargetKFs.push_back(pKFi2);
-                pKFi2->mnFuseTargetForKF = mpCurrentKeyFrame->mnId;
+                vpProjectKFs.push_back(pKFi2);
+                pKFi2->mnFuseFlagInLocalMapping = mpCurrentKeyFrame->mnId;
             }
             if (mbAbortBA)
                 break;
@@ -767,13 +741,13 @@ namespace ORB_SLAM3 {
         // imu模式下加了一些prevKF
         if (mbInertial) {
             KeyFrame *pKFi = mpCurrentKeyFrame->mPrevKF;
-            while (vpTargetKFs.size() < 20 && pKFi) {
-                if (pKFi->isBad() || pKFi->mnFuseTargetForKF == mpCurrentKeyFrame->mnId) {
+            while (vpProjectKFs.size() < 2 * nn && pKFi) {
+                if (pKFi->isBad() || pKFi->mnFuseFlagInLocalMapping == mpCurrentKeyFrame->mnId) {
                     pKFi = pKFi->mPrevKF;
                     continue;
                 }
-                vpTargetKFs.push_back(pKFi);
-                pKFi->mnFuseTargetForKF = mpCurrentKeyFrame->mnId;
+                vpProjectKFs.push_back(pKFi);
+                pKFi->mnFuseFlagInLocalMapping = mpCurrentKeyFrame->mnId;
                 pKFi = pKFi->mPrevKF;
             }
         }
@@ -783,15 +757,15 @@ namespace ORB_SLAM3 {
         ORBmatcher matcher;
 
         // Step 3：将当前帧的地图点分别与一级二级相邻关键帧地图点进行融合 -- 正向
-        vector<MapPoint *> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
-        for (vector<KeyFrame *>::iterator vit = vpTargetKFs.begin(), vend = vpTargetKFs.end(); vit != vend; vit++) {
-            KeyFrame *pKFi = *vit;
+        vector<MapPoint *> vpMapPointsInKF = mpCurrentKeyFrame->GetMapPointsInKF();
+        for (vector<KeyFrame *>::iterator vKFit = vpProjectKFs.begin(), vend = vpProjectKFs.end(); vKFit != vend; vKFit++) {
+            KeyFrame *pKFi = *vKFit;
 
             // 将地图点投影到关键帧中进行匹配和融合；融合策略如下
             // 1.如果地图点能匹配关键帧的特征点，并且该点有对应的地图点，那么选择观测数目多的替换两个地图点
             // 2.如果地图点能匹配关键帧的特征点，并且该点没有对应的地图点，那么为该点添加该投影地图点
             // 注意这个时候对地图点融合的操作是立即生效的
-            matcher.Fuse(pKFi, vpMapPointMatches);
+            matcher.SearchKFAndMapPointsByProjection(pKFi, vpMapPointsInKF);
         }
 
 
@@ -801,48 +775,47 @@ namespace ORB_SLAM3 {
         // Search matches by projection from target KFs in current KF
         // Step 4：将一级二级相邻关键帧地图点分别与当前关键帧地图点进行融合 -- 反向
         // 用于进行存储要融合的一级邻接和二级邻接关键帧所有MapPoints的集合
-        vector<MapPoint *> vpFuseCandidates;
-        vpFuseCandidates.reserve(vpTargetKFs.size() * vpMapPointMatches.size());
+        vector<MapPoint *> vpProjectMPs;
+        vpProjectMPs.reserve(vpProjectKFs.size() * vpMapPointsInKF.size());
 
-        //  Step 4.1：遍历每一个一级邻接和二级邻接关键帧，收集他们的地图点存储到 vpFuseCandidates
-        for (vector<KeyFrame *>::iterator vitKF = vpTargetKFs.begin(), vendKF = vpTargetKFs.end();
+        //  Step 4.1：遍历每一个一级邻接和二级邻接关键帧，收集他们的地图点存储到 vpProjectMPs
+        for (vector<KeyFrame *>::iterator vitKF = vpProjectKFs.begin(), vendKF = vpProjectKFs.end();
              vitKF != vendKF; vitKF++) {
             KeyFrame *pKFi = *vitKF;
 
-            vector<MapPoint *> vpMapPointsKFi = pKFi->GetMapPointMatches();
+            vector<MapPoint *> vpMapPointsInKFi = pKFi->GetMapPointsInKF();
 
             // 遍历当前一级邻接和二级邻接关键帧中所有的MapPoints,找出需要进行融合的并且加入到集合中
-            for (vector<MapPoint *>::iterator vitMP = vpMapPointsKFi.begin(), vendMP = vpMapPointsKFi.end();
-                 vitMP != vendMP; vitMP++) {
-                MapPoint *pMP = *vitMP;
+            for (vector<MapPoint *>::iterator vMPit = vpMapPointsInKFi.begin(), vendMP = vpMapPointsInKFi.end();
+                 vMPit != vendMP; vMPit++) {
+                MapPoint *pMP = *vMPit;
                 if (!pMP)
                     continue;
 
                 // 如果地图点是坏点，或者已经加进集合vpFuseCandidates，跳过
-                if (pMP->isBad() || pMP->mnFuseCandidateForKF == mpCurrentKeyFrame->mnId)
+                if (pMP->isBad() || pMP->mnFuseFlagInLocalMapping == mpCurrentKeyFrame->mnId)
                     continue;
 
                 // 加入集合，并标记已经加入
-                pMP->mnFuseCandidateForKF = mpCurrentKeyFrame->mnId;
-                vpFuseCandidates.push_back(pMP);
+                pMP->mnFuseFlagInLocalMapping = mpCurrentKeyFrame->mnId;
+                vpProjectMPs.push_back(pMP);
             }
         }
 
         // Step 4.2：进行地图点投影融合,和正向融合操作是完全相同的
         // 不同的是正向操作是"每个关键帧和当前关键帧的地图点进行融合",而这里的是"当前关键帧和所有邻接关键帧的地图点进行融合"
-        matcher.Fuse(mpCurrentKeyFrame, vpFuseCandidates);
+        matcher.SearchKFAndMapPointsByProjection(mpCurrentKeyFrame, vpProjectMPs);
 
 
         // Update points
         // Step 5：更新当前帧地图点的描述子、深度、观测主方向等属性
-        vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
-        for (size_t i = 0, iend = vpMapPointMatches.size(); i < iend; i++) {
-            MapPoint *pMP = vpMapPointMatches[i];
+        vpMapPointsInKF = mpCurrentKeyFrame->GetMapPointsInKF();
+        for (size_t i = 0, iend = vpMapPointsInKF.size(); i < iend; i++) {
+            MapPoint *pMP = vpMapPointsInKF[i];
             if (pMP) {
                 if (!pMP->isBad()) {
                     // 在所有找到pMP的关键帧中，获得最佳的描述子
                     pMP->ComputeDistinctiveDescriptors();
-
                     // 更新平均观测方向和观测距离
                     pMP->UpdateNormalAndDepth();
                 }
@@ -852,7 +825,7 @@ namespace ORB_SLAM3 {
         // Update connections in covisibility graph
         // Step 6：更新当前帧的MapPoints后更新与其它帧的连接关系
         // 更新covisibility图
-        mpCurrentKeyFrame->UpdateConnections();
+        mpCurrentKeyFrame->UpdateCovisGraph();
     }
 
 
@@ -971,101 +944,83 @@ namespace ORB_SLAM3 {
         mpCurrentKeyFrame->UpdateBestCovisibles();
         // 1. 根据Covisibility Graph提取当前帧的共视关键帧
         vector<KeyFrame *> vpLocalKeyFrames = mpCurrentKeyFrame->GetVectorCovisibleKeyFrames();
-
-        float redundant_th;
-        // 非IMU模式时
-        if (!mbInertial)
-            redundant_th = 0.9;
-            // 单目+imu 时
-        else if (mbMonocular)
-            redundant_th = 0.9;
-            // 双目+imu时
-        else
-            redundant_th = 0.5;
-
         const bool bInitImu = mpAtlas->isImuInitialized();
-        int count = 0;
 
         // Compoute last KF from optimizable window:
         unsigned int last_ID;
         if (mbInertial) {
-            int count = 0;
+            int nPre = 0;
             KeyFrame *aux_KF = mpCurrentKeyFrame;
             // 找到第前21个关键帧的关键帧id
-            while (count < Nd && aux_KF->mPrevKF) {
+            while (nPre < Nd && aux_KF->mPrevKF) {
                 aux_KF = aux_KF->mPrevKF;
-                count++;
+                nPre++;
             }
             last_ID = aux_KF->mnId;
         }
 
-
-        // 对所有的共视关键帧进行遍历
-        for (vector<KeyFrame *>::iterator vit = vpLocalKeyFrames.begin(), vend = vpLocalKeyFrames.end();
-             vit != vend; vit++) {
-            count++;
+        int nProcessedKFNum = 0;
+        for (vector<KeyFrame *>::iterator vit = vpLocalKeyFrames.begin(),
+                vend = vpLocalKeyFrames.end(); vit != vend; vit++) {
+            nProcessedKFNum++;
             KeyFrame *pKF = *vit;
 
             // 如果是地图里第1个关键帧或者是标记为坏帧，则跳过
             if ((pKF->mnId == pKF->GetMap()->GetInitKFid()) || pKF->isBad())
                 continue;
             // Step 2：提取每个共视关键帧的地图点
-            const vector<MapPoint *> vpMapPoints = pKF->GetMapPointMatches();
+            const vector<MapPoint *> vpMapPoints = pKF->GetMapPointsInKF();
 
-            // 记录某个点被观测次数，后面并未使用
-            int nObs = 3;
-            const int thObs = nObs;  // 观测次数阈值，默认为3
             // 记录冗余观测点的数目
-            int nRedundantObservations = 0;
-            int nMPs = 0;
+            int nRedMPs = 0;
+            int nTotMPs = 0;
 
             // Step 3：遍历该共视关键帧的所有地图点，判断是否90%以上的地图点能被其它至少3个关键帧（同样或者更低层级）观测到
             for (size_t i = 0, iend = vpMapPoints.size(); i < iend; i++) {
                 MapPoint *pMP = vpMapPoints[i];
-                if (pMP) {
-                    if (!pMP->isBad()) {
-                        if (!mbMonocular) {
-                            // 对于双目，仅考虑近处（不超过基线的40倍 ）的地图点
-                            if (pKF->mvfMPDepth[i] > pKF->mfThDepth || pKF->mvfMPDepth[i] < 0)
-                                continue;
+                if (!pMP) {
+                    continue;
+                }
+                if (pMP->isBad()) {
+                    continue;
+                }
+                if (!mbMonocular) {
+                    // 对于双目，仅考虑近处（不超过基线的40倍 ）的地图点
+                    if (pKF->mvfMPDepth[i] > pKF->mfThDepth || pKF->mvfMPDepth[i] < 0)
+                        continue;
+                }
+                nTotMPs++;
+                // pMP->GetObsTimes() 是观测到该地图点的相机总数目（单目1，双目2）
+                if (pMP->GetObsTimes() > mnWeakCovisTh) {
+                    const int &CurScaleLevel = pKF->mvKPsUn[i].octave;
+                    const map<KeyFrame *, tuple<int, int>> ObsKFAndLRIdx = pMP->GetObsKFAndLRIdx();
+                    int nCurObs = 0;
+                    // 遍历观测到该地图点的关键帧
+                    for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = ObsKFAndLRIdx.begin(), mend = ObsKFAndLRIdx.end();
+                         mit != mend; mit++) {
+                        KeyFrame *pKFi = mit->first;
+                        if (pKFi == pKF)
+                            continue;
+                        tuple<int, int> indexes = mit->second;
+                        int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
+                        int ScaleLeveli = -1;
+                        ScaleLeveli = pKFi->mvKPsUn[leftIndex].octave;
+                        // 同样或更低金字塔层级的地图点更准确
+                        if (ScaleLeveli <= CurScaleLevel + 1) {
+                            nCurObs++;
+                            // 已经找到3个满足条件的关键帧，就停止不找了
+                            if (nCurObs > mnWeakCovisTh)
+                                break;
                         }
-
-                        nMPs++;
-                        // pMP->Observations() 是观测到该地图点的相机总数目（单目1，双目2）
-                        if (pMP->Observations() > thObs) {
-                            const int &scaleLevel = pKF->mvKPsUn[i].octave;
-                            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
-                            int nObs = 0;
-                            // 遍历观测到该地图点的关键帧
-                            for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin(), mend = observations.end();
-                                 mit != mend; mit++) {
-                                KeyFrame *pKFi = mit->first;
-                                if (pKFi == pKF)
-                                    continue;
-                                tuple<int, int> indexes = mit->second;
-                                int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
-                                int scaleLeveli = -1;
-                                scaleLeveli = pKFi->mvKPsUn[leftIndex].octave;
-                                // 尺度约束：为什么pKF 尺度+1 要大于等于 pKFi 尺度？
-                                // 回答：因为同样或更低金字塔层级的地图点更准确
-                                if (scaleLeveli <= scaleLevel + 1) {
-                                    nObs++;
-                                    // 已经找到3个满足条件的关键帧，就停止不找了
-                                    if (nObs > thObs)
-                                        break;
-                                }
-                            }
-                            // 地图点至少被3个关键帧观测到，就记录为冗余点，更新冗余点计数数目
-                            if (nObs > thObs) {
-                                nRedundantObservations++;
-                            }
-                        }
+                    }
+                    // 地图点至少被3个关键帧观测到，就记录为冗余点，更新冗余点计数数目
+                    if (nCurObs > mnWeakCovisTh) {
+                        nRedMPs++;
                     }
                 }
             }
-
             // Step 4：该关键帧90%以上的有效地图点被判断为冗余的，则删除该关键帧
-            if (nRedundantObservations > redundant_th * nMPs) {
+            if (nRedMPs > mfCullKFRedundantTh * nTotMPs) {
                 // imu模式下需要更改前后关键帧的连续性，且预积分要叠加起来
                 if (mbInertial) {
                     // 关键帧少于Nd个，跳过不删
@@ -1078,37 +1033,36 @@ namespace ORB_SLAM3 {
 
                     // 关键帧具有前后关键帧
                     if (pKF->mPrevKF && pKF->mNextKF) {
-                        const float t = pKF->mNextKF->mdTimestamp - pKF->mPrevKF->mdTimestamp;
+                        const double dTPN = pKF->mNextKF->mdTimestamp - pKF->mPrevKF->mdTimestamp;
                         // 下面两个括号里的内容一模一样
                         // imu初始化了，且距当前帧的ID超过21，且前后两个关键帧时间间隔小于3s
                         // 或者时间间隔小于0.5s
-                        if ((bInitImu && (pKF->mnId < last_ID) && t < 3.) || (t < 0.5)) {
+                        if ((bInitImu && (pKF->mnId < last_ID) && dTPN < 3.0) || (dTPN < 0.5)) {
                             pKF->mNextKF->mpImuPreintegrated->MergePrevious(pKF->mpImuPreintegrated);
                             pKF->mNextKF->mPrevKF = pKF->mPrevKF;
                             pKF->mPrevKF->mNextKF = pKF->mNextKF;
-                            pKF->mNextKF = NULL;
-                            pKF->mPrevKF = NULL;
+                            pKF->mNextKF = static_cast<KeyFrame *>(NULL);
+                            pKF->mPrevKF = static_cast<KeyFrame *>(NULL);
                             pKF->SetBadFlag();
                         }
                             // 没经过imu初始化的第三阶段，且关键帧与其前一个关键帧的距离小于0.02m，且前后两个关键帧时间间隔小于3s
                         else if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA2() &&
-                                 ((pKF->GetImuPosition() - pKF->mPrevKF->GetImuPosition()).norm() < 0.02) && (t < 3)) {
+                                 ((pKF->GetImuPosition() - pKF->mPrevKF->GetImuPosition()).norm() < 0.02) && (dTPN < 3)) {
                             pKF->mNextKF->mpImuPreintegrated->MergePrevious(pKF->mpImuPreintegrated);
                             pKF->mNextKF->mPrevKF = pKF->mPrevKF;
                             pKF->mPrevKF->mNextKF = pKF->mNextKF;
-                            pKF->mNextKF = NULL;
-                            pKF->mPrevKF = NULL;
+                            pKF->mNextKF = static_cast<KeyFrame *>(NULL);
+                            pKF->mPrevKF = static_cast<KeyFrame *>(NULL);
                             pKF->SetBadFlag();
                         }
                     }
                 }
-                    // 非imu就没那么多事儿了，直接干掉
                 else {
                     pKF->SetBadFlag();
                 }
             }
             // 遍历共视关键帧个数超过一定，就不弄了
-            if ((count > 20 && mbAbortBA) || count > 100) {
+            if ((nProcessedKFNum > 20 && mbAbortBA) || nProcessedKFNum > 100) {
                 break;
             }
         }
@@ -1145,7 +1099,6 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> lock(mMutexReset);
             cout << "LM: Active map reset recieved" << endl;
             mbResetRequestedActiveMap = true;
-            mpMapToReset = pMap;
         }
         cout << "LM: Active map reset, waiting..." << endl;
 
@@ -1250,16 +1203,8 @@ namespace ORB_SLAM3 {
         if (mbResetRequested)
             return;
 
-        float minTime;
-        int nMinKF;
-        // 从时间及帧数上限制初始化，不满足下面的不进行初始化
-        if (mbMonocular) {
-            minTime = 2.0;
-            nMinKF = 10;
-        } else {
-            minTime = 1.0;
-            nMinKF = 10;
-        }
+        float fMinTime = 1.0;
+        int nMinKF = 10;
 
         // 当前地图大于10帧才进行初始化
         if (mpAtlas->KeyFramesInMap() < nMinKF)
@@ -1280,7 +1225,7 @@ namespace ORB_SLAM3 {
             return;
 
         mFirstTs = vpKF.front()->mdTimestamp;
-        if (mpCurrentKeyFrame->mdTimestamp - mFirstTs < minTime)
+        if (mpCurrentKeyFrame->mdTimestamp - mFirstTs < fMinTime)
             return;
 
         // 正在做IMU的初始化，在tracking里面使用，如果为true，暂不添加关键帧
@@ -1354,8 +1299,6 @@ namespace ORB_SLAM3 {
 
         mScale = 1.0;
 
-        // 暂时没发现在别的地方出现过
-        mInitTime = mpTracker->mLastFrame.mdTimestamp - vpKF.front()->mdTimestamp;
 
         std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
         // 3. 计算残差及偏置差，优化尺度重力方向及速度偏置，偏置先验为0，双目时不优化尺度
@@ -1388,11 +1331,12 @@ namespace ORB_SLAM3 {
             // 即使初始化成功后面还会执行这个函数重新初始化
             // 在之前没有初始化成功情况下（此时刚刚初始化成功）对每一帧都标记，后面的kf全部都在tracking里面标记为true
             // 也就是初始化之前的那些关键帧即使有imu信息也不算
-            if (!mpAtlas->isImuInitialized())
+            if (!mpAtlas->isImuInitialized()){
                 for (int i = 0; i < N; i++) {
                     KeyFrame *pKF2 = vpKF[i];
                     pKF2->bImu = true;
                 }
+            }
         }
 
         // TODO 这步更新是否有必要做待研究，0.4版本是放在FullInertialBA下面做的
@@ -1473,7 +1417,6 @@ namespace ORB_SLAM3 {
 
                     pChild->mBiasGBA = pChild->GetImuBias();
                     pChild->mnBAGlobalForKF = GBAid;
-
                 }
                 // 加入到list中，再去寻找pChild的子关键帧
                 lpKFtoCheck.push_back(pChild);
@@ -1532,7 +1475,6 @@ namespace ORB_SLAM3 {
 
         Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
 
-        mnKFs = vpKF.size();
         mIdxInit++;
 
         // 9. 再有新的来就不要了~不然陷入无限套娃了
@@ -1644,13 +1586,6 @@ namespace ORB_SLAM3 {
             return mpCurrentKeyFrame->mdTimestamp;
         } else
             return 0.0;
-    }
-
-/**
- * @brief 获取当前关键帧
- */
-    KeyFrame *LocalMapping::GetCurrKF() {
-        return mpCurrentKeyFrame;
     }
 
 } //namespace ORB_SLAM

@@ -140,7 +140,7 @@ namespace ORB_SLAM3 {
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
 
-            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
+            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
 
             int nEdges = 0;
             //SET EDGES
@@ -361,7 +361,7 @@ namespace ORB_SLAM3 {
             pIncKF = pKFi;
             bool bFixed = false;
             if (bFixLocal) {
-                bFixed = (pKFi->mnBALocalForKF >= (maxKFid - 1)) || (pKFi->mnBAFixedForKF >= (maxKFid - 1));
+                bFixed = (pKFi->mnBAFlagInLocalMapping >= (maxKFid - 1)) || (pKFi->mnBAFixedForKF >= (maxKFid - 1));
                 if (!bFixed)
                     nNonFixed++;
                 VP->setFixed(bFixed);
@@ -524,7 +524,7 @@ namespace ORB_SLAM3 {
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
 
-            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
+            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
 
 
             bool bAllFixed = true;
@@ -790,19 +790,19 @@ namespace ORB_SLAM3 {
         return nInitialCorrespondences - nBad;
     }
 
-    void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int &num_fixedKF, int &num_OptKF,
-                                          int &num_MPs, int &num_edges) {
+    void Optimizer::LocalBAWithoutImu(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int &num_fixedKF, int &num_OptKF,
+                                      int &num_MPs, int &num_edges) {
         // Local KeyFrames: First Breath Search from Current Keyframe
         list<KeyFrame *> lLocalKeyFrames;
 
         lLocalKeyFrames.push_back(pKF);
-        pKF->mnBALocalForKF = pKF->mnId;
+        pKF->mnBAFlagInLocalMapping = pKF->mnId;
         Map *pCurrentMap = pKF->GetMap();
 
         const vector<KeyFrame *> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();
         for (int i = 0, iend = vNeighKFs.size(); i < iend; i++) {
             KeyFrame *pKFi = vNeighKFs[i];
-            pKFi->mnBALocalForKF = pKF->mnId;
+            pKFi->mnBAFlagInLocalMapping = pKF->mnId;
             if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap)
                 lLocalKeyFrames.push_back(pKFi);
         }
@@ -817,15 +817,15 @@ namespace ORB_SLAM3 {
             if (pKFi->mnId == pMap->GetInitKFid()) {
                 num_fixedKF = 1;
             }
-            vector<MapPoint *> vpMPs = pKFi->GetMapPointMatches();
+            vector<MapPoint *> vpMPs = pKFi->GetMapPointsInKF();
             for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
                 MapPoint *pMP = *vit;
                 if (pMP)
                     if (!pMP->isBad() && pMP->GetMap() == pCurrentMap) {
 
-                        if (pMP->mnBALocalForKF != pKF->mnId) {
+                        if (pMP->mnBAFlagInLocalMapping != pKF->mnId) {
                             lLocalMapPoints.push_back(pMP);
-                            pMP->mnBALocalForKF = pKF->mnId;
+                            pMP->mnBAFlagInLocalMapping = pKF->mnId;
                         }
                     }
             }
@@ -835,12 +835,12 @@ namespace ORB_SLAM3 {
         list<KeyFrame *> lFixedCameras;
         for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
              lit != lend; lit++) {
-            map<KeyFrame *, tuple<int, int>> observations = (*lit)->GetObservations();
+            map<KeyFrame *, tuple<int, int>> observations = (*lit)->GetObsKFAndLRIdx();
             for (map<KeyFrame *, tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
                  mit != mend; mit++) {
                 KeyFrame *pKFi = mit->first;
 
-                if (pKFi->mnBALocalForKF != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId) {
+                if (pKFi->mnBAFlagInLocalMapping != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId) {
                     pKFi->mnBAFixedForKF = pKF->mnId;
                     if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap)
                         lFixedCameras.push_back(pKFi);
@@ -960,7 +960,7 @@ namespace ORB_SLAM3 {
             optimizer.addVertex(vPoint);
             nPoints++;
 
-            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
+            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
 
             //Set edges
             for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin(), mend = observations.end();
@@ -1205,7 +1205,7 @@ namespace ORB_SLAM3 {
             for (set<KeyFrame *>::const_iterator sit = spConnections.begin(), send = spConnections.end();
                  sit != send; sit++) {
                 const long unsigned int nIDj = (*sit)->mnId;
-                if ((nIDi != pCurKF->mnId || nIDj != pLoopKF->mnId) && pKF->GetWeight(*sit) < minFeat)
+                if ((nIDi != pCurKF->mnId || nIDj != pLoopKF->mnId) && pKF->GetWeightBetweenKF(*sit) < minFeat)
                     continue;
 
                 const g2o::Sim3 Sjw = vScw[nIDj];
@@ -1733,7 +1733,7 @@ namespace ORB_SLAM3 {
 
         // Set MapPoint vertices
         const int N = vpMatches1.size();
-        const vector<MapPoint *> vpMapPoints1 = pKF1->GetMapPointMatches();
+        const vector<MapPoint *> vpMapPoints1 = pKF1->GetMapPointsInKF();
         vector<ORB_SLAM3::EdgeSim3ProjectXYZ *> vpEdges12;
         vector<ORB_SLAM3::EdgeInverseSim3ProjectXYZ *> vpEdges21;
         vector<size_t> vnIndexEdge;
@@ -1954,17 +1954,16 @@ namespace ORB_SLAM3 {
         return nIn;
     }
 
-    void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int &num_fixedKF, int &num_OptKF,
-                                    int &num_MPs, int &num_edges, bool bLarge, bool bRecInit) {
+    void Optimizer::LocalBAWithImu(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int &num_fixedKF, int &num_OptKF,
+                                   int &num_MPs, int &num_edges, bool bLarge, bool bRecInit) {
         Map *pCurrentMap = pKF->GetMap();
-
         int maxOpt = 10;
         int opt_it = 10;
         if (bLarge) {
             maxOpt = 25;
             opt_it = 4;
         }
-        const int Nd = std::min((int) pCurrentMap->KeyFramesInMap() - 2, maxOpt);
+        const int Nd = std::min((int) pCurrentMap->GetKeyFramesNumInMap() - 2, maxOpt);
         const unsigned long maxKFid = pKF->mnId;
 
         vector<KeyFrame *> vpOptimizableKFs;
@@ -1973,29 +1972,33 @@ namespace ORB_SLAM3 {
 
         vpOptimizableKFs.reserve(Nd);
         vpOptimizableKFs.push_back(pKF);
-        pKF->mnBALocalForKF = pKF->mnId;
+        pKF->mnBAFlagInLocalMapping = pKF->mnId;
         for (int i = 1; i < Nd; i++) {
             if (vpOptimizableKFs.back()->mPrevKF) {
                 vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
-                vpOptimizableKFs.back()->mnBALocalForKF = pKF->mnId;
-            } else
+                vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pKF->mnId;
+            } else {
                 break;
+            }
         }
 
         int N = vpOptimizableKFs.size();
-
         // Optimizable points seen by temporal optimizable keyframes
         list<MapPoint *> lLocalMapPoints;
         for (int i = 0; i < N; i++) {
-            vector<MapPoint *> vpMPs = vpOptimizableKFs[i]->GetMapPointMatches();
+            vector<MapPoint *> vpMPs = vpOptimizableKFs[i]->GetMapPointsInKF();
             for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
                 MapPoint *pMP = *vit;
-                if (pMP)
-                    if (!pMP->isBad())
-                        if (pMP->mnBALocalForKF != pKF->mnId) {
-                            lLocalMapPoints.push_back(pMP);
-                            pMP->mnBALocalForKF = pKF->mnId;
-                        }
+                if (!pMP) {
+                    continue;
+                }
+                if (pMP->isBad()) {
+                    continue;
+                }
+                if (pMP->mnBAFlagInLocalMapping != pKF->mnId) {
+                    lLocalMapPoints.push_back(pMP);
+                    pMP->mnBAFlagInLocalMapping = pKF->mnId;
+                }
             }
         }
 
@@ -2005,7 +2008,7 @@ namespace ORB_SLAM3 {
             lFixedKeyFrames.push_back(vpOptimizableKFs.back()->mPrevKF);
             vpOptimizableKFs.back()->mPrevKF->mnBAFixedForKF = pKF->mnId;
         } else {
-            vpOptimizableKFs.back()->mnBALocalForKF = 0;
+            vpOptimizableKFs.back()->mnBAFlagInLocalMapping = 0;
             vpOptimizableKFs.back()->mnBAFixedForKF = pKF->mnId;
             lFixedKeyFrames.push_back(vpOptimizableKFs.back());
             vpOptimizableKFs.pop_back();
@@ -2016,22 +2019,20 @@ namespace ORB_SLAM3 {
         for (int i = 0, iend = vpNeighsKFs.size(); i < iend; i++) {
             if (lpOptVisKFs.size() >= maxCovKF)
                 break;
-
             KeyFrame *pKFi = vpNeighsKFs[i];
-            if (pKFi->mnBALocalForKF == pKF->mnId || pKFi->mnBAFixedForKF == pKF->mnId)
+            if (pKFi->mnBAFlagInLocalMapping == pKF->mnId || pKFi->mnBAFixedForKF == pKF->mnId)
                 continue;
-            pKFi->mnBALocalForKF = pKF->mnId;
+            pKFi->mnBAFlagInLocalMapping = pKF->mnId;
             if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap) {
                 lpOptVisKFs.push_back(pKFi);
-
-                vector<MapPoint *> vpMPs = pKFi->GetMapPointMatches();
+                vector<MapPoint *> vpMPs = pKFi->GetMapPointsInKF();
                 for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
                     MapPoint *pMP = *vit;
                     if (pMP)
                         if (!pMP->isBad())
-                            if (pMP->mnBALocalForKF != pKF->mnId) {
+                            if (pMP->mnBAFlagInLocalMapping != pKF->mnId) {
                                 lLocalMapPoints.push_back(pMP);
-                                pMP->mnBALocalForKF = pKF->mnId;
+                                pMP->mnBAFlagInLocalMapping = pKF->mnId;
                             }
                 }
             }
@@ -2039,15 +2040,13 @@ namespace ORB_SLAM3 {
 
         // Fixed KFs which are not covisible optimizable
         const int maxFixKF = 200;
-
         for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
              lit != lend; lit++) {
-            map<KeyFrame *, tuple<int, int>> observations = (*lit)->GetObservations();
+            map<KeyFrame *, tuple<int, int>> observations = (*lit)->GetObsKFAndLRIdx();
             for (map<KeyFrame *, tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
                  mit != mend; mit++) {
                 KeyFrame *pKFi = mit->first;
-
-                if (pKFi->mnBALocalForKF != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId) {
+                if (pKFi->mnBAFlagInLocalMapping != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId) {
                     pKFi->mnBAFixedForKF = pKF->mnId;
                     if (!pKFi->isBad()) {
                         lFixedKeyFrames.push_back(pKFi);
@@ -2260,14 +2259,14 @@ namespace ORB_SLAM3 {
             vPoint->setId(id);
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
-            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
+            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
 
             // Create visual constraints
             for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin(), mend = observations.end();
                  mit != mend; mit++) {
                 KeyFrame *pKFi = mit->first;
 
-                if (pKFi->mnBALocalForKF != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId)
+                if (pKFi->mnBAFlagInLocalMapping != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId)
                     continue;
 
                 if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap) {
@@ -2422,7 +2421,7 @@ namespace ORB_SLAM3 {
             VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
             Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
             pKFi->SetPose(Tcw);
-            pKFi->mnBALocalForKF = 0;
+            pKFi->mnBAFlagInLocalMapping = 0;
 
             if (pKFi->bImu) {
                 VertexVelocity *VV = static_cast<VertexVelocity *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1));
@@ -2442,7 +2441,7 @@ namespace ORB_SLAM3 {
             VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
             Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
             pKFi->SetPose(Tcw);
-            pKFi->mnBALocalForKF = 0;
+            pKFi->mnBAFlagInLocalMapping = 0;
         }
 
         //Points
@@ -3110,7 +3109,7 @@ namespace ORB_SLAM3 {
             optimizer.addVertex(vPoint);
 
 
-            const map<KeyFrame *, tuple<int, int>> observations = pMPi->GetObservations();
+            const map<KeyFrame *, tuple<int, int>> observations = pMPi->GetObsKFAndLRIdx();
             int nEdges = 0;
             //SET EDGES
             for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin();
@@ -3303,11 +3302,11 @@ namespace ORB_SLAM3 {
             if (pMPi->isBad())
                 continue;
 
-            const map<KeyFrame *, tuple<int, int>> observations = pMPi->GetObservations();
+            const map<KeyFrame *, tuple<int, int>> observations = pMPi->GetObsKFAndLRIdx();
             for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin();
                  mit != observations.end(); mit++) {
                 KeyFrame *pKF = mit->first;
-                if (pKF->isBad() || pKF->mnId > maxKFid || pKF->mnBALocalForKF != pMainKF->mnId ||
+                if (pKF->isBad() || pKF->mnId > maxKFid || pKF->mnBAFlagInLocalMapping != pMainKF->mnId ||
                     !pKF->GetMapPoint(get<0>(mit->second)))
                     continue;
 
@@ -3412,11 +3411,11 @@ namespace ORB_SLAM3 {
 
         // Add sliding window for current KF
         vpOptimizableKFs.push_back(pCurrKF);
-        pCurrKF->mnBALocalForKF = pCurrKF->mnId;
+        pCurrKF->mnBAFlagInLocalMapping = pCurrKF->mnId;
         for (int i = 1; i < Nd; i++) {
             if (vpOptimizableKFs.back()->mPrevKF) {
                 vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
-                vpOptimizableKFs.back()->mnBALocalForKF = pCurrKF->mnId;
+                vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pCurrKF->mnId;
             } else
                 break;
         }
@@ -3424,7 +3423,7 @@ namespace ORB_SLAM3 {
         list<KeyFrame *> lFixedKeyFrames;
         if (vpOptimizableKFs.back()->mPrevKF) {
             vpOptimizableCovKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
-            vpOptimizableKFs.back()->mPrevKF->mnBALocalForKF = pCurrKF->mnId;
+            vpOptimizableKFs.back()->mPrevKF->mnBAFlagInLocalMapping = pCurrKF->mnId;
         } else {
             vpOptimizableCovKFs.push_back(vpOptimizableKFs.back());
             vpOptimizableKFs.pop_back();
@@ -3432,13 +3431,13 @@ namespace ORB_SLAM3 {
 
         // Add temporal neighbours to merge KF (previous and next KFs)
         vpOptimizableKFs.push_back(pMergeKF);
-        pMergeKF->mnBALocalForKF = pCurrKF->mnId;
+        pMergeKF->mnBAFlagInLocalMapping = pCurrKF->mnId;
 
         // Previous KFs
         for (int i = 1; i < (Nd / 2); i++) {
             if (vpOptimizableKFs.back()->mPrevKF) {
                 vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
-                vpOptimizableKFs.back()->mnBALocalForKF = pCurrKF->mnId;
+                vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pCurrKF->mnId;
             } else
                 break;
         }
@@ -3448,7 +3447,7 @@ namespace ORB_SLAM3 {
             lFixedKeyFrames.push_back(vpOptimizableKFs.back()->mPrevKF);
             vpOptimizableKFs.back()->mPrevKF->mnBAFixedForKF = pCurrKF->mnId;
         } else {
-            vpOptimizableKFs.back()->mnBALocalForKF = 0;
+            vpOptimizableKFs.back()->mnBAFlagInLocalMapping = 0;
             vpOptimizableKFs.back()->mnBAFixedForKF = pCurrKF->mnId;
             lFixedKeyFrames.push_back(vpOptimizableKFs.back());
             vpOptimizableKFs.pop_back();
@@ -3457,13 +3456,13 @@ namespace ORB_SLAM3 {
         // Next KFs
         if (pMergeKF->mNextKF) {
             vpOptimizableKFs.push_back(pMergeKF->mNextKF);
-            vpOptimizableKFs.back()->mnBALocalForKF = pCurrKF->mnId;
+            vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pCurrKF->mnId;
         }
 
         while (vpOptimizableKFs.size() < (2 * Nd)) {
             if (vpOptimizableKFs.back()->mNextKF) {
                 vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mNextKF);
-                vpOptimizableKFs.back()->mnBALocalForKF = pCurrKF->mnId;
+                vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pCurrKF->mnId;
             } else
                 break;
         }
@@ -3474,16 +3473,16 @@ namespace ORB_SLAM3 {
         list<MapPoint *> lLocalMapPoints;
         map<MapPoint *, int> mLocalObs;
         for (int i = 0; i < N; i++) {
-            vector<MapPoint *> vpMPs = vpOptimizableKFs[i]->GetMapPointMatches();
+            vector<MapPoint *> vpMPs = vpOptimizableKFs[i]->GetMapPointsInKF();
             for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
-                // Using mnBALocalForKF we avoid redundance here, one MP can not be added several times to lLocalMapPoints
+                // Using mnBAFlagInLocalMapping we avoid redundance here, one MP can not be added several times to lLocalMapPoints
                 MapPoint *pMP = *vit;
                 if (pMP)
                     if (!pMP->isBad())
-                        if (pMP->mnBALocalForKF != pCurrKF->mnId) {
+                        if (pMP->mnBAFlagInLocalMapping != pCurrKF->mnId) {
                             mLocalObs[pMP] = 1;
                             lLocalMapPoints.push_back(pMP);
-                            pMP->mnBALocalForKF = pCurrKF->mnId;
+                            pMP->mnBAFlagInLocalMapping = pCurrKF->mnId;
                         } else {
                             mLocalObs[pMP]++;
                         }
@@ -3499,17 +3498,17 @@ namespace ORB_SLAM3 {
         // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes
         int i = 0;
         for (vector<pair<MapPoint *, int>>::iterator lit = pairs.begin(), lend = pairs.end(); lit != lend; lit++, i++) {
-            map<KeyFrame *, tuple<int, int>> observations = lit->first->GetObservations();
+            map<KeyFrame *, tuple<int, int>> observations = lit->first->GetObsKFAndLRIdx();
             if (i >= maxCovKF)
                 break;
             for (map<KeyFrame *, tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
                  mit != mend; mit++) {
                 KeyFrame *pKFi = mit->first;
 
-                if (pKFi->mnBALocalForKF != pCurrKF->mnId &&
+                if (pKFi->mnBAFlagInLocalMapping != pCurrKF->mnId &&
                     pKFi->mnBAFixedForKF != pCurrKF->mnId) // If optimizable or already included...
                 {
-                    pKFi->mnBALocalForKF = pCurrKF->mnId;
+                    pKFi->mnBAFlagInLocalMapping = pCurrKF->mnId;
                     if (!pKFi->isBad()) {
                         vpOptimizableCovKFs.push_back(pKFi);
                         break;
@@ -3716,7 +3715,7 @@ namespace ORB_SLAM3 {
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
 
-            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObservations();
+            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
 
             // Create visual constraints
             for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin(), mend = observations.end();
@@ -3726,7 +3725,7 @@ namespace ORB_SLAM3 {
                 if (!pKFi)
                     continue;
 
-                if ((pKFi->mnBALocalForKF != pCurrKF->mnId) && (pKFi->mnBAFixedForKF != pCurrKF->mnId))
+                if ((pKFi->mnBAFlagInLocalMapping != pCurrKF->mnId) && (pKFi->mnBAFixedForKF != pCurrKF->mnId))
                     continue;
 
                 if (pKFi->mnId > maxKFid) {
@@ -3959,7 +3958,7 @@ namespace ORB_SLAM3 {
 
                     // Left monocular observation
                     // 这里说的Left monocular包含两种情况：1.单目情况 2.两个相机情况下的相机1
-                    if ( pFrame->mvfXInRight[i] < 0) {
+                    if (pFrame->mvfXInRight[i] < 0) {
                         kpUn = pFrame->mvKPsUn[i];
                         nInitialMonoCorrespondences++;
                         pFrame->mvbOutlier[i] = false;
@@ -4665,7 +4664,7 @@ namespace ORB_SLAM3 {
             for (set<KeyFrame *>::const_iterator sit = spConnections.begin(), send = spConnections.end();
                  sit != send; sit++) {
                 const long unsigned int nIDj = (*sit)->mnId;
-                if ((nIDi != pCurKF->mnId || nIDj != pLoopKF->mnId) && pKF->GetWeight(*sit) < minFeat)
+                if ((nIDi != pCurKF->mnId || nIDj != pLoopKF->mnId) && pKF->GetWeightBetweenKF(*sit) < minFeat)
                     continue;
 
                 const g2o::Sim3 Sjw = vScw[nIDj];

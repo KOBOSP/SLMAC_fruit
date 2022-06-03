@@ -67,9 +67,9 @@ class KeyFrame
 
         // Variables of tracking
         //ar & mnTrackReferenceForFrame;
-        //ar & mnFuseTargetForKF;
+        //ar & mnFuseFlagInLocalMapping;
         // Variables of local mapping
-        //ar & mnBALocalForKF;
+        //ar & mnBAFlagInLocalMapping;
         //ar & mnBAFixedForKF;
         //ar & mnNumberOfOpt;
         // Variables used by KeyFrameDatabase
@@ -215,13 +215,13 @@ public:
     void AddConnection(KeyFrame* pKF, const int &weight);
     void EraseConnection(KeyFrame* pKF);
 
-    void UpdateConnections(bool upParent=true);
+    void UpdateCovisGraph(bool bShow=true);
     void UpdateBestCovisibles();
     std::set<KeyFrame *> GetConnectedKeyFrames();
     std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();
     std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);
     std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);
-    int GetWeight(KeyFrame* pKF);
+    int GetWeightBetweenKF(KeyFrame* pKF);
 
     // Spanning tree functions
     void AddChild(KeyFrame* pKF);
@@ -247,7 +247,7 @@ public:
     void EraseMapPointMatch(MapPoint* pMP);
     void ReplaceMapPointMatch(const int &idx, MapPoint* pMP);
     std::set<MapPoint*> GetMapPoints();
-    std::vector<MapPoint*> GetMapPointMatches();
+    std::vector<MapPoint*> GetMapPointsInKF();
     int TrackedMapPoints(const int &minObs);
     MapPoint* GetMapPoint(const size_t &idx);
 
@@ -314,10 +314,10 @@ public:
 
     // Variables used by the tracking
     long unsigned int mnTrackReferenceForFrame;
-    long unsigned int mnFuseTargetForKF;
+    long unsigned int mnFuseFlagInLocalMapping;
 
     // Variables used by the local mapping
-    long unsigned int mnBALocalForKF;
+    long unsigned int mnBAFlagInLocalMapping;
     long unsigned int mnBAFixedForKF;
 
     //Number of optimizations by BA(amount of iterations in BA)

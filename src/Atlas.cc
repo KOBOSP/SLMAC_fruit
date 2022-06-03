@@ -167,12 +167,12 @@ namespace ORB_SLAM3 {
 
     long unsigned int Atlas::MapPointsInMap() {
         unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->MapPointsInMap();
+        return mpCurrentMap->GetMapPointsNumInMap();
     }
 
     long unsigned Atlas::KeyFramesInMap() {
         unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->KeyFramesInMap();
+        return mpCurrentMap->GetKeyFramesNumInMap();
     }
 
     std::vector<KeyFrame *> Atlas::GetAllKeyFrames() {

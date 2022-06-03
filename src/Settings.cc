@@ -253,6 +253,10 @@ namespace ORB_SLAM3 {
         msSaveTo = ReadParameter<string>(fSettings, "System.SaveAtlasToFile", found, false);
         mfThFarPoints = ReadParameter<float>(fSettings, "System.thFarPoints", found);
         mbOpenLoop = ReadParameter<int>(fSettings, "LoopClosing.OpenLoop", found);
+        mfCullKFRedundantTh = ReadParameter<float>(fSettings, "LocalMapping.CullKFRedundantTh", found);
+        mnStrongCovisTh = ReadParameter<int>(fSettings, "LocalMapping.StrongCovisTh", found);
+        mnWeakCovisTh = ReadParameter<int>(fSettings, "LocalMapping.WeakCovisTh", found);
+
     }
 
     void Settings::PrecomputeRectificationMaps() {

@@ -100,7 +100,7 @@ namespace ORB_SLAM3 {
  */
     vector<KeyFrame *> KeyFrameDatabase::DetectLoopCandidates(KeyFrame *pKF, float minScore) {
         // 取出与当前关键帧相连（>15个共视地图点）的所有关键帧，这些相连关键帧都是局部相连，在闭环检测的时候将被剔除
-        // 相连关键帧定义见 KeyFrame::UpdateConnections()
+        // 相连关键帧定义见 KeyFrame::UpdateCovisGraph()
         set<KeyFrame *> spConnectedKeyFrames = pKF->GetConnectedKeyFrames();
         // 用于保存可能与当前关键帧形成闭环的候选帧（只要有相同的word，且不属于局部相连（共视）帧）
         list<KeyFrame *> lKFsSharingWords;

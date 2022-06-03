@@ -450,7 +450,7 @@ namespace ORB_SLAM3 {
     }
 
     void System::ChangeDataset() {
-        if (mpAtlas->GetCurrentMap()->KeyFramesInMap() < 12) {
+        if (mpAtlas->GetCurrentMap()->GetKeyFramesNumInMap() < 12) {
             mpTracker->ResetActiveMap();
         } else {
             mpTracker->CreateMapInAtlas();

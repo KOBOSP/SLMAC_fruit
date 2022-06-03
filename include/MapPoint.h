@@ -51,7 +51,7 @@ class MapPoint
         ar & mnId;
         ar & mnFirstKFid;
         ar & mnFirstFrame;
-        ar & nObs;
+        ar & nTimesObs;
         // Variables used by the tracking
         //ar & mTrackProjX;
         //ar & mTrackProjY;
@@ -69,8 +69,8 @@ class MapPoint
         //ar & mnLastFrameSeen;
 
         // Variables used by local mapping
-        //ar & mnBALocalForKF;
-        //ar & mnFuseCandidateForKF;
+        //ar & mnBAFlagInLocalMapping;
+        //ar & mnFuseFlagInLocalMapping;
 
         // Variables used by loop closing and merging
         //ar & mnLoopPointForKF;
@@ -86,7 +86,7 @@ class MapPoint
         ar & boost::serialization::make_array(mWorldPos.data(), mWorldPos.size());
         ar & boost::serialization::make_array(mNormalVector.data(), mNormalVector.size());
         //ar & BOOST_SERIALIZATION_NVP(mBackupObservationsId);
-        //ar & mObservations;
+        //ar & mObsKFAndLRIdx;
         ar & mBackupObservationsId1;
         ar & mBackupObservationsId2;
         serializeMatrix(ar,mDescriptor,version);
@@ -118,10 +118,10 @@ public:
 
     KeyFrame* GetReferenceKeyFrame();
 
-    std::map<KeyFrame*,std::tuple<int,int>> GetObservations();
-    int Observations();
+    std::map<KeyFrame*,std::tuple<int,int>> GetObsKFAndLRIdx();
+    int GetObsTimes();
 
-    void AddObservation(KeyFrame* pKF,int idx);
+    void AddObsKFAndLRIdx(KeyFrame* pKF, int idx);
     void EraseObservation(KeyFrame* pKF);
 
     std::tuple<int,int> GetIndexInKeyFrame(KeyFrame* pKF);
@@ -164,7 +164,7 @@ public:
     static long unsigned int nNextId;
     long int mnFirstKFid;
     long int mnFirstFrame;
-    int nObs;
+    int nTimesObs;
 
     // Variables used by the tracking
     float mTrackProjX;
@@ -180,8 +180,8 @@ public:
     long unsigned int mnLastFrameSeen;
 
     // Variables used by local mapping
-    long unsigned int mnBALocalForKF;
-    long unsigned int mnFuseCandidateForKF;
+    long unsigned int mnBAFlagInLocalMapping;
+    long unsigned int mnFuseFlagInLocalMapping;
 
     // Variables used by loop closing
     long unsigned int mnLoopPointForKF;
@@ -212,7 +212,7 @@ protected:
      Eigen::Vector3f mWorldPos;
 
      // Keyframes observing the point and associated index in keyframe
-     std::map<KeyFrame*,std::tuple<int,int> > mObservations;
+     std::map<KeyFrame*,std::tuple<int,int> > mObsKFAndLRIdx;
      // For save relation without pointer, this is necessary for save/load function
      std::map<long unsigned int, int> mBackupObservationsId1;
      std::map<long unsigned int, int> mBackupObservationsId2;

@@ -152,13 +152,13 @@ namespace ORB_SLAM3 {
     }
 
 // 获取地图点数目
-    long unsigned int Map::MapPointsInMap() {
+    long unsigned int Map::GetMapPointsNumInMap() {
         unique_lock<mutex> lock(mMutexMap);
         return mspMapPoints.size();
     }
 
 // 获取地图中的关键帧数目
-    long unsigned int Map::KeyFramesInMap() {
+    long unsigned int Map::GetKeyFramesNumInMap() {
         unique_lock<mutex> lock(mMutexMap);
         return mspKeyFrames.size();
     }
@@ -356,10 +356,10 @@ namespace ORB_SLAM3 {
             if (!pMPi || pMPi->isBad())
                 continue;
 
-            if (pMPi->GetObservations().size() == 0) {
+            if (pMPi->GetObsKFAndLRIdx().size() == 0) {
                 nMPWithoutObs++;
             }
-            map<KeyFrame *, std::tuple<int, int>> mpObs = pMPi->GetObservations();
+            map<KeyFrame *, std::tuple<int, int>> mpObs = pMPi->GetObsKFAndLRIdx();
             for (map<KeyFrame *, std::tuple<int, int>>::iterator it = mpObs.begin(), end = mpObs.end();
                  it != end; ++it) {
                 if (it->first->GetMap() != this || it->first->isBad()) {
