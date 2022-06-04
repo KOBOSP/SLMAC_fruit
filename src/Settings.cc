@@ -245,6 +245,7 @@ namespace ORB_SLAM3 {
         mfImageFrameScale = ReadParameter<float>(fSettings, "Viewer.imageViewScale", found);
         mfMapWidth = ReadParameter<float>(fSettings, "Viewer.MapWidth", found);
         mfMapHeight = ReadParameter<float>(fSettings, "Viewer.MapHeight", found);
+        mnColorNum = ReadParameter<int>(fSettings, "Viewer.ColorNum", found);
     }
 
     void Settings::ReadSystem(cv::FileStorage &fSettings) {
@@ -256,7 +257,7 @@ namespace ORB_SLAM3 {
         mfCullKFRedundantTh = ReadParameter<float>(fSettings, "LocalMapping.CullKFRedundantTh", found);
         mnStrongCovisTh = ReadParameter<int>(fSettings, "LocalMapping.StrongCovisTh", found);
         mnWeakCovisTh = ReadParameter<int>(fSettings, "LocalMapping.WeakCovisTh", found);
-
+        mfThTimeRescueLost = ReadParameter<float>(fSettings, "Tracking.ThTimeRescueLost", found);
     }
 
     void Settings::PrecomputeRectificationMaps() {

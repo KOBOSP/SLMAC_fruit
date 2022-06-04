@@ -82,8 +82,8 @@ class KeyFrame
         //ar & mnMergeQuery;
         //ar & mnMergeWords;
         //ar & mMergeScore;
-        //ar & mnPlaceRecognitionQuery;
-        //ar & mnPlaceRecognitionWords;
+        //ar & mnRecognitionFlagInLoopClosing;
+        //ar & mnRecognitionCommonWords;
         //ar & mPlaceRecognitionScore;
         //ar & mbCurrentPlaceRecognition;
         // Variables of loop closing
@@ -333,8 +333,8 @@ public:
     long unsigned int mnMergeQuery;
     int mnMergeWords;
     float mMergeScore;
-    long unsigned int mnPlaceRecognitionQuery;
-    int mnPlaceRecognitionWords;
+    long unsigned int mnRecognitionFlagInLoopClosing;
+    int mnRecognitionCommonWords;
     float mPlaceRecognitionScore;
 
     bool mbCurrentPlaceRecognition;

@@ -106,9 +106,11 @@ Viewer.ViewpointF: 500.0
 Viewer.imageViewScale: 1.0
 Viewer.MapWidth: 1024.0
 Viewer.MapHeight: 768.0
+Viewer.ColorNum: 30
 
 LoopClosing.OpenLoop: 1
 System.thFarPoints: 100.0
 LocalMapping.StrongCovisTh: 15
 LocalMapping.WeakCovisTh: 3
 LocalMapping.CullKFRedundantTh: 0.5
+Tracking.ThTimeRescueLost: 5.0

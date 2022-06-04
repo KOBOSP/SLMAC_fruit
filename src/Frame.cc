@@ -84,8 +84,6 @@ namespace ORB_SLAM3 {
         if (frame.HasVelocity()) {
             SetVelocity(frame.GetVelocity());
         }
-
-        mmProjectPoints = frame.mmProjectPoints;
     }
 
 // 立体匹配模式下的双目
@@ -149,7 +147,6 @@ namespace ORB_SLAM3 {
         // 初始化本帧的地图点
         mvpMPs = vector<MapPoint *>(mnKPsLeftNum, static_cast<MapPoint *>(NULL));
         mvbOutlier = vector<bool>(mnKPsLeftNum, false);
-        mmProjectPoints.clear();
 
 
         // This is done only for the first Frame (or after a change in the calibration)
@@ -859,14 +856,16 @@ namespace ORB_SLAM3 {
         sort(vDistIdx.begin(), vDistIdx.end());
         const float median = vDistIdx[vDistIdx.size() / 2].first;
         const float thDist = 1.5f * 1.4f * median;
-
+        mnMStereo = vDistIdx.size();
         for (int i = vDistIdx.size() - 1; i >= 0; i--) {
-            if (vDistIdx[i].first < thDist)
+            if (vDistIdx[i].first < thDist){
                 break;
+            }
             else {
                 // 误匹配点置为-1，和初始化时保持一直，作为error code
                 mvfXInRight[vDistIdx[i].second] = -1;
                 mvfMPDepth[vDistIdx[i].second] = -1;
+                mnMStereo--;
             }
         }
     }
@@ -904,82 +903,4 @@ namespace ORB_SLAM3 {
         unique_lock<std::mutex> lock(*mpMutexImu);
         mbImuPreintegrated = true;
     }
-
-/** 
- * @brief 两个相机模式下单相机的验证，判断路标点是否在视野中
- */
-    bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight) {
-        // 3D in absolute coordinates
-        // Step 1 获得这个地图点的世界坐标
-        Eigen::Vector3f P = pMP->GetWorldPos();
-
-        Eigen::Matrix3f mR;
-        Eigen::Vector3f mt, twc;
-        mR = mRcw;
-        mt = mtcw;
-        twc = mOw;
-
-
-        // 3D in camera coordinates
-        // 根据当前帧(粗糙)位姿转化到当前相机坐标系下的三维点Pc
-        Eigen::Vector3f Pc = mR * P + mt;
-        const float Pc_dist = Pc.norm();
-        const float &PcZ = Pc(2);
-
-        // Check positive depth
-        // Step 2 关卡一：检查这个地图点在当前帧的相机坐标系下，是否有正的深度.如果是负的，表示出错，直接返回false
-        if (PcZ < 0.0f)
-            return false;
-
-        // Project in image and check it is not outside
-        Eigen::Vector2f uv;
-        uv = mpCamera->project(Pc);
-
-        // Step 3 关卡二：将MapPoint投影到当前帧的像素坐标(u,v), 并判断是否在图像有效范围内
-        // 判断是否在图像边界中，只要不在那么就说明无法在当前帧下进行重投影
-        if (uv(0) < mfMinX || uv(0) > mfMaxX)
-            return false;
-        if (uv(1) < mfMinY || uv(1) > mfMaxY)
-            return false;
-
-        // Check distance is in the scale invariance region of the MapPoint
-        // Step 4 关卡三：计算MapPoint到相机中心的距离, 并判断是否在尺度变化的距离内
-        // 得到认为的可靠距离范围:[0.8f*mfMinDistance, 1.2f*mfMaxDistance]
-        const float maxDistance = pMP->GetMaxDistanceInvariance();
-        const float minDistance = pMP->GetMinDistanceInvariance();
-        // 得到当前地图点距离当前帧相机光心的距离,注意P，mOw都是在同一坐标系下才可以
-        // mOw：当前相机光心在世界坐标系下坐标
-        const Eigen::Vector3f PO = P - twc;
-        // 取模就得到了距离
-        const float dist = PO.norm();
-
-        // 如果不在允许的尺度变化范围内，认为重投影不可靠
-        if (dist < minDistance || dist > maxDistance)
-            return false;
-
-        // Check viewing angle
-        // Step 5 关卡四：计算当前相机指向地图点向量和地图点的平均观测方向夹角的余弦值, 若小于cos(viewingCosLimit), 即夹角大于viewingCosLimit弧度则返回
-        Eigen::Vector3f Pn = pMP->GetNormal();
-
-        // 计算当前相机指向地图点向量和地图点的平均观测方向夹角的余弦值，注意平均观测方向为单位向量
-        const float viewCos = PO.dot(Pn) / dist;
-
-        // 如果大于给定的阈值 cos(60°)=0.5，认为这个点方向太偏了，重投影不可靠，返回false
-        if (viewCos < viewingCosLimit)
-            return false;
-
-        // Predict scale in the image
-        // Step 6 根据地图点到光心的距离来预测一个尺度（仿照特征点金字塔层级）
-        const int nPredictedLevel = pMP->PredictScale(dist, this);
-
-        // Step 7 记录计算得到的一些参数
-        pMP->mTrackProjX = uv(0);
-        pMP->mTrackProjY = uv(1);
-        pMP->mnTrackScaleLevel = nPredictedLevel;
-        pMP->mTrackViewCos = viewCos;
-        pMP->mTrackDepth = Pc_dist;
-
-        return true;
-    }
-
 } //namespace ORB_SLAM

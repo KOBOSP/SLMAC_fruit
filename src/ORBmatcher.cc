@@ -288,8 +288,8 @@ namespace ORB_SLAM3 {
         return nmatches;
     }
 
-    int ORBmatcher::SearchByProjection(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints,
-                                       vector<MapPoint *> &vpMatched, int th, float ratioHamming) {
+    int ORBmatcher::SearchKFAndMPsByProjectionInLC(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints,
+                                                   vector<MapPoint *> &vpMatched, int th, float ratioHamming) {
         // Get Calibration Parameters for later projection
         const float &fx = pKF->fx;
         const float &fy = pKF->fy;
@@ -408,10 +408,10 @@ namespace ORB_SLAM3 {
         return nmatches;
     }
 
-    int ORBmatcher::SearchByProjection(KeyFrame *pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint *> &vpPoints,
-                                       const std::vector<KeyFrame *> &vpPointsKFs,
-                                       std::vector<MapPoint *> &vpMatched, std::vector<KeyFrame *> &vpMatchedKF, int th,
-                                       float ratioHamming) {
+    int ORBmatcher::SearchMPsAndKFsByProjectionInLC(KeyFrame *pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint *> &vpPoints,
+                                                    const std::vector<KeyFrame *> &vpPointsKFs,
+                                                    std::vector<MapPoint *> &vpMatchedMP, std::vector<KeyFrame *> &vpMatchedKF, int th,
+                                                    float ratioHamming) {
         // Get Calibration Parameters for later projection
         const float &fx = pKF->fx;
         const float &fy = pKF->fy;
@@ -422,7 +422,7 @@ namespace ORB_SLAM3 {
         Eigen::Vector3f Ow = Tcw.inverse().translation();
 
         // Set of MapPoints already found in the KeyFrame
-        set<MapPoint *> spAlreadyFound(vpMatched.begin(), vpMatched.end());
+        set<MapPoint *> spAlreadyFound(vpMatchedMP.begin(), vpMatchedMP.end());
         spAlreadyFound.erase(static_cast<MapPoint *>(NULL));
 
         int nmatches = 0;
@@ -490,7 +490,7 @@ namespace ORB_SLAM3 {
             int bestIdx = -1;
             for (vector<size_t>::const_iterator vit = vIndices.begin(), vend = vIndices.end(); vit != vend; vit++) {
                 const size_t idx = *vit;
-                if (vpMatched[idx])
+                if (vpMatchedMP[idx])
                     continue;
 
                 const int &kpLevel = pKF->mvKPsUn[idx].octave;
@@ -509,7 +509,7 @@ namespace ORB_SLAM3 {
             }
 
             if (bestDist <= TH_LOW * ratioHamming) {
-                vpMatched[bestIdx] = pMP;
+                vpMatchedMP[bestIdx] = pMP;
                 vpMatchedKF[bestIdx] = pKFi;
                 nmatches++;
             }
@@ -664,7 +664,7 @@ namespace ORB_SLAM3 {
     * @param  vpMatches12        pKF2中与pKF1匹配的MapPoint，vpMatches12[i]表示匹配的地图点，null表示没有匹配，i表示匹配的pKF1 特征点索引
     * @return                    成功匹配的数量
     */
-    int ORBmatcher::SearchByBoW(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches12) {
+    int ORBmatcher::SearchKFsByBoWInLoopClosing(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches12) {
         // Step 1 分别取出两个关键帧的特征点、BoW 向量、地图点、描述子
         const vector<cv::KeyPoint> &vKeysUn1 = pKF1->mvKPsUn;
         const DBoW2::FeatureVector &vFeatVec1 = pKF1->mFeatVec;
@@ -775,9 +775,7 @@ namespace ORB_SLAM3 {
             int ind1 = -1;
             int ind2 = -1;
             int ind3 = -1;
-
             ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
-
             for (int i = 0; i < HISTO_LENGTH; i++) {
                 if (i == ind1 || i == ind2 || i == ind3)
                     continue;
@@ -787,7 +785,6 @@ namespace ORB_SLAM3 {
                 }
             }
         }
-
         return nmatches;
     }
 

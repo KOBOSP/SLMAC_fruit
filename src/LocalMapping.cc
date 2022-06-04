@@ -154,8 +154,7 @@ namespace ORB_SLAM3 {
                             }
                             // 判断成功跟踪匹配的点数是否足够多
                             // 条件---------1.1、跟踪成功的内点数目大于75-----1.2、并且是单目--或--2.1、跟踪成功的内点数目大于100-----2.2、并且不是单目
-                            bool bLarge = ((mpTracker->GetMatchesInliers() > 75) && mbMonocular) ||
-                                          ((mpTracker->GetMatchesInliers() > 100) && !mbMonocular);
+                            bool bLarge = ((mpTracker->GetMatchesInliers() > 100) && !mbMonocular);
                             // 局部地图+IMU一起优化，优化关键帧位姿、地图点、IMU参数
                             Optimizer::LocalBAWithImu(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
                                                       num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA, bLarge,

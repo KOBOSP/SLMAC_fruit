@@ -500,19 +500,13 @@ namespace ORB_SLAM3 {
 
         tuple<int, int> indexes = ObsKFAndLRIdx[pRefKF];
         int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
-        int level;
-        level = pRefKF->mvKPsUn[leftIndex].octave;
-
-
-        //const int level = pRefKF->mvKPsUn[ObsKFAndLRIdx[pRefKF]].octave;
-        const float levelScaleFactor = pRefKF->mvScaleFactors[level];  // 当前金字塔层对应的缩放倍数
-        const int nLevels = pRefKF->mnScaleLevels;  // 金字塔层数
+        int level = pRefKF->mvKPsUn[leftIndex].octave;
 
         {
             unique_lock<mutex> lock3(mMutexPos);
             // 使用方法见PredictScale函数前的注释
-            mfMaxDistance = dist * levelScaleFactor;  // 观测到该点的距离上限
-            mfMinDistance = mfMaxDistance / pRefKF->mvScaleFactors[nLevels - 1];  // 观测到该点的距离下限
+            mfMaxDistance = dist * pRefKF->mvScaleFactors[level];  // 观测到该点的距离上限
+            mfMinDistance = mfMaxDistance / pRefKF->mvScaleFactors[pRefKF->mnScaleLevels - 1];  // 观测到该点的距离下限
             mNormalVector = normal / n;  // 获得地图点平均的观测方向
         }
     }

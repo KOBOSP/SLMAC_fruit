@@ -26,133 +26,150 @@
 
 namespace ORB_SLAM3 {
 
-    FrameDrawer::FrameDrawer(Atlas *pAtlas) : mpAtlas(pAtlas) {
+    FrameDrawer::FrameDrawer(Atlas *pAtlas, int nCN) : mpAtlas(pAtlas) {
         mState = Tracking::SYSTEM_NOT_READY;
         mImgLeft = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
         mImgRight = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
+        mnColorNum = nCN;
+        for (int i = 0; i < nCN; i++) {
+            vRandColorSet.push_back(cv::Scalar(rand() % 255, rand() % 255, rand() % 255));
+        }
     }
 
     cv::Mat FrameDrawer::DrawKeyFrame(float imageScale, bool bFrameBoth) {
         cv::Mat ImgLeft, ImgRight, ImgTmp;
         vector<int> vMatches; // Initialization: correspondeces with reference keypoints
-        vector<bool> vbVO, vbMap; // Tracked MapPoints in current frame
-        int State;
+        int State, nTrackMethod;
         vector<cv::KeyPoint> vIniKPsLeft, vCurKPsLeft; // KeyPoints in current frame
         vector<float> vfCurXInRight;
-        cv::Scalar ColorA(0, 255, 0);
-        cv::Scalar ColorB(255, 0, 0);
-        cv::Scalar ColorC(0, 0, 255);
-
+        std::vector<bool> vbOutlier;
         //Copy variables within scoped mutex
         {
             unique_lock<mutex> lock(mMutex);
             State = mState;
-            if (mState == Tracking::SYSTEM_NOT_READY)
-                mState = Tracking::NO_IMAGES_YET;
+            nTrackMethod = mnTrackMethod;
             mImgLeft.copyTo(ImgLeft);
             mImgRight.copyTo(ImgRight);
             vCurKPsLeft = mvCurKPsLeft;
             vIniKPsLeft = mvIniKPsLeft;
             vfCurXInRight = mvfCurXInRight;
-            if (mState == Tracking::NOT_INITIALIZED) {
-                vMatches = mvIniMatches;
-            } else if (mState == Tracking::OK) {
-                vbVO = mvbVO;
-                vbMap = mvbMap;
-            }
+            vbOutlier = mvbOutlier;
+            vMatches = mvIniMatches;
         }
 
-        if (ImgLeft.channels()<3){
+        if (ImgLeft.channels() < 3) {
             cvtColor(ImgLeft, ImgLeft, cv::COLOR_GRAY2BGR);
         }
-        if (ImgRight.channels()<3){
+        if (ImgRight.channels() < 3) {
             cvtColor(ImgRight, ImgRight, cv::COLOR_GRAY2BGR);
         }
         //Draw
+        if (bFrameBoth) {
+            cv::hconcat(ImgLeft, ImgRight, ImgTmp);
+        } else {
+            ImgLeft.copyTo(ImgTmp);
+        }
         if (State == Tracking::NOT_INITIALIZED) {
             for (unsigned int i = 0; i < vMatches.size(); i++) {
                 if (vMatches[i] >= 0) {
                     cv::Point2f pt1, pt2;
                     pt1 = vIniKPsLeft[i].pt / imageScale;
                     pt2 = vCurKPsLeft[vMatches[i]].pt / imageScale;
-                    cv::line(ImgLeft, pt1, pt2, ColorA);
+                    cv::line(ImgTmp, pt1, pt2, vRandColorSet[i % mnColorNum]);
                 }
             }
-        } else if (State == Tracking::OK){
-            mnTrackedMap = 0;
-            mnTrackedVO = 0;
-            const float r = 5;
+        } else if (State == Tracking::OK) {
+            const float fRectR = 5;
+            const float fCircleR = 3;
             int n = vCurKPsLeft.size();
             for (int i = 0; i < n; i++) {
-                if (vbVO[i] || vbMap[i]) {
-                    cv::Point2f pt1, pt2;
-                    cv::Point2f point;
-                    point = vCurKPsLeft[i].pt / imageScale;
-                    float px = vCurKPsLeft[i].pt.x / imageScale;
-                    float py = vCurKPsLeft[i].pt.y / imageScale;
-                    pt1.x = px - r;
-                    pt1.y = py - r;
-                    pt2.x = px + r;
-                    pt2.y = py + r;
-                    if (vbMap[i]) {
-                        cv::rectangle(ImgLeft, pt1, pt2, ColorA);
-                        cv::circle(ImgLeft, point, 2, ColorA, -1);
-                        mnTrackedMap++;
-                    } else {
-                        cv::rectangle(ImgLeft, pt1, pt2, ColorB);
-                        cv::circle(ImgLeft, point, 2, ColorB, -1);
-                        mnTrackedVO++;
+                cv::Point2f pt1, pt2, pt3;
+                pt1 = vCurKPsLeft[i].pt / imageScale;
+
+                if ((vfCurXInRight[i] > 0)) {
+                    //left KPs
+                    cv::circle(ImgTmp, pt1, fCircleR, vRandColorSet[i % mnColorNum], fCircleR / 2);
+                    //right KPs
+                    if (bFrameBoth) {
+                        pt2.x = (ImgLeft.cols + vfCurXInRight[i]) / imageScale;
+                        pt2.y = pt1.y;
+                        cv::circle(ImgTmp, pt2, fCircleR, vRandColorSet[i % mnColorNum], fCircleR / 2);
+                        if (i % 4 == 0) {
+                            cv::line(ImgTmp, pt1, pt2, vRandColorSet[i % mnColorNum]);
+                        }
                     }
+                }
+
+                if (!vbOutlier[i]) {
+                    pt2.x = pt1.x - fRectR;
+                    pt2.y = pt1.y - fRectR;
+                    pt3.x = pt1.x + fRectR;
+                    pt3.y = pt1.y + fRectR;
+                    cv::rectangle(ImgTmp, pt2, pt3, vRandColorSet[i % mnColorNum]);
                 }
             }
         }
 
-        ImgLeft.copyTo(ImgTmp);
-        if(bFrameBoth && vfCurXInRight.size()>0){
-            cv::hconcat(ImgLeft, ImgRight, ImgTmp);
-            int n = vCurKPsLeft.size();
-            for (int i = 0; i < n; i++) {
-                if ((vfCurXInRight[i] > 0)&&(vbVO[i] || vbMap[i])) {
-                    cv::Point2f pt1, pt2;
-                    pt1 = vCurKPsLeft[i].pt / imageScale;
-                    pt2.x = (ImgLeft.cols + vfCurXInRight[i]) / imageScale;
-                    pt2.y = pt1.y;
-                    cv::line(ImgTmp, pt1, pt2, ColorC);
-                }
-            }
-        }
-        DrawTextInfo(ImgTmp, State, ImgLeft);
+        DrawTextInfo(ImgTmp, State, nTrackMethod, ImgLeft);
         return ImgLeft;
     }
 
 
-
-    void FrameDrawer::DrawTextInfo(cv::Mat &ImgOri, int nState, cv::Mat &ImgWithText) {
+    void FrameDrawer::DrawTextInfo(cv::Mat &ImgOri, int nState, int nTrackMethod, cv::Mat &ImgWithText) {
         stringstream sShow;
-        if (nState == Tracking::NO_IMAGES_YET)
-            sShow << " WAITING FOR IMAGES";
-        else if (nState == Tracking::NOT_INITIALIZED)
-            sShow << " TRYING TO INITIALIZE ";
-        else if (nState == Tracking::OK) {
-            if (!mbOnlyTracking)
-                sShow << "SLAM MODE | ";
-            else
-                sShow << "LOCALIZATION | ";
-            int nMaps = mpAtlas->CountMaps();
-            int nKFs = mpAtlas->KeyFramesInMap();
-            int nMPs = mpAtlas->MapPointsInMap();
-            sShow << "Maps: " << nMaps << ", KFs: " << nKFs << ", MPs: " << nMPs << ", TMap: " << mnTrackedMap << " , TVO: " << mnTrackedVO;
-        } else if (nState == Tracking::LOST) {
-            sShow << " TRACK LOST. TRYING TO RELOCALIZE ";
+        if (nState == Tracking::NO_IMAGES_YET) {
+            sShow << " Wait ";
+        } else if (nState == Tracking::NOT_INITIALIZED) {
+            sShow << " Init";
         } else if (nState == Tracking::SYSTEM_NOT_READY) {
-            sShow << " LOADING ORB VOCABULARY. PLEASE WAIT...";
+            sShow << " Load ";
+        } else if (nState == Tracking::OK) {
+            if (!mbOnlyTracking) {
+                sShow << "SLAM ";
+            } else {
+                sShow << " Track ";
+            }
+        } else if (nState == Tracking::RECENTLY_LOST) {
+            sShow << " Rece ";
+        } else if (nState == Tracking::LOST) {
+            sShow << " Lost ";
         }
+
+        switch (nTrackMethod) {
+            case (0): {
+                sShow << "NoWay ";
+                break;
+            }
+            case (1): {
+                sShow << "Imu ";
+                break;
+            }
+            case (2): {
+                sShow << "Motion ";
+                break;
+            }
+            case (3): {
+                sShow << "RefKF ";
+                break;
+            }
+            case (4): {
+                sShow << "Reloc ";
+                break;
+            }
+        }
+        sShow << "| EFps:" << mnExtraFps << " TFps:" << mnTrackFps << " | ";
+        int nMaps = mpAtlas->CountMaps();
+        int nKFs = mpAtlas->KeyFramesInMap();
+        int nMPs = mpAtlas->MapPointsInMap();
+        sShow << "Maps: " << nMaps << ", KFs: " << nKFs << ", MPs: " << nMPs << ", TMap: " << mnTMap << " , MStero: "
+              << mnMStereo;
 
         int nBaseline = 0;
         cv::Size TextSize = cv::getTextSize(sShow.str(), cv::FONT_HERSHEY_PLAIN, 1, 1, &nBaseline);
         ImgWithText = cv::Mat(ImgOri.rows + TextSize.height + 10, ImgOri.cols, ImgOri.type());
         ImgOri.copyTo(ImgWithText.rowRange(0, ImgOri.rows).colRange(0, ImgOri.cols));
-        ImgWithText.rowRange(ImgOri.rows, ImgWithText.rows) = cv::Mat::zeros(TextSize.height + 10, ImgOri.cols, ImgOri.type());
+        ImgWithText.rowRange(ImgOri.rows, ImgWithText.rows) = cv::Mat::zeros(TextSize.height + 10, ImgOri.cols,
+                                                                             ImgOri.type());
         cv::putText(ImgWithText, sShow.str(), cv::Point(5, ImgWithText.rows - 5), cv::FONT_HERSHEY_PLAIN, 1,
                     cv::Scalar(255, 255, 255), 1, 8);
 
@@ -161,34 +178,27 @@ namespace ORB_SLAM3 {
     void FrameDrawer::Update(Tracking *pTracker, bool bFrameBoth) {
         unique_lock<mutex> lock(mMutex);
         pTracker->mImgLeft.copyTo(mImgLeft);
-        mvCurKPsLeft = pTracker->mCurFrame.mvKPsLeft;
-        mvIniKPsLeft = pTracker->mInitialFrame.mvKPsLeft;
-        mnCurKPsLeft = mvCurKPsLeft.size();
         if (bFrameBoth) {
             pTracker->mImgRight.copyTo(mImgRight);
-            mvfCurXInRight = pTracker->mCurFrame.mvfXInRight;
         }
-
-        mvbVO = vector<bool>(mnCurKPsLeft, false);
-        mvbMap = vector<bool>(mnCurKPsLeft, false);
-        mbOnlyTracking = pTracker->mbOnlyTracking;
 
         if (pTracker->mLastProcessedState == Tracking::NOT_INITIALIZED) {
             mvIniMatches = pTracker->mvIniMatches;
         } else if (pTracker->mLastProcessedState == Tracking::OK) {
-            for (int i = 0; i < mnCurKPsLeft; i++) {
-                MapPoint *pMP = pTracker->mCurFrame.mvpMPs[i];
-                if (pMP) {
-                    if (!pTracker->mCurFrame.mvbOutlier[i]) {
-                        if (pMP->GetObsTimes() > 2)
-                            mvbMap[i] = true;
-                        else
-                            mvbVO[i] = true;
-                    }
-                }
-            }
+            mnTrackMethod = pTracker->mnTrackMethod;
+            mvbOutlier = pTracker->mCurFrame.mvbOutlier;
+            mvfCurXInRight = pTracker->mCurFrame.mvfXInRight;
         }
+
+        mvCurKPsLeft = pTracker->mCurFrame.mvKPsLeft;
+        mvIniKPsLeft = pTracker->mInitialFrame.mvKPsLeft;
+
         mState = static_cast<int>(pTracker->mLastProcessedState);
+        mbOnlyTracking = pTracker->mbOnlyTracking;
+        mnTrackFps = pTracker->mdTrackFps;
+        mnExtraFps = pTracker->mdExtraFps;
+        mnTMap = pTracker->mnLMInFMatchNum;
+        mnMStereo = pTracker->mCurFrame.mnMStereo;
     }
 
 } //namespace ORB_SLAM

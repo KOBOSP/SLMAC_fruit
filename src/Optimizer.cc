@@ -1848,16 +1848,13 @@ namespace ORB_SLAM3 {
                 kpUn2 = pKF2->mvKPsUn[i2];
                 obs2 << kpUn2.pt.x, kpUn2.pt.y;
                 inKF2 = true;
-
                 nInKF2++;
             } else {
                 float invz = 1 / P3D2c(2);
                 float x = P3D2c(0) * invz;
                 float y = P3D2c(1) * invz;
-
                 obs2 << x, y;
                 kpUn2 = cv::KeyPoint(cv::Point2f(x, y), pMP2->mnTrackScaleLevel);
-
                 inKF2 = false;
                 nOutKF2++;
             }

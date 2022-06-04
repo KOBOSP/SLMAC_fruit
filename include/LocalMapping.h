@@ -89,7 +89,6 @@ public:
     // not consider far points (clouds)
     bool mbFarPoints;
     float mfThFarPoints;
-
 protected:
 
     bool HaveNewKeyFrames();

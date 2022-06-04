@@ -149,7 +149,7 @@ namespace ORB_SLAM3 {
         float mfViewPointX, mfViewPointY, mfViewPointZ, mfViewPointF;
         float mfImageFrameScale;
         float mfMapWidth, mfMapHeight;
-
+        int mnColorNum;
         /*
          * Save & load maps
          */
@@ -158,6 +158,7 @@ namespace ORB_SLAM3 {
         bool mbOpenLoop;
         float mfCullKFRedundantTh;
         int mnWeakCovisTh,mnStrongCovisTh;
+        float mfThTimeRescueLost;
     };
 };
 

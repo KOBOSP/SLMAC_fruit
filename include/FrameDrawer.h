@@ -41,7 +41,7 @@ class FrameDrawer
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    FrameDrawer(Atlas* pAtlas);
+    FrameDrawer(Atlas* pAtlas, int nCN);
 
     // Update info from the last processed frame.
     void Update(Tracking *pTracker, bool bFrameBoth);
@@ -52,21 +52,22 @@ public:
 
 protected:
 
-    void DrawTextInfo(cv::Mat &ImgOri, int nState, cv::Mat &ImgWithText);
+    void DrawTextInfo(cv::Mat &ImgOri, int nState, int nTrackMethod, cv::Mat &ImgWithText);
 
     // Info of the frame to be drawn
     cv::Mat mImgLeft, mImgRight;
-    int mnCurKPsLeft;
     vector<cv::KeyPoint> mvCurKPsLeft, mvIniKPsLeft;
     vector<float> mvfCurXInRight;
-    vector<bool> mvbMap, mvbVO;
     bool mbOnlyTracking;
-    int mnTrackedMap, mnTrackedVO;
     vector<int> mvIniMatches;
     int mState;
-
+    int mnTrackMethod;
+    int mnTrackFps,mnExtraFps;
     Atlas* mpAtlas;
-
+    int mnTMap, mnMStereo;
+    std::vector<bool> mvbOutlier;
+    int mnColorNum;
+    std::vector<cv::Scalar> vRandColorSet;
     std::mutex mMutex;
 
 };

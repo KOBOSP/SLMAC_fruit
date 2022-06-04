@@ -88,7 +88,7 @@ namespace ORB_SLAM3 {
         // 如果是有imu的传感器类型，设置mbIsInertial = true;以后的跟踪和预积分将和这个标志有关
         mpAtlas->SetInertialSensor();
 
-        mpFrameDrawer = new FrameDrawer(mpAtlas);
+        mpFrameDrawer = new FrameDrawer(mpAtlas, mSettings->mnColorNum);
         mpMapDrawer = new MapDrawer(mpAtlas, sSettingFile, mSettings);
 
         //(it will live in the main thread of execution, the one that called this constructor)
@@ -251,7 +251,7 @@ namespace ORB_SLAM3 {
         // Wait until all thread have effectively stopped
         while (!mpLocalMapper->CheckFinished() || !mpLoopCloser->CheckFinished() || mpLoopCloser->CheckRunningGBA()) {
             if(!mpLocalMapper->CheckFinished()){
-                cout << "mpLocalMapper is not finished" << endl;
+                cout << "mpLocalMapping is not finished" << endl;
             }
             if(!mpLoopCloser->CheckFinished()){
                 cout << "mpLoopCloser is not finished" << endl;

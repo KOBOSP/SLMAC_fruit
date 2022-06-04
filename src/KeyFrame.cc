@@ -32,12 +32,14 @@ namespace ORB_SLAM3 {
               mnBALocalForMerge(0),
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnMergeQuery(0), mnMergeWords(0),
               mnBAGlobalForKF(0),
-              fx(0), fy(0), cx(0), cy(0), invfx(0), invfy(0), mnPlaceRecognitionQuery(0), mnPlaceRecognitionWords(0),
+              fx(0), fy(0), cx(0), cy(0), invfx(0), invfy(0), mnRecognitionFlagInLoopClosing(0),
+              mnRecognitionCommonWords(0),
               mPlaceRecognitionScore(0),
               mfBaselineFocal(0), mfBaseline(0), mfThDepth(0), mnKPsLeftNum(0),
               mvKPsLeft(static_cast<vector<cv::KeyPoint>>(NULL)),
               mvKPsUn(static_cast<vector<cv::KeyPoint>>(NULL)),
-              mvfXInRight(static_cast<vector<float>>(NULL)), mvfMPDepth(static_cast<vector<float>>(NULL)), mnScaleLevels(0),
+              mvfXInRight(static_cast<vector<float>>(NULL)), mvfMPDepth(static_cast<vector<float>>(NULL)),
+              mnScaleLevels(0),
               mfScaleFactor(0),
               mfLogScaleFactor(0), mvScaleFactors(0), mvfLevelSigma2(0), mvfInvLevelSigma2(0), mnMinX(0), mnMinY(0),
               mnMaxX(0),
@@ -55,7 +57,7 @@ namespace ORB_SLAM3 {
               mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAFlagInLocalMapping(0), mnBAFixedForKF(0),
               mnBALocalForMerge(0),
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnBAGlobalForKF(0),
-              mnPlaceRecognitionQuery(0), mnPlaceRecognitionWords(0), mPlaceRecognitionScore(0),
+              mnRecognitionFlagInLoopClosing(0), mnRecognitionCommonWords(0), mPlaceRecognitionScore(0),
               fx(F.fx), fy(F.fy), cx(F.cx), cy(F.cy), invfx(F.invfx), invfy(F.invfy),
               mfBaselineFocal(F.mfBaselineFocal), mfBaseline(F.mfBaseline), mfThDepth(F.mfThCloseFar),
               mnKPsLeftNum(F.mnKPsLeftNum), mvKPsLeft(F.mvKPsLeft), mvKPsUn(F.mvKPsUn),
@@ -357,18 +359,14 @@ namespace ORB_SLAM3 {
         unique_lock<mutex> lock(mMutexFeatures);
 
         int nPoints = 0;
-        // 是否检查数目
-        const bool bCheckObs = minObs > 0;
         // N是当前帧中特征点的个数
         for (int i = 0; i < mnKPsLeftNum; i++) {
             MapPoint *pMP = mvpMapPoints[i];
             if (pMP) {
                 if (!pMP->isBad()) {
-                    if (bCheckObs) {
-                        // 满足输入阈值要求的地图点计数加1
-                        if (mvpMapPoints[i]->GetObsTimes() >= minObs){
-                            nPoints++;
-                        }
+                    // 满足输入阈值要求的地图点计数加1
+                    if (mvpMapPoints[i]->GetObsTimes() >= minObs) {
+                        nPoints++;
                     }
                 }
             }

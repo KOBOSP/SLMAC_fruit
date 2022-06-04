@@ -187,7 +187,7 @@ namespace ORB_SLAM3 {
         // Threshold close/far points. Close points are inserted from 1 view.
         // Far points are inserted as in the monocular case from 2 views.
         float mfThCloseFar;
-
+        int mnMStereo;
         int mnKPsLeftNum;
         std::vector<cv::KeyPoint> mvKPsLeft, mvKPsRight;
         std::vector<cv::KeyPoint> mvKPsUn;
@@ -262,9 +262,6 @@ namespace ORB_SLAM3 {
 
         //Grid for the right image
         std::vector<std::size_t> mGridRight[FRAME_GRID_COLS][FRAME_GRID_ROWS];
-
-        bool isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight = false);
-
 
     };
 

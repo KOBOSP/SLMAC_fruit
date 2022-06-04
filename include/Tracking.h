@@ -106,6 +106,7 @@ public:
 
     eTrackingState mState;
     eTrackingState mLastProcessedState;
+    int mnTrackMethod;//0:Lost, 1:Imu, 2:Motion, 3:RefKF, 4:Reloc,
 
     int mSensor;
 
@@ -126,9 +127,12 @@ public:
     // frames with estimated pose
     int mTrackedFrame;
     bool mbDoNext;
+    //Current matches in frame
+    int mnLMInFMatchNum;
 
     // True if local mapping is deactivated and we are performing only localization
     bool mbOnlyTracking;
+    double mdTrackFps,mdExtraFps;
 
     void ResetThread(bool bLocMap = false);
     void ResetActiveMap(bool bLocMap = false);
@@ -146,11 +150,11 @@ protected:
     bool TrackReferenceKeyFrame();
     void UpdateLastFramePose();
     bool TrackWithMotionModel();
-    bool PredictStateIMU();
+    bool TrackWithIMU();
 
     bool Relocalization();
 
-    void UpdateLocalMap();
+    void UpdateKFsAndMPsInLocal();
     void UpdateLocalMapPoints();
     void UpdateLocalKeyFrames();
 
@@ -185,7 +189,7 @@ protected:
     IMU::Bias mLastBias;
 
     //Other Thread Pointers
-    LocalMapping* mpLocalMapper;
+    LocalMapping* mpLocalMapping;
     LoopClosing* mpLoopClosing;
 
     //ORB
@@ -221,31 +225,31 @@ protected:
     float mImuFreq;
     double mImuInterval;
     bool mInsertKFsLost;
-    int mnFramesToResetIMU;
 
     //New KeyFrame rules (according to fps)
     int mMinFrames;
     int mnMaxFrames;
-
+    int mnFrameNumDurRefLoc;
+    int mnFrameNumDurRecLost;
+    int mnFrameNumDurLost;
 
     // Threshold close/far points
     // Points seen as close by the stereo/RGBD sensor are considered reliable
     // and inserted from just one frame. Far points requiere a match in two keyframes.
     float mfThDepth;
 
-    //Current matches in frame
-    int mnMatchesInliers;
+
 
     //Last Frame, KeyFrame and Relocalisation Info
     KeyFrame* mpLastKeyFrame;
-    unsigned int mnLastKeyFrameId;
-    unsigned int mnLastRelocFrameId;
-    double mTimeStampLost;
-    double mdThTimeRescueLost;
+    unsigned int mnFrameIdLastReloc;
+    unsigned int mnFrameIdRecLost;
+    unsigned int mnFrameIdLost;
 
     unsigned int mnFirstFrameId;
     unsigned int mnInitialFrameId;
     unsigned int mnLastInitFrameId;
+    unsigned int mnLastKeyFrameId;
 
     bool mbCreatedMap;
 

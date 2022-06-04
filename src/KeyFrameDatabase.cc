@@ -483,12 +483,12 @@ namespace ORB_SLAM3 {
                     if (spConnectedKF.find(pKFi) != spConnectedKF.end()) {
                         continue;
                     }
-                    if (pKFi->mnPlaceRecognitionQuery != pKF->mnId) {
-                        pKFi->mnPlaceRecognitionWords = 0;
-                        pKFi->mnPlaceRecognitionQuery = pKF->mnId;
+                    if (pKFi->mnRecognitionFlagInLoopClosing != pKF->mnId) {
+                        pKFi->mnRecognitionCommonWords = 0;
+                        pKFi->mnRecognitionFlagInLoopClosing = pKF->mnId;
                         lKFsSharingWords.push_back(pKFi);
                     }
-                    pKFi->mnPlaceRecognitionWords++;
+                    pKFi->mnRecognitionCommonWords++;
                 }
             }
         }
@@ -499,8 +499,8 @@ namespace ORB_SLAM3 {
         int maxCommonWords = 0;
         for (list<KeyFrame *>::iterator lit = lKFsSharingWords.begin(), lend = lKFsSharingWords.end();
              lit != lend; lit++) {
-            if ((*lit)->mnPlaceRecognitionWords > maxCommonWords)
-                maxCommonWords = (*lit)->mnPlaceRecognitionWords;
+            if ((*lit)->mnRecognitionCommonWords > maxCommonWords)
+                maxCommonWords = (*lit)->mnRecognitionCommonWords;
         }
 
         int minCommonWords = maxCommonWords * 0.8f;
@@ -518,7 +518,7 @@ namespace ORB_SLAM3 {
              lit != lend; lit++) {
             KeyFrame *pKFi = *lit;
 
-            if (pKFi->mnPlaceRecognitionWords > minCommonWords) {
+            if (pKFi->mnRecognitionCommonWords > minCommonWords) {
                 nscores++;
                 float si = mpVoc->score(pKF->mBowVec, pKFi->mBowVec);
                 pKFi->mPlaceRecognitionScore = si;
@@ -543,7 +543,7 @@ namespace ORB_SLAM3 {
             KeyFrame *pBestKF = pKFi;
             for (vector<KeyFrame *>::iterator vit = vpNeighs.begin(), vend = vpNeighs.end(); vit != vend; vit++) {
                 KeyFrame *pKF2 = *vit;
-                if (pKF2->mnPlaceRecognitionQuery != pKF->mnId)
+                if (pKF2->mnRecognitionFlagInLoopClosing != pKF->mnId)
                     continue;
 
                 accScore += pKF2->mPlaceRecognitionScore;
@@ -591,10 +591,10 @@ namespace ORB_SLAM3 {
  * @param[out] vpMergeCand 记录找到的融合候选帧
  * @param[in] nNumCandidates 期望的候选数目,即回环和候选分别应该有多少个
  */
-    void KeyFrameDatabase::DetectNBestCandidates(KeyFrame *pKF, vector<KeyFrame *> &vpLoopCand,
-                                                 vector<KeyFrame *> &vpMergeCand, int nNumCandidates) {
+    void KeyFrameDatabase::DetectNBestLoopAndMergeKFs(KeyFrame *pKF, vector<KeyFrame *> &vpLoopCand,
+                                                      vector<KeyFrame *> &vpMergeCand, int nNumCandidates) {
         // Step 1统计与当前关键帧有相同单词的关键帧
-        list<KeyFrame *> lKFsSharingWords;
+        list<KeyFrame *> lKFsCommonWords;
         // set<KeyFrame*> spInsertedKFsSharing;
         //  当前关键帧的共视关键帧(避免将当前关键帧的共视关键帧加入回环检测)
         set<KeyFrame *> spConnectedKF;
@@ -612,115 +612,98 @@ namespace ORB_SLAM3 {
                 // 遍历每个有该单词的关键帧
                 for (list<KeyFrame *>::iterator lit = lKFs.begin(), lend = lKFs.end(); lit != lend; lit++) {
                     KeyFrame *pKFi = *lit;
-                    /*if(spConnectedKF.find(pKFi) != spConnectedKF.end())
-                    {
-                        continue;
-                    }*/
                     // 如果此关键帧没有被当前关键帧访问过(防止重复添加)
-                    if (pKFi->mnPlaceRecognitionQuery != pKF->mnId) {
+                    if (pKFi->mnRecognitionFlagInLoopClosing != pKF->mnId) {
                         // 初始化公共单词数为0
-                        pKFi->mnPlaceRecognitionWords = 0;
+                        pKFi->mnRecognitionCommonWords = 0;
                         // 如果该关键帧不是当前关键帧的共视关键帧
                         if (!spConnectedKF.count(pKFi)) {
                             // 标记该关键帧被当前关键帧访问到（也就是有公共单词）
-                            pKFi->mnPlaceRecognitionQuery = pKF->mnId;
+                            pKFi->mnRecognitionFlagInLoopClosing = pKF->mnId;
                             // 把当前关键帧添加到有公共单词的关键帧列表中
-                            lKFsSharingWords.push_back(pKFi);
+                            lKFsCommonWords.push_back(pKFi);
                         }
                     }
                     // 递增该关键帧与当前关键帧的公共单词数
-                    pKFi->mnPlaceRecognitionWords++;
-                    /*if(spInsertedKFsSharing.find(pKFi) == spInsertedKFsSharing.end())
-                    {
-                        lKFsSharingWords.push_back(pKFi);
-                        spInsertedKFsSharing.insert(pKFi);
-                    }*/
+                    pKFi->mnRecognitionCommonWords++;
                 }
             }
         }
         // 如果没有有公共单词的关键帧,直接返回
-        if (lKFsSharingWords.empty())
+        if (lKFsCommonWords.empty())
             return;
 
         // Only compare against those keyframes that share enough words
         // Step 2 统计所有候选帧中与当前关键帧的公共单词数最多的单词数maxCommonWords,并筛选
         int maxCommonWords = 0;
-        for (list<KeyFrame *>::iterator lit = lKFsSharingWords.begin(), lend = lKFsSharingWords.end();
+        for (list<KeyFrame *>::iterator lit = lKFsCommonWords.begin(), lend = lKFsCommonWords.end();
              lit != lend; lit++) {
-            if ((*lit)->mnPlaceRecognitionWords > maxCommonWords)
-                maxCommonWords = (*lit)->mnPlaceRecognitionWords;
+            if ((*lit)->mnRecognitionCommonWords > maxCommonWords)
+                maxCommonWords = (*lit)->mnRecognitionCommonWords;
         }
         // 取0.8倍为阀值
         int minCommonWords = maxCommonWords * 0.8f;
         // 这里的pair是 <相似度,候选帧的指针> : 记录所有大于minCommonWords的候选帧与当前关键帧的相似度
-        list<pair<float, KeyFrame *>> lScoreAndMatch;
-        // 只是个统计变量,貌似没有用到
-        int nscores = 0;
+        list<pair<float, KeyFrame *>> lScoreAndMatchKF;
 
         // Compute similarity score.
         // 对所有大于minCommonWords的候选帧计算相似度
 
         // 遍历所有有公共单词的候选帧
-        for (list<KeyFrame *>::iterator lit = lKFsSharingWords.begin(), lend = lKFsSharingWords.end();
+        for (list<KeyFrame *>::iterator lit = lKFsCommonWords.begin(), lend = lKFsCommonWords.end();
              lit != lend; lit++) {
             KeyFrame *pKFi = *lit;
             // 如果当前帧的公共单词数大于minCommonWords
-            if (pKFi->mnPlaceRecognitionWords > minCommonWords) {
-                nscores++; //未使用
+            if (pKFi->mnRecognitionCommonWords > minCommonWords) {
                 // 计算相似度
                 float si = mpVoc->score(pKF->mBowVec, pKFi->mBowVec);
                 // 记录该候选帧与当前帧的相似度
                 pKFi->mPlaceRecognitionScore = si;
                 // 记录到容器里, 每个元素是<相似度,候选帧的指针>
-                lScoreAndMatch.push_back(make_pair(si, pKFi));
+                lScoreAndMatchKF.push_back(make_pair(si, pKFi));
             }
         }
         // 如果为空,直接返回,表示没有符合上述条件的关键帧
-        if (lScoreAndMatch.empty())
+        if (lScoreAndMatchKF.empty())
             return;
         // Step 3 : 用小组得分排序得到top3总分里最高分的关键帧,作为候选帧
         // 统计以组为单位的累计相似度和组内相似度最高的关键帧, 每个pair为<小组总相似度,组内相似度最高的关键帧指针>
-        list<pair<float, KeyFrame *>> lAccScoreAndMatch;
-        float bestAccScore = 0;
-
+        list<pair<float, KeyFrame *>> lCulmulateScoreAndMatch;
         // Lets now accumulate score by covisibility
         // 变量所有被lScoreAndMatch记录的pair <相似度,候选关键帧>
-        for (list<pair<float, KeyFrame *>>::iterator it = lScoreAndMatch.begin(), itend = lScoreAndMatch.end();
+        for (list<pair<float, KeyFrame *>>::iterator it = lScoreAndMatchKF.begin(), itend = lScoreAndMatchKF.end();
              it != itend; it++) {
             // 候选关键帧
             KeyFrame *pKFi = it->second;
             // 与候选关键帧共视关系最好的10个关键帧
             vector<KeyFrame *> vpNeighs = pKFi->GetBestCovisibilityKeyFrames(10);
             // 初始化最大相似度为该候选关键帧自己的相似度
-            float bestScore = it->first;
+            float fBestScore = it->first;
             // 初始化小组累计得分为改候选关键帧自己的相似度
-            float accScore = bestScore;
+            float fCulmuScore = fBestScore;
             // 初始化组内相似度最高的帧为该候选关键帧本身
             KeyFrame *pBestKF = pKFi;
             // 遍历与当前关键帧共视关系最好的10帧
             for (vector<KeyFrame *>::iterator vit = vpNeighs.begin(), vend = vpNeighs.end(); vit != vend; vit++) {
                 KeyFrame *pKF2 = *vit;
                 // 如果该关键帧没有被当前关键帧访问过(也就是没有公共单词)则跳过
-                if (pKF2->mnPlaceRecognitionQuery != pKF->mnId)
+                if (pKF2->mnRecognitionFlagInLoopClosing != pKF->mnId)
                     continue;
                 // 累加小组总分
-                accScore += pKF2->mPlaceRecognitionScore;
+                fCulmuScore += pKF2->mPlaceRecognitionScore;
                 // 如果大于组内最高分,则更新当前最高分记录
-                if (pKF2->mPlaceRecognitionScore > bestScore) {
+                if (pKF2->mPlaceRecognitionScore > fBestScore) {
                     pBestKF = pKF2;
-                    bestScore = pKF2->mPlaceRecognitionScore;
+                    fBestScore = pKF2->mPlaceRecognitionScore;
                 }
             }
             // 统计以组为单位的累计相似度和组内相似度最高的关键帧, 每个pair为<小组总相似度,组内相似度最高的关键帧指针>
-            lAccScoreAndMatch.push_back(make_pair(accScore, pBestKF));
-            // 统计最高得分, 这个bestAccSocre没有用到
-            if (accScore > bestAccScore)
-                bestAccScore = accScore;
+            lCulmulateScoreAndMatch.push_back(make_pair(fCulmuScore, pBestKF));
         }
 
-        // cout << "Amount of candidates: " << lAccScoreAndMatch.size() << endl;
+        // cout << "Amount of candidates: " << lCulmulateScoreAndMatch.size() << endl;
         //  按相似度从大到小排序
-        lAccScoreAndMatch.sort(compFirst);
+        lCulmulateScoreAndMatch.sort(compFirst);
         // 最后返回的变量, 记录回环的候选帧
         vpLoopCand.reserve(nNumCandidates);
         // 最后返回的变量, 记录融合候选帧
@@ -728,11 +711,11 @@ namespace ORB_SLAM3 {
         // 避免重复添加
         set<KeyFrame *> spAlreadyAddedKF;
         // cout << "Candidates in score order " << endl;
-        // for(list<pair<float,KeyFrame*> >::iterator it=lAccScoreAndMatch.begin(), itend=lAccScoreAndMatch.end(); it!=itend; it++)
+        // for(list<pair<float,KeyFrame*> >::iterator it=lCulmulateScoreAndMatch.begin(), itend=lCulmulateScoreAndMatch.end(); it!=itend; it++)
         int i = 0;
-        list<pair<float, KeyFrame *>>::iterator it = lAccScoreAndMatch.begin();
+        list<pair<float, KeyFrame *>>::iterator it = lCulmulateScoreAndMatch.begin();
         // 遍历lAccScoreAndMatch中所有的pair, 每个pair为<小组总相似度,组内相似度最高的关键帧指针>，nNumCandidates默认为3
-        while (i < lAccScoreAndMatch.size() &&
+        while (i < lCulmulateScoreAndMatch.size() &&
                (vpLoopCand.size() < nNumCandidates || vpMergeCand.size() < nNumCandidates)) {
             // cout << "Accum score: " << it->first << endl;
             //  拿到候选关键帧的指针
