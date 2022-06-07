@@ -549,7 +549,7 @@ namespace ORB_SLAM3 {
         const double hp2 = HALF_PATCH_SIZE * HALF_PATCH_SIZE;
 
         //利用圆的方程计算每行像素的u坐标边界（max）
-        int v0,v1;
+        int v0, v1;
         for (v1 = 0; v1 <= nMaxRows; ++v1)
             mCircleXMax[v1] = cvRound(sqrt(hp2 - v1 * v1));        //结果都是大于0的结果，表示x坐标在这一行的边界
         // Make sure we are symmetric
@@ -675,9 +675,10 @@ namespace ORB_SLAM3 {
  * @param[in] level                 指定的金字塔图层，并未使用
  * @return vector<cv::KeyPoint>     已经均匀分散好的特征点vector容器
  */
-    vector<cv::KeyPoint> ORBextractor::DistributeKPsInlevel(const vector<cv::KeyPoint> &vToDistributeKeys, const int &minX,
-                                                            const int &maxX, const int &minY, const int &maxY,
-                                                            const int &nDesireFeature, const int &level) {
+    vector<cv::KeyPoint>
+    ORBextractor::DistributeKPsInlevel(const vector<cv::KeyPoint> &vToDistributeKeys, const int &minX,
+                                       const int &maxX, const int &minY, const int &maxY,
+                                       const int &nDesireFeature, const int &level) {
         // Compute how many initial nodes
         // Step 1 根据宽高比确定初始节点数目
         //计算应该生成的初始节点个数，根节点的数量nIni是根据边界的宽高比值确定的，一般是1或者2
@@ -689,10 +690,8 @@ namespace ORB_SLAM3 {
 
         //存储有提取器节点的列表
         list<ExtractorNode> lNodes;
-
         //存储初始提取器节点指针的vector
         vector<ExtractorNode *> vpIniNodes;
-
         //然后重新设置其大小
         vpIniNodes.resize(nIni);
 
@@ -700,15 +699,12 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < nIni; i++) {
             //生成一个提取器节点
             ExtractorNode ni;
-
             //设置提取器节点的图像边界
             //注意这里和提取FAST角点区域相同，都是“半径扩充图像”，特征点坐标从0 开始
             ni.UL = cv::Point2i(hX * static_cast<float>(i), 0);    //UpLeft
             ni.UR = cv::Point2i(hX * static_cast<float>(i + 1), 0);  //UpRight
             ni.BL = cv::Point2i(ni.UL.x, maxY - minY);                //BottomLeft
             ni.BR = cv::Point2i(ni.UR.x, maxY - minY);             //BottomRight
-
-            //重设vkeys大小
             ni.vKeys.reserve(vToDistributeKeys.size());
 
             //将刚才生成的提取节点添加到列表中
@@ -727,7 +723,6 @@ namespace ORB_SLAM3 {
             //按特征点的横轴位置，分配给属于那个图像区域的提取器节点（最初的提取器节点）
             vpIniNodes[kp.pt.x / hX]->vKeys.push_back(kp);
         }
-
         // Step 4 遍历此提取器节点列表，标记那些不可再分裂的节点，删除那些没有分配到特征点的节点
         list<ExtractorNode>::iterator lNit = lNodes.begin();
         while (lNit != lNodes.end()) {
@@ -737,12 +732,11 @@ namespace ORB_SLAM3 {
             }
             lNit++;
         }
-        //结束标志位清空
-        bool bFinish = false;
+
         // Step 5 根据兴趣点分布,利用4叉树方法对图像进行划分区域
-        while (!bFinish) {
+        while (1) {
             //保存当前节点个数，prev在这里理解为“保留”比较好
-            int nPreNodeNum = lNodes.size();
+            int nPreNodeNum = lNodes.size();;
             //重新定位迭代器指向列表头部
             lNit = lNodes.begin();
 
@@ -773,14 +767,12 @@ namespace ORB_SLAM3 {
                     //? 分裂方式是后加的先分裂，先加的后分裂。
                     lNit = lNodes.erase(lNit);
                 }//判断当前遍历到的节点中是否有超过一个的特征点
-
-                // Finish if there are more nodes than required features or all nodes contain just one point
-                if ((int) lNodes.size() >= nDesireFeature || (int) lNodes.size() == nPreNodeNum){
-                    //停止标志置位
-                    bFinish = true;
-                    break;
-                }
             }//遍历列表中的所有提取器节点
+
+            // Finish if there are more nodes than required features or all nodes contain just one point
+            if ((int) lNodes.size() >= nDesireFeature || (int) lNodes.size() == nPreNodeNum) {
+                break;
+            }
         }// 根据兴趣点分布,利用4叉树方法对图像进行划分区域
 
         // Retain the best point in each node
@@ -808,6 +800,7 @@ namespace ORB_SLAM3 {
                     fMaxResp = vNodeKeys[k].response;
                 }
             }
+
             //将这个节点区域中的响应值最大的特征点加入最终结果容器
             vResultKeys.push_back(*pKPMaxResP);
         }
@@ -817,7 +810,8 @@ namespace ORB_SLAM3 {
 
 
 //计算四叉树的特征点，函数名字后面的OctTree只是说明了在过滤和分配特征点时所使用的方式
-    void ORBextractor::DistributeKPsByOctTree(vector<vector<KeyPoint> > &allKeypoints)    //所有的特征点，这里第一层vector存储的是某图层里面的所有特征点，
+    void ORBextractor::DistributeKPsByOctTree(
+            vector<vector<KeyPoint> > &allKeypoints)    //所有的特征点，这里第一层vector存储的是某图层里面的所有特征点，
     {    //第二层存储的是整个图像金字塔中的所有图层里面的所有特征点
         allKeypoints.resize(mnLevels);
         //图像cell的尺寸，是个正方形，可以理解为边长in像素坐标
@@ -834,7 +828,6 @@ namespace ORB_SLAM3 {
             vector<cv::KeyPoint> vToDistributeKeys;
             //一般地都是过量采集，所以这里预分配的空间大小是nfeatures*10
             vToDistributeKeys.reserve(mnFeatures * 10);
-
             //计算进行特征点提取的图像区域尺寸
             const float width = (maxBorderX - minBorderX);
             const float height = (maxBorderY - minBorderY);
@@ -854,7 +847,6 @@ namespace ORB_SLAM3 {
                 //前面的EDGE_THRESHOLD指的应该是提取后的特征点所在的边界，所以minBorderY是考虑了计算半径时候的图像边界
                 //目测一个图像网格的大小是25*25啊
                 float maxY = iniY + hCell + 6;
-
                 //如果初始的行坐标就已经超过了有效的图像边界了，这里的“有效图像”是指原始的、可以提取FAST特征点的图像区域
                 if (iniY >= maxBorderY - 3)
                     continue;
@@ -881,19 +873,18 @@ namespace ORB_SLAM3 {
                     vector<cv::KeyPoint> vKeysCell;
                     //调用opencv的库函数来检测FAST角点
                     cv::FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX),    //待检测的图像，这里就是当前遍历到的图像块
-                         vKeysCell,            //存储角点位置的容器
-                         mfIniThFAST,            //检测阈值
-                         true);                //使能非极大值抑制
+                             vKeysCell,            //存储角点位置的容器
+                             mfIniThFAST,            //检测阈值
+                             true);                //使能非极大值抑制
 
                     //如果这个图像块中使用默认的FAST检测阈值没有能够检测到角点
                     if (vKeysCell.empty()) {
                         //那么就使用更低的阈值来进行重新检测
                         cv::FAST(mvImagePyramid[level].rowRange(iniY, maxY).colRange(iniX, maxX),    //待检测的图像
-                             vKeysCell,        //存储角点位置的容器
-                             mnMinThFAST,        //更低的检测阈值
-                             true);            //使能非极大值抑制
+                                 vKeysCell,        //存储角点位置的容器
+                                 mnMinThFAST,        //更低的检测阈值
+                                 true);            //使能非极大值抑制
                     }
-
                     //当图像cell中检测到FAST角点的时候执行下面的语句
                     if (!vKeysCell.empty()) {
                         //遍历其中的所有FAST角点
@@ -914,7 +905,6 @@ namespace ORB_SLAM3 {
             vector<KeyPoint> &vKPs = allKeypoints[level];
             //并且调整其大小为欲提取出来的特征点个数（当然这里也是扩大了的，因为不可能所有的特征点都是在这一个图层中提取出来的）
             vKPs.reserve(mnFeatures);
-
             // 根据mnFeatuvector<KeyPoint> & vKPs = allKeypoints[level];resPerLevel,即该层的兴趣点数,对特征点进行剔除
             //返回值是一个保存有特征点的vector容器，含有剔除后的保留下来的特征点
             //得到的特征点的坐标，依旧是在当前图层下来讲的
@@ -924,7 +914,6 @@ namespace ORB_SLAM3 {
                                         minBorderY, maxBorderY,
                                         mvnFeaturesPerLevel[level],    //希望保留下来的当前层图像的特征点个数
                                         level);                        //当前层图像所在的图层
-
             //PATCH_SIZE是对于底层的初始图像来说的，现在要根据当前图层的尺度缩放倍数进行缩放得到缩放后的PATCH大小 和特征点的方向计算有关
             const int scaledPatchSize = PATCH_SIZE * mvfScaleFactor[level];
 
@@ -942,12 +931,15 @@ namespace ORB_SLAM3 {
                 vKPs[i].size = scaledPatchSize;
             }
         }
+
         // compute orientations
         //然后计算这些特征点的方向信息，注意这里还是分层计算的
-        for (int level = 0; level < mnLevels; ++level)
+        for (int level = 0; level < mnLevels; ++level){
             ComputeOrientation(mvImagePyramid[level],    //对应的图层的图像
                                allKeypoints[level],    //这个图层中提取并保留下来的特征点容器
                                mCircleXMax);                    //以及PATCH的横坐标边界
+        }
+
     }
 
 
@@ -987,7 +979,6 @@ namespace ORB_SLAM3 {
         // Step 1 检查图像有效性。如果图像为空，那么就直接返回
         if (_image.empty())
             return -1;
-
         //获取图像的大小
         Mat image = _image.getMat();
         //判断图像的格式是否正确，要求是单通道灰度值
@@ -1002,14 +993,11 @@ namespace ORB_SLAM3 {
         vector<vector<KeyPoint> > vvKPsInLayer;
         //使用四叉树的方式计算每层图像的特征点并进行分配
         DistributeKPsByOctTree(vvKPsInLayer);
-
         //使用传统的方法提取并平均分配图像的特征点，作者并未使用
         //ComputeKeyPointsOld(vvKPsInLayer);
 
-
         // Step 4 拷贝图像描述子到新的矩阵descriptors
         Mat TmpDescriptors;
-
         //统计整个图像金字塔中的特征点
         int nKPs = 0;
         //开始遍历每层图像金字塔，并且累加每层的特征点个数
@@ -1017,15 +1005,15 @@ namespace ORB_SLAM3 {
             nKPs += (int) vvKPsInLayer[level].size();
 
         //如果本图像金字塔中没有任何的特征点
-        if (nKPs == 0)
+        if (nKPs == 0) {
             //通过调用cv::mat类的.realse方法，强制清空矩阵的引用计数，这样就可以强制释放矩阵的数据了
             //参考[https://blog.csdn.net/giantchen547792075/article/details/9107877]
             OutDescriptors.release();
-        else {
+        } else {
             //如果图像金字塔中有特征点，那么就创建这个存储描述子的矩阵，注意这个矩阵是存储整个图像金字塔中特征点的描述子的
             OutDescriptors.create(nKPs,        //矩阵的行数，对应为特征点的总个数
-                                32,            //矩阵的列数，对应为使用32*8=256位描述子
-                                CV_8U);            //矩阵元素的格式
+                                  32,            //矩阵的列数，对应为使用32*8=256位描述子
+                                  CV_8U);            //矩阵元素的格式
             //获取这个描述子的矩阵信息
             // ?为什么不是直接在参数_descriptors上对矩阵内容进行修改，而是重新新建了一个变量，复制矩阵后，在这个新建变量的基础上进行修改？
             TmpDescriptors = OutDescriptors.getMat();
@@ -1044,7 +1032,6 @@ namespace ORB_SLAM3 {
             vector<KeyPoint> &vKPsInLevel = vvKPsInLayer[level];
             //本层的特征点数
             int nKPsInLevel = (int) vKPsInLevel.size();
-
             if (nKPsInLevel == 0)
                 continue;
 
@@ -1052,7 +1039,6 @@ namespace ORB_SLAM3 {
             //  Step 5 对图像进行高斯模糊
             // 深拷贝当前金字塔所在层级的图像
             Mat ImgInLevel = mvImagePyramid[level].clone();
-
             // 注意：提取特征点的时候，使用的是清晰的原图像；这里计算描述子的时候，为了避免图像噪声的影响，使用了高斯模糊
             GaussianBlur(ImgInLevel,        //源图像
                          ImgInLevel,        //输出图像
@@ -1060,7 +1046,6 @@ namespace ORB_SLAM3 {
                          2,                //高斯滤波在x方向的标准差
                          2,                //高斯滤波在y方向的标准差
                          BORDER_REFLECT_101);//边缘拓展点插值类型
-
             // Compute the TmpDescriptors
             // desc存储当前图层的描述子
             //Mat DescriInLevel = TmpDescriptors.rowRange(nOffset, nOffset + nKPsInLevel);
@@ -1095,7 +1080,6 @@ namespace ORB_SLAM3 {
                 DesRowInLevel++;
             }
         }
-//        cout << "[ORBextractor]: extracted " << vOutKPs.size() << " KeyPoints" << endl;
         return DesRowInOut;
     }
 

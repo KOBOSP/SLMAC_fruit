@@ -157,7 +157,7 @@ namespace ORB_SLAM3 {
         float mfThFarPoints;
         bool mbOpenLoop;
         float mfCullKFRedundantTh;
-        int mnWeakCovisTh,mnStrongCovisTh;
+        int mnWeakCovisTh, mnStrongCovisTh, mnSingleMaxCullKFsNum;
         float mfThTimeRescueLost;
     };
 };

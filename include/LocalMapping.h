@@ -83,7 +83,6 @@ public:
     Eigen::Vector3d mba;
     double mScale;
 
-    unsigned int mIdxInit;
     double mFirstTs;
     bool mbBadImu;
     // not consider far points (clouds)
@@ -146,7 +145,7 @@ protected:
     Eigen::MatrixXd infoInertial;
     float mfCullKFRedundantTh;
     float mTinit;
-    int mnWeakCovisTh,mnStrongCovisTh;
+    int mnWeakCovisTh, mnStrongCovisTh, mnSingleMaxCullKFsNum;
 
     };
 

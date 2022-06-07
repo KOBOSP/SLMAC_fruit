@@ -69,7 +69,7 @@ class MapPoint
         //ar & mnLastFrameSeen;
 
         // Variables used by local mapping
-        //ar & mnBAFlagInLocalMapping;
+        //ar & mnBAOptFlagInLM;
         //ar & mnFuseFlagInLocalMapping;
 
         // Variables used by loop closing and merging

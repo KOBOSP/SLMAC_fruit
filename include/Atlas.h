@@ -98,6 +98,8 @@ public:
 
     /* All methods without Map pointer work on current map */
     void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
+    void SetReferenceKeyFrames(const std::vector<KeyFrame*> &vpKFs);
+
     void InformNewBigChange();
     int GetLastBigChangeIdx();
 

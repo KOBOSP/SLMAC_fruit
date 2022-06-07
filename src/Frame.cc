@@ -118,11 +118,8 @@ namespace ORB_SLAM3 {
         mvfInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
 
 
-        // Step 3 对左目右目图像提取ORB特征点, 第一个参数0-左图， 1-右图。为加速计算，同时开了两个线程计算
         thread threadLeft(&Frame::ExtractORB, this, 0, ImgLeft, 0, 0);
-        // 对右目图像提取orb特征
         thread threadRight(&Frame::ExtractORB, this, 1, ImgRight, 0, 0);
-        // 等待两张图像特征点提取过程完成
         threadLeft.join();
         threadRight.join();
 
@@ -133,21 +130,18 @@ namespace ORB_SLAM3 {
         // 如果左图像中没有成功提取到特征点那么就返回，也意味这这一帧的图像无法使用
         if (mvKPsLeft.empty())
             return;
-
+        if (mvKPsRight.empty())
+            return;
         // Step 4 用OpenCV的矫正函数、内参对提取到的特征点进行矫正
         mvKPsUn = mvKPsLeft;
-
-
 
         // Step 5 计算双目间特征点的匹配，只有匹配成功的特征点会计算其深度,深度存放在 mvfMPDepth
         // mvuRight中存储的应该是左图像中的点所匹配的在右图像中的点的横坐标（纵坐标相同）
         ComputeStereoMatches();
 
-
         // 初始化本帧的地图点
         mvpMPs = vector<MapPoint *>(mnKPsLeftNum, static_cast<MapPoint *>(NULL));
         mvbOutlier = vector<bool>(mnKPsLeftNum, false);
-
 
         // This is done only for the first Frame (or after a change in the calibration)
         //  Step 5 计算去畸变后图像边界，将特征点分配到网格中。这个过程一般是在第一帧或者是相机标定参数发生变化之后进行

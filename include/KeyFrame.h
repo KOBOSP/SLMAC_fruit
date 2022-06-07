@@ -69,8 +69,8 @@ class KeyFrame
         //ar & mnTrackReferenceForFrame;
         //ar & mnFuseFlagInLocalMapping;
         // Variables of local mapping
-        //ar & mnBAFlagInLocalMapping;
-        //ar & mnBAFixedForKF;
+        //ar & mnBAOptFlagInLM;
+        //ar & mnBAFixFlagInLM;
         //ar & mnNumberOfOpt;
         // Variables used by KeyFrameDatabase
         //ar & mnLoopQuery;
@@ -303,7 +303,7 @@ public:
     static long unsigned int nNextId;
     long unsigned int mnId;
     const long unsigned int mnFrameId;
-
+    static int mnStrongCovisTh;
     const double mdTimestamp;
 
     // Grid (to speed up feature matching)
@@ -317,11 +317,8 @@ public:
     long unsigned int mnFuseFlagInLocalMapping;
 
     // Variables used by the local mapping
-    long unsigned int mnBAFlagInLocalMapping;
-    long unsigned int mnBAFixedForKF;
-
-    //Number of optimizations by BA(amount of iterations in BA)
-    long unsigned int mnNumberOfOpt;
+    long unsigned int mnBAOptFlagInLM;
+    long unsigned int mnBAFixFlagInLM;
 
     // Variables used by the keyframe database
     long unsigned int mnLoopQuery;
@@ -337,14 +334,10 @@ public:
     int mnRecognitionCommonWords;
     float mPlaceRecognitionScore;
 
-    bool mbCurrentPlaceRecognition;
-
-
     // Variables used by loop closing
     Sophus::SE3f mTcwGBA;
     Sophus::SE3f mTcwBefGBA;
     Eigen::Vector3f mVwbGBA;
-    Eigen::Vector3f mVwbBefGBA;
     IMU::Bias mBiasGBA;
     long unsigned int mnBAGlobalForKF;
 
@@ -353,9 +346,6 @@ public:
     Sophus::SE3f mTcwBefMerge;
     Sophus::SE3f mTwcBefMerge;
     Eigen::Vector3f mVwbMerge;
-    Eigen::Vector3f mVwbBefMerge;
-    IMU::Bias mBiasMerge;
-    long unsigned int mnMergeCorrectedForKF;
     long unsigned int mnBALocalForMerge;
 
     float mfScale;
@@ -397,14 +387,9 @@ public:
     // Preintegrated IMU measurements from previous keyframe
     KeyFrame* mPrevKF;
     KeyFrame* mNextKF;
-
     IMU::Preintegrated* mpImuPreintegrated;
     IMU::Calib mImuCalib;
-
     unsigned int mnOriginMapId;
-
-    std::vector <KeyFrame*> mvpLoopCandKFs;
-    std::vector <KeyFrame*> mvpMergeCandKFs;
 
     //bool mbHasHessian;
     //cv::Mat mHessianPose;

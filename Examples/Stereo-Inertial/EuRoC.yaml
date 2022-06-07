@@ -80,7 +80,7 @@ IMU.InsertKFsWhenLost: 1
 #--------------------------------------------------------------------------------------------
 
 # ORB Extractor: Number of features per image
-ORBextractor.nFeatures: 1200
+ORBextractor.nFeatures: 1000
 ORBextractor.fScaleFactor: 1.2
 ORBextractor.nLevels: 8
 # ORB Extractor: Fast threshold
@@ -114,3 +114,4 @@ LocalMapping.StrongCovisTh: 15
 LocalMapping.WeakCovisTh: 3
 LocalMapping.CullKFRedundantTh: 0.5
 Tracking.ThTimeRescueLost: 5.0
+LocalMapping.SingleMaxCullKFsNum: 20

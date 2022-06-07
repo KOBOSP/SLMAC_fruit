@@ -83,28 +83,15 @@ namespace ORB_SLAM3 {
 
         vector<ORB_SLAM3::EdgeSE3ProjectXYZ *> vpEdgesMono;
         vpEdgesMono.reserve(nExpectedSize);
-
-        vector<ORB_SLAM3::EdgeSE3ProjectXYZToBody *> vpEdgesBody;
-        vpEdgesBody.reserve(nExpectedSize);
-
         vector<KeyFrame *> vpEdgeKFMono;
         vpEdgeKFMono.reserve(nExpectedSize);
-
-        vector<KeyFrame *> vpEdgeKFBody;
-        vpEdgeKFBody.reserve(nExpectedSize);
-
         vector<MapPoint *> vpMapPointEdgeMono;
         vpMapPointEdgeMono.reserve(nExpectedSize);
 
-        vector<MapPoint *> vpMapPointEdgeBody;
-        vpMapPointEdgeBody.reserve(nExpectedSize);
-
         vector<g2o::EdgeStereoSE3ProjectXYZ *> vpEdgesStereo;
         vpEdgesStereo.reserve(nExpectedSize);
-
         vector<KeyFrame *> vpEdgeKFStereo;
         vpEdgeKFStereo.reserve(nExpectedSize);
-
         vector<MapPoint *> vpMapPointEdgeStereo;
         vpMapPointEdgeStereo.reserve(nExpectedSize);
 
@@ -361,7 +348,7 @@ namespace ORB_SLAM3 {
             pIncKF = pKFi;
             bool bFixed = false;
             if (bFixLocal) {
-                bFixed = (pKFi->mnBAFlagInLocalMapping >= (maxKFid - 1)) || (pKFi->mnBAFixedForKF >= (maxKFid - 1));
+                bFixed = (pKFi->mnBAOptFlagInLM >= (maxKFid - 1)) || (pKFi->mnBAFixFlagInLM >= (maxKFid - 1));
                 if (!bFixed)
                     nNonFixed++;
                 VP->setFixed(bFixed);
@@ -418,7 +405,6 @@ namespace ORB_SLAM3 {
                     pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
                     g2o::HyperGraph::Vertex *VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
                     g2o::HyperGraph::Vertex *VV1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 1);
-
                     g2o::HyperGraph::Vertex *VG1;
                     g2o::HyperGraph::Vertex *VA1;
                     g2o::HyperGraph::Vertex *VG2;
@@ -465,7 +451,7 @@ namespace ORB_SLAM3 {
                     optimizer.addEdge(ei);
 
                     if (!bInit) {
-                        EdgeGyroRW *egr = new EdgeGyroRW();
+                        EdgeGyrRW *egr = new EdgeGyrRW();
                         egr->setVertex(0, VG1);
                         egr->setVertex(1, VG2);
                         Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
@@ -482,8 +468,9 @@ namespace ORB_SLAM3 {
                         ear->computeError();
                         optimizer.addEdge(ear);
                     }
-                } else
+                } else{
                     cout << pKFi->mnId << " or " << pKFi->mPrevKF->mnId << " no imu" << endl;
+                }
             }
         }
 
@@ -523,24 +510,18 @@ namespace ORB_SLAM3 {
             vPoint->setId(id);
             vPoint->setMarginalized(true);
             optimizer.addVertex(vPoint);
-
             const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
-
-
             bool bAllFixed = true;
 
             //Set edges
             for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin(), mend = observations.end();
                  mit != mend; mit++) {
                 KeyFrame *pKFi = mit->first;
-
                 if (pKFi->mnId > maxKFid)
                     continue;
-
                 if (!pKFi->isBad()) {
                     const int leftIndex = get<0>(mit->second);
                     cv::KeyPoint kpUn;
-
                     if (leftIndex != -1 && pKFi->mvfXInRight[get<0>(mit->second)] < 0) // Monocular observation
                     {
                         kpUn = pKFi->mvKPsUn[leftIndex];
@@ -626,7 +607,6 @@ namespace ORB_SLAM3 {
             } else {
                 pKFi->mTcwGBA = Sophus::SE3f(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
                 pKFi->mnBAGlobalForKF = nLoopId;
-
             }
             if (pKFi->bImu) {
                 VertexVelocity *VV = static_cast<VertexVelocity *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1));
@@ -673,12 +653,9 @@ namespace ORB_SLAM3 {
                 pMP->mPosGBA = vPoint->estimate().cast<float>();
                 pMP->mnBAGlobalForKF = nLoopId;
             }
-
         }
-
-        pMap->IncreaseChangeIndex();
+        pMap->IncreaseChangeIdx();
     }
-
 
     int Optimizer::PoseOptimization(Frame *pFrame) {
         g2o::SparseOptimizer optimizer;
@@ -790,39 +767,721 @@ namespace ORB_SLAM3 {
         return nInitialCorrespondences - nBad;
     }
 
-    void Optimizer::LocalBAWithoutImu(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int &num_fixedKF, int &num_OptKF,
+    int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit) {
+        g2o::SparseOptimizer optimizer;
+        g2o::BlockSolverX::LinearSolverType *linearSolver;
+
+        linearSolver = new g2o::LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>();
+
+        g2o::BlockSolverX *solver_ptr = new g2o::BlockSolverX(linearSolver);
+
+        g2o::OptimizationAlgorithmGaussNewton *solver = new g2o::OptimizationAlgorithmGaussNewton(solver_ptr);
+        optimizer.setVerbose(false);
+        optimizer.setAlgorithm(solver);
+
+        int nInitialMonoCorrespondences = 0;
+        int nInitialStereoCorrespondences = 0;
+        int nInitialCorrespondences = 0;
+
+        // Set Frame vertex
+        VertexPose *VP = new VertexPose(pFrame);
+        VP->setId(0);
+        VP->setFixed(false);
+        optimizer.addVertex(VP);
+        VertexVelocity *VV = new VertexVelocity(pFrame);
+        VV->setId(1);
+        VV->setFixed(false);
+        optimizer.addVertex(VV);
+        VertexGyroBias *VG = new VertexGyroBias(pFrame);
+        VG->setId(2);
+        VG->setFixed(false);
+        optimizer.addVertex(VG);
+        VertexAccBias *VA = new VertexAccBias(pFrame);
+        VA->setId(3);
+        VA->setFixed(false);
+        optimizer.addVertex(VA);
+
+        // Set MapPoint vertices
+        const int N = pFrame->mnKPsLeftNum;
+        const bool bRight = false;
+
+        vector<EdgeMonoOnlyPose *> vpEdgesMono;
+        vector<EdgeStereoOnlyPose *> vpEdgesStereo;
+        vector<size_t> vnIndexEdgeMono;
+        vector<size_t> vnIndexEdgeStereo;
+        vpEdgesMono.reserve(N);
+        vpEdgesStereo.reserve(N);
+        vnIndexEdgeMono.reserve(N);
+        vnIndexEdgeStereo.reserve(N);
+
+        const float thHuberMono = sqrt(5.991);
+        const float thHuberStereo = sqrt(7.815);
+
+        {
+            unique_lock<mutex> lock(MapPoint::mGlobalMutex);
+
+            for (int i = 0; i < N; i++) {
+                MapPoint *pMP = pFrame->mvpMPs[i];
+                if (pMP) {
+                    cv::KeyPoint kpUn;
+
+                    // Left monocular observation
+                    // 这里说的Left monocular包含两种情况：1.单目情况 2.两个相机情况下的相机1
+                    if (pFrame->mvfXInRight[i] < 0) {
+                        kpUn = pFrame->mvKPsUn[i];
+                        nInitialMonoCorrespondences++;
+                        pFrame->mvbOutlier[i] = false;
+
+                        Eigen::Matrix<double, 2, 1> obs;
+                        obs << kpUn.pt.x, kpUn.pt.y;
+
+                        EdgeMonoOnlyPose *e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
+
+                        e->setVertex(0, VP);
+                        e->setMeasurement(obs);
+
+                        // Add here uncerteinty
+                        const float unc2 = pFrame->mpCamera->uncertainty2(obs);
+
+                        const float invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave] / unc2;
+                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+
+                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+                        e->setRobustKernel(rk);
+                        rk->setDelta(thHuberMono);
+
+                        optimizer.addEdge(e);
+
+                        vpEdgesMono.push_back(e);
+                        vnIndexEdgeMono.push_back(i);
+                    }
+                        // Stereo observation
+                    else {
+                        nInitialStereoCorrespondences++;
+                        pFrame->mvbOutlier[i] = false;
+
+                        kpUn = pFrame->mvKPsUn[i];
+                        const float kp_ur = pFrame->mvfXInRight[i];
+                        Eigen::Matrix<double, 3, 1> obs;
+                        obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+
+                        EdgeStereoOnlyPose *e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
+
+                        e->setVertex(0, VP);
+                        e->setMeasurement(obs);
+
+                        // Add here uncerteinty
+                        const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
+
+                        const float &invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave] / unc2;
+                        e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
+
+                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+                        e->setRobustKernel(rk);
+                        rk->setDelta(thHuberStereo);
+
+                        optimizer.addEdge(e);
+
+                        vpEdgesStereo.push_back(e);
+                        vnIndexEdgeStereo.push_back(i);
+                    }
+                }
+            }
+        }
+        nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
+
+        KeyFrame *pKF = pFrame->mpPrevKeyFrame;
+        VertexPose *VPk = new VertexPose(pKF);
+        VPk->setId(4);
+        VPk->setFixed(true);
+        optimizer.addVertex(VPk);
+        VertexVelocity *VVk = new VertexVelocity(pKF);
+        VVk->setId(5);
+        VVk->setFixed(true);
+        optimizer.addVertex(VVk);
+        VertexGyroBias *VGk = new VertexGyroBias(pKF);
+        VGk->setId(6);
+        VGk->setFixed(true);
+        optimizer.addVertex(VGk);
+        VertexAccBias *VAk = new VertexAccBias(pKF);
+        VAk->setId(7);
+        VAk->setFixed(true);
+        optimizer.addVertex(VAk);
+
+        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuFromPrevKF);
+
+        ei->setVertex(0, VPk);
+        ei->setVertex(1, VVk);
+        ei->setVertex(2, VGk);
+        ei->setVertex(3, VAk);
+        ei->setVertex(4, VP);
+        ei->setVertex(5, VV);
+        optimizer.addEdge(ei);
+
+        EdgeGyrRW *egr = new EdgeGyrRW();
+        egr->setVertex(0, VGk);
+        egr->setVertex(1, VG);
+        Eigen::Matrix3d InfoG = pFrame->mpImuFromPrevKF->C.block<3, 3>(9, 9).cast<double>().inverse();
+        egr->setInformation(InfoG);
+        optimizer.addEdge(egr);
+
+        EdgeAccRW *ear = new EdgeAccRW();
+        ear->setVertex(0, VAk);
+        ear->setVertex(1, VA);
+        Eigen::Matrix3d InfoA = pFrame->mpImuFromPrevKF->C.block<3, 3>(12, 12).cast<double>().inverse();
+        ear->setInformation(InfoA);
+        optimizer.addEdge(ear);
+
+        // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
+        // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
+        float chi2Mono[4] = {12, 7.5, 5.991, 5.991};
+        float chi2Stereo[4] = {15.6, 9.8, 7.815, 7.815};
+
+        int its[4] = {10, 10, 10, 10};
+
+        int nBad = 0;
+        int nBadMono = 0;
+        int nBadStereo = 0;
+        int nInliersMono = 0;
+        int nInliersStereo = 0;
+        int nInliers = 0;
+        for (size_t it = 0; it < 4; it++) {
+            optimizer.initializeOptimization(0);
+            optimizer.optimize(its[it]);
+
+            nBad = 0;
+            nBadMono = 0;
+            nBadStereo = 0;
+            nInliers = 0;
+            nInliersMono = 0;
+            nInliersStereo = 0;
+            float chi2close = 1.5 * chi2Mono[it];
+
+            // For monocular observations
+            for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
+                EdgeMonoOnlyPose *e = vpEdgesMono[i];
+
+                const size_t idx = vnIndexEdgeMono[i];
+
+                if (pFrame->mvbOutlier[idx]) {
+                    e->computeError();
+                }
+
+                const float chi2 = e->chi2();
+                bool bClose = pFrame->mvpMPs[idx]->mTrackDepth < 10.f;
+
+                if ((chi2 > chi2Mono[it] && !bClose) || (bClose && chi2 > chi2close) || !e->isDepthPositive()) {
+                    pFrame->mvbOutlier[idx] = true;
+                    e->setLevel(1);
+                    nBadMono++;
+                } else {
+                    pFrame->mvbOutlier[idx] = false;
+                    e->setLevel(0);
+                    nInliersMono++;
+                }
+
+                if (it == 2)
+                    e->setRobustKernel(0);
+            }
+
+            // For stereo observations
+            for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
+                EdgeStereoOnlyPose *e = vpEdgesStereo[i];
+
+                const size_t idx = vnIndexEdgeStereo[i];
+
+                if (pFrame->mvbOutlier[idx]) {
+                    e->computeError();
+                }
+
+                const float chi2 = e->chi2();
+
+                if (chi2 > chi2Stereo[it]) {
+                    pFrame->mvbOutlier[idx] = true;
+                    e->setLevel(1); // not included in next optimization
+                    nBadStereo++;
+                } else {
+                    pFrame->mvbOutlier[idx] = false;
+                    e->setLevel(0);
+                    nInliersStereo++;
+                }
+
+                if (it == 2)
+                    e->setRobustKernel(0);
+            }
+
+            nInliers = nInliersMono + nInliersStereo;
+            nBad = nBadMono + nBadStereo;
+
+            if (optimizer.edges().size() < 10) {
+                break;
+            }
+
+        }
+
+        // If not too much tracks, recover not too bad points
+        if ((nInliers < 30) && !bRecInit) {
+            nBad = 0;
+            const float chi2MonoOut = 18.f;
+            const float chi2StereoOut = 24.f;
+            EdgeMonoOnlyPose *e1;
+            EdgeStereoOnlyPose *e2;
+            for (size_t i = 0, iend = vnIndexEdgeMono.size(); i < iend; i++) {
+                const size_t idx = vnIndexEdgeMono[i];
+                e1 = vpEdgesMono[i];
+                e1->computeError();
+                if (e1->chi2() < chi2MonoOut)
+                    pFrame->mvbOutlier[idx] = false;
+                else
+                    nBad++;
+            }
+            for (size_t i = 0, iend = vnIndexEdgeStereo.size(); i < iend; i++) {
+                const size_t idx = vnIndexEdgeStereo[i];
+                e2 = vpEdgesStereo[i];
+                e2->computeError();
+                if (e2->chi2() < chi2StereoOut)
+                    pFrame->mvbOutlier[idx] = false;
+                else
+                    nBad++;
+            }
+        }
+
+        // Recover optimized pose, velocity and biases
+        pFrame->SetImuPoseVelocity(VP->estimate().Rwb.cast<float>(), VP->estimate().twb.cast<float>(),
+                                   VV->estimate().cast<float>());
+        Vector6d b;
+        b << VG->estimate(), VA->estimate();
+        pFrame->mImuBias = IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]);
+
+        // Recover Hessian, marginalize keyFframe states and generate new prior for frame
+        Eigen::Matrix<double, 15, 15> H;
+        H.setZero();
+
+        H.block<9, 9>(0, 0) += ei->GetHessian2();
+        H.block<3, 3>(9, 9) += egr->GetHessian2();
+        H.block<3, 3>(12, 12) += ear->GetHessian2();
+
+        int tot_in = 0, tot_out = 0;
+        for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
+            EdgeMonoOnlyPose *e = vpEdgesMono[i];
+
+            const size_t idx = vnIndexEdgeMono[i];
+
+            if (!pFrame->mvbOutlier[idx]) {
+                H.block<6, 6>(0, 0) += e->GetHessian();
+                tot_in++;
+            } else
+                tot_out++;
+        }
+
+        for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
+            EdgeStereoOnlyPose *e = vpEdgesStereo[i];
+
+            const size_t idx = vnIndexEdgeStereo[i];
+
+            if (!pFrame->mvbOutlier[idx]) {
+                H.block<6, 6>(0, 0) += e->GetHessian();
+                tot_in++;
+            } else
+                tot_out++;
+        }
+
+        pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
+                                              VA->estimate(), H);
+
+        return nInitialCorrespondences - nBad;
+    }
+
+    int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit) {
+        g2o::SparseOptimizer optimizer;
+        g2o::BlockSolverX::LinearSolverType *linearSolver;
+
+        linearSolver = new g2o::LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>();
+
+        g2o::BlockSolverX *solver_ptr = new g2o::BlockSolverX(linearSolver);
+
+        g2o::OptimizationAlgorithmGaussNewton *solver = new g2o::OptimizationAlgorithmGaussNewton(solver_ptr);
+        optimizer.setAlgorithm(solver);
+        optimizer.setVerbose(false);
+
+        int nInitialMonoCorrespondences = 0;
+        int nInitialStereoCorrespondences = 0;
+        int nInitialCorrespondences = 0;
+
+        // Set Current Frame vertex
+        VertexPose *VP = new VertexPose(pFrame);
+        VP->setId(0);
+        VP->setFixed(false);
+        optimizer.addVertex(VP);
+        VertexVelocity *VV = new VertexVelocity(pFrame);
+        VV->setId(1);
+        VV->setFixed(false);
+        optimizer.addVertex(VV);
+        VertexGyroBias *VG = new VertexGyroBias(pFrame);
+        VG->setId(2);
+        VG->setFixed(false);
+        optimizer.addVertex(VG);
+        VertexAccBias *VA = new VertexAccBias(pFrame);
+        VA->setId(3);
+        VA->setFixed(false);
+        optimizer.addVertex(VA);
+
+        // Set MapPoint vertices
+        const int N = pFrame->mnKPsLeftNum;
+        const int Nleft = -1;
+        const bool bRight = false;
+
+        vector<EdgeMonoOnlyPose *> vpEdgesMono;
+        vector<EdgeStereoOnlyPose *> vpEdgesStereo;
+        vector<size_t> vnIndexEdgeMono;
+        vector<size_t> vnIndexEdgeStereo;
+        vpEdgesMono.reserve(N);
+        vpEdgesStereo.reserve(N);
+        vnIndexEdgeMono.reserve(N);
+        vnIndexEdgeStereo.reserve(N);
+
+        const float thHuberMono = sqrt(5.991);
+        const float thHuberStereo = sqrt(7.815);
+
+        {
+            unique_lock<mutex> lock(MapPoint::mGlobalMutex);
+
+            for (int i = 0; i < N; i++) {
+                MapPoint *pMP = pFrame->mvpMPs[i];
+                if (pMP) {
+                    cv::KeyPoint kpUn;
+                    // Left monocular observation
+                    // 这里说的Left monocular包含两种情况：1.单目情况 2.两个相机情况下的相机1
+                    if (pFrame->mvfXInRight[i] < 0) {
+                        kpUn = pFrame->mvKPsUn[i];
+                        nInitialMonoCorrespondences++;
+                        pFrame->mvbOutlier[i] = false;
+
+                        Eigen::Matrix<double, 2, 1> obs;
+                        obs << kpUn.pt.x, kpUn.pt.y;
+
+                        EdgeMonoOnlyPose *e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
+
+                        e->setVertex(0, VP);
+                        e->setMeasurement(obs);
+
+                        // Add here uncerteinty
+                        const float unc2 = pFrame->mpCamera->uncertainty2(obs);
+
+                        const float invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave] / unc2;
+                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+
+                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+                        e->setRobustKernel(rk);
+                        rk->setDelta(thHuberMono);
+
+                        optimizer.addEdge(e);
+
+                        vpEdgesMono.push_back(e);
+                        vnIndexEdgeMono.push_back(i);
+                    } else { // Stereo observation
+                        nInitialStereoCorrespondences++;
+                        pFrame->mvbOutlier[i] = false;
+
+                        kpUn = pFrame->mvKPsUn[i];
+                        const float kp_ur = pFrame->mvfXInRight[i];
+                        Eigen::Matrix<double, 3, 1> obs;
+                        obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+
+                        EdgeStereoOnlyPose *e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
+
+                        e->setVertex(0, VP);
+                        e->setMeasurement(obs);
+
+                        // Add here uncerteinty
+                        const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
+
+                        const float &invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave] / unc2;
+                        e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
+
+                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+                        e->setRobustKernel(rk);
+                        rk->setDelta(thHuberStereo);
+
+                        optimizer.addEdge(e);
+
+                        vpEdgesStereo.push_back(e);
+                        vnIndexEdgeStereo.push_back(i);
+                    }
+                }
+            }
+        }
+
+        nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
+
+        // Set Previous Frame Vertex
+        Frame *pFp = pFrame->mpPrevFrame;
+
+        VertexPose *VPk = new VertexPose(pFp);
+        VPk->setId(4);
+        VPk->setFixed(false);
+        optimizer.addVertex(VPk);
+        VertexVelocity *VVk = new VertexVelocity(pFp);
+        VVk->setId(5);
+        VVk->setFixed(false);
+        optimizer.addVertex(VVk);
+        VertexGyroBias *VGk = new VertexGyroBias(pFp);
+        VGk->setId(6);
+        VGk->setFixed(false);
+        optimizer.addVertex(VGk);
+        VertexAccBias *VAk = new VertexAccBias(pFp);
+        VAk->setId(7);
+        VAk->setFixed(false);
+        optimizer.addVertex(VAk);
+
+        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuFromPrevFrame);
+
+        ei->setVertex(0, VPk);
+        ei->setVertex(1, VVk);
+        ei->setVertex(2, VGk);
+        ei->setVertex(3, VAk);
+        ei->setVertex(4, VP);
+        ei->setVertex(5, VV);
+        optimizer.addEdge(ei);
+
+        EdgeGyrRW *egr = new EdgeGyrRW();
+        egr->setVertex(0, VGk);
+        egr->setVertex(1, VG);
+        Eigen::Matrix3d InfoG = pFrame->mpImuFromPrevKF->C.block<3, 3>(9, 9).cast<double>().inverse();
+        egr->setInformation(InfoG);
+        optimizer.addEdge(egr);
+
+        EdgeAccRW *ear = new EdgeAccRW();
+        ear->setVertex(0, VAk);
+        ear->setVertex(1, VA);
+        Eigen::Matrix3d InfoA = pFrame->mpImuFromPrevKF->C.block<3, 3>(12, 12).cast<double>().inverse();
+        ear->setInformation(InfoA);
+        optimizer.addEdge(ear);
+
+        if (!pFp->mpcpi)
+            Verbose::PrintMess("pFp->mpcpi does not exist!!!\nPrevious Frame " + to_string(pFp->mnId),
+                               Verbose::VERBOSITY_NORMAL);
+
+        EdgePriorPoseImu *ep = new EdgePriorPoseImu(pFp->mpcpi);
+
+        ep->setVertex(0, VPk);
+        ep->setVertex(1, VVk);
+        ep->setVertex(2, VGk);
+        ep->setVertex(3, VAk);
+        g2o::RobustKernelHuber *rkp = new g2o::RobustKernelHuber;
+        ep->setRobustKernel(rkp);
+        rkp->setDelta(5);
+        optimizer.addEdge(ep);
+
+        // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
+        // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
+        const float chi2Mono[4] = {5.991, 5.991, 5.991, 5.991};
+        const float chi2Stereo[4] = {15.6f, 9.8f, 7.815f, 7.815f};
+        const int its[4] = {10, 10, 10, 10};
+
+        int nBad = 0;
+        int nBadMono = 0;
+        int nBadStereo = 0;
+        int nInliersMono = 0;
+        int nInliersStereo = 0;
+        int nInliers = 0;
+        for (size_t it = 0; it < 4; it++) {
+            optimizer.initializeOptimization(0);
+            optimizer.optimize(its[it]);
+
+            nBad = 0;
+            nBadMono = 0;
+            nBadStereo = 0;
+            nInliers = 0;
+            nInliersMono = 0;
+            nInliersStereo = 0;
+            float chi2close = 1.5 * chi2Mono[it];
+
+            for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
+                EdgeMonoOnlyPose *e = vpEdgesMono[i];
+
+                const size_t idx = vnIndexEdgeMono[i];
+                bool bClose = pFrame->mvpMPs[idx]->mTrackDepth < 10.f;
+
+                if (pFrame->mvbOutlier[idx]) {
+                    e->computeError();
+                }
+
+                const float chi2 = e->chi2();
+
+                if ((chi2 > chi2Mono[it] && !bClose) || (bClose && chi2 > chi2close) || !e->isDepthPositive()) {
+                    pFrame->mvbOutlier[idx] = true;
+                    e->setLevel(1);
+                    nBadMono++;
+                } else {
+                    pFrame->mvbOutlier[idx] = false;
+                    e->setLevel(0);
+                    nInliersMono++;
+                }
+
+                if (it == 2)
+                    e->setRobustKernel(0);
+
+            }
+
+            for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
+                EdgeStereoOnlyPose *e = vpEdgesStereo[i];
+
+                const size_t idx = vnIndexEdgeStereo[i];
+
+                if (pFrame->mvbOutlier[idx]) {
+                    e->computeError();
+                }
+
+                const float chi2 = e->chi2();
+
+                if (chi2 > chi2Stereo[it]) {
+                    pFrame->mvbOutlier[idx] = true;
+                    e->setLevel(1);
+                    nBadStereo++;
+                } else {
+                    pFrame->mvbOutlier[idx] = false;
+                    e->setLevel(0);
+                    nInliersStereo++;
+                }
+
+                if (it == 2)
+                    e->setRobustKernel(0);
+            }
+
+            nInliers = nInliersMono + nInliersStereo;
+            nBad = nBadMono + nBadStereo;
+
+            if (optimizer.edges().size() < 10) {
+                break;
+            }
+        }
+
+
+        if ((nInliers < 30) && !bRecInit) {
+            nBad = 0;
+            const float chi2MonoOut = 18.f;
+            const float chi2StereoOut = 24.f;
+            EdgeMonoOnlyPose *e1;
+            EdgeStereoOnlyPose *e2;
+            for (size_t i = 0, iend = vnIndexEdgeMono.size(); i < iend; i++) {
+                const size_t idx = vnIndexEdgeMono[i];
+                e1 = vpEdgesMono[i];
+                e1->computeError();
+                if (e1->chi2() < chi2MonoOut)
+                    pFrame->mvbOutlier[idx] = false;
+                else
+                    nBad++;
+
+            }
+            for (size_t i = 0, iend = vnIndexEdgeStereo.size(); i < iend; i++) {
+                const size_t idx = vnIndexEdgeStereo[i];
+                e2 = vpEdgesStereo[i];
+                e2->computeError();
+                if (e2->chi2() < chi2StereoOut)
+                    pFrame->mvbOutlier[idx] = false;
+                else
+                    nBad++;
+            }
+        }
+
+        nInliers = nInliersMono + nInliersStereo;
+
+
+        // Recover optimized pose, velocity and biases
+        pFrame->SetImuPoseVelocity(VP->estimate().Rwb.cast<float>(), VP->estimate().twb.cast<float>(),
+                                   VV->estimate().cast<float>());
+        Vector6d b;
+        b << VG->estimate(), VA->estimate();
+        pFrame->mImuBias = IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]);
+
+        // Recover Hessian, marginalize previous frame states and generate new prior for frame
+        Eigen::Matrix<double, 30, 30> H;
+        H.setZero();
+
+        H.block<24, 24>(0, 0) += ei->GetHessian();
+
+        Eigen::Matrix<double, 6, 6> Hgr = egr->GetHessian();
+        H.block<3, 3>(9, 9) += Hgr.block<3, 3>(0, 0);
+        H.block<3, 3>(9, 24) += Hgr.block<3, 3>(0, 3);
+        H.block<3, 3>(24, 9) += Hgr.block<3, 3>(3, 0);
+        H.block<3, 3>(24, 24) += Hgr.block<3, 3>(3, 3);
+
+        Eigen::Matrix<double, 6, 6> Har = ear->GetHessian();
+        H.block<3, 3>(12, 12) += Har.block<3, 3>(0, 0);
+        H.block<3, 3>(12, 27) += Har.block<3, 3>(0, 3);
+        H.block<3, 3>(27, 12) += Har.block<3, 3>(3, 0);
+        H.block<3, 3>(27, 27) += Har.block<3, 3>(3, 3);
+
+        H.block<15, 15>(0, 0) += ep->GetHessian();
+
+        int tot_in = 0, tot_out = 0;
+        for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
+            EdgeMonoOnlyPose *e = vpEdgesMono[i];
+
+            const size_t idx = vnIndexEdgeMono[i];
+
+            if (!pFrame->mvbOutlier[idx]) {
+                H.block<6, 6>(15, 15) += e->GetHessian();
+                tot_in++;
+            } else
+                tot_out++;
+        }
+
+        for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
+            EdgeStereoOnlyPose *e = vpEdgesStereo[i];
+
+            const size_t idx = vnIndexEdgeStereo[i];
+
+            if (!pFrame->mvbOutlier[idx]) {
+                H.block<6, 6>(15, 15) += e->GetHessian();
+                tot_in++;
+            } else
+                tot_out++;
+        }
+
+        H = Marginalize(H, 0, 14);
+
+        pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
+                                              VA->estimate(), H.block<15, 15>(15, 15));
+        delete pFp->mpcpi;
+        pFp->mpcpi = NULL;
+
+        return nInitialCorrespondences - nBad;
+    }
+
+    void Optimizer::LocalBAWithoutImu(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int &nFixedKFsNum, int &num_OptKF,
                                       int &num_MPs, int &num_edges) {
         // Local KeyFrames: First Breath Search from Current Keyframe
         list<KeyFrame *> lLocalKeyFrames;
 
         lLocalKeyFrames.push_back(pKF);
-        pKF->mnBAFlagInLocalMapping = pKF->mnId;
+        pKF->mnBAOptFlagInLM = pKF->mnId;
         Map *pCurrentMap = pKF->GetMap();
 
         const vector<KeyFrame *> vNeighKFs = pKF->GetVectorCovisibleKeyFrames();
         for (int i = 0, iend = vNeighKFs.size(); i < iend; i++) {
             KeyFrame *pKFi = vNeighKFs[i];
-            pKFi->mnBAFlagInLocalMapping = pKF->mnId;
+            pKFi->mnBAOptFlagInLM = pKF->mnId;
             if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap)
                 lLocalKeyFrames.push_back(pKFi);
         }
 
         // Local MapPoints seen in Local KeyFrames
-        num_fixedKF = 0;
+        nFixedKFsNum = 0;
         list<MapPoint *> lLocalMapPoints;
         set<MapPoint *> sNumObsMP;
         for (list<KeyFrame *>::iterator lit = lLocalKeyFrames.begin(), lend = lLocalKeyFrames.end();
              lit != lend; lit++) {
             KeyFrame *pKFi = *lit;
             if (pKFi->mnId == pMap->GetInitKFid()) {
-                num_fixedKF = 1;
+                nFixedKFsNum = 1;
             }
             vector<MapPoint *> vpMPs = pKFi->GetMapPointsInKF();
             for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
                 MapPoint *pMP = *vit;
                 if (pMP)
                     if (!pMP->isBad() && pMP->GetMap() == pCurrentMap) {
-
                         if (pMP->mnBAFlagInLocalMapping != pKF->mnId) {
                             lLocalMapPoints.push_back(pMP);
                             pMP->mnBAFlagInLocalMapping = pKF->mnId;
@@ -832,25 +1491,24 @@ namespace ORB_SLAM3 {
         }
 
         // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes
-        list<KeyFrame *> lFixedCameras;
+        list<KeyFrame *> lFixedKFs;
         for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
              lit != lend; lit++) {
             map<KeyFrame *, tuple<int, int>> observations = (*lit)->GetObsKFAndLRIdx();
             for (map<KeyFrame *, tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
                  mit != mend; mit++) {
                 KeyFrame *pKFi = mit->first;
-
-                if (pKFi->mnBAFlagInLocalMapping != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId) {
-                    pKFi->mnBAFixedForKF = pKF->mnId;
+                if (pKFi->mnBAOptFlagInLM != pKF->mnId && pKFi->mnBAFixFlagInLM != pKF->mnId) {
+                    pKFi->mnBAFixFlagInLM = pKF->mnId;
                     if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap)
-                        lFixedCameras.push_back(pKFi);
+                        lFixedKFs.push_back(pKFi);
                 }
             }
         }
-        num_fixedKF = lFixedCameras.size() + num_fixedKF;
+        nFixedKFsNum = lFixedKFs.size() + nFixedKFsNum;
 
 
-        if (num_fixedKF == 0) {
+        if (nFixedKFsNum == 0) {
             Verbose::PrintMess("LM-LBA: There are 0 fixed KF in the optimizations, LBA aborted",
                                Verbose::VERBOSITY_NORMAL);
             return;
@@ -859,11 +1517,8 @@ namespace ORB_SLAM3 {
         // Setup optimizer
         g2o::SparseOptimizer optimizer;
         g2o::BlockSolver_6_3::LinearSolverType *linearSolver;
-
         linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>();
-
         g2o::BlockSolver_6_3 *solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
-
         g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
         if (pMap->IsInertial())
             solver->setUserLambdaInit(100.0);
@@ -876,8 +1531,8 @@ namespace ORB_SLAM3 {
 
         unsigned long maxKFid = 0;
 
-        // DEBUG LBA
-        pCurrentMap->msOptKFs.clear();
+        pCurrentMap->msOptImuKFs.clear();
+        pCurrentMap->msOptVisKFs.clear();
         pCurrentMap->msFixedKFs.clear();
 
         // Set Local KeyFrame vertices
@@ -893,12 +1548,12 @@ namespace ORB_SLAM3 {
             if (pKFi->mnId > maxKFid)
                 maxKFid = pKFi->mnId;
             // DEBUG LBA
-            pCurrentMap->msOptKFs.insert(pKFi->mnId);
+            pCurrentMap->msOptVisKFs.insert(pKFi->mnId);
         }
         num_OptKF = lLocalKeyFrames.size();
 
         // Set Fixed KeyFrame vertices
-        for (list<KeyFrame *>::iterator lit = lFixedCameras.begin(), lend = lFixedCameras.end(); lit != lend; lit++) {
+        for (list<KeyFrame *>::iterator lit = lFixedKFs.begin(), lend = lFixedKFs.end(); lit != lend; lit++) {
             KeyFrame *pKFi = *lit;
             g2o::VertexSE3Expmap *vSE3 = new g2o::VertexSE3Expmap();
             Sophus::SE3<float> Tcw = pKFi->GetPose();
@@ -913,32 +1568,19 @@ namespace ORB_SLAM3 {
         }
 
         // Set MapPoint vertices
-        const int nExpectedSize = (lLocalKeyFrames.size() + lFixedCameras.size()) * lLocalMapPoints.size();
+        const int nExpectedSize = (lLocalKeyFrames.size() + lFixedKFs.size()) * lLocalMapPoints.size();
 
         vector<ORB_SLAM3::EdgeSE3ProjectXYZ *> vpEdgesMono;
         vpEdgesMono.reserve(nExpectedSize);
-
-        vector<ORB_SLAM3::EdgeSE3ProjectXYZToBody *> vpEdgesBody;
-        vpEdgesBody.reserve(nExpectedSize);
-
         vector<KeyFrame *> vpEdgeKFMono;
         vpEdgeKFMono.reserve(nExpectedSize);
-
-        vector<KeyFrame *> vpEdgeKFBody;
-        vpEdgeKFBody.reserve(nExpectedSize);
-
         vector<MapPoint *> vpMapPointEdgeMono;
         vpMapPointEdgeMono.reserve(nExpectedSize);
 
-        vector<MapPoint *> vpMapPointEdgeBody;
-        vpMapPointEdgeBody.reserve(nExpectedSize);
-
         vector<g2o::EdgeStereoSE3ProjectXYZ *> vpEdgesStereo;
         vpEdgesStereo.reserve(nExpectedSize);
-
         vector<KeyFrame *> vpEdgeKFStereo;
         vpEdgeKFStereo.reserve(nExpectedSize);
-
         vector<MapPoint *> vpMapPointEdgeStereo;
         vpMapPointEdgeStereo.reserve(nExpectedSize);
 
@@ -1042,7 +1684,7 @@ namespace ORB_SLAM3 {
         optimizer.optimize(10);
 
         vector<pair<KeyFrame *, MapPoint *> > vToErase;
-        vToErase.reserve(vpEdgesMono.size() + vpEdgesBody.size() + vpEdgesStereo.size());
+        vToErase.reserve(vpEdgesMono.size() + vpEdgesStereo.size());
 
         // Check inlier observations
         for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
@@ -1054,19 +1696,6 @@ namespace ORB_SLAM3 {
 
             if (e->chi2() > 5.991 || !e->isDepthPositive()) {
                 KeyFrame *pKFi = vpEdgeKFMono[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
-            }
-        }
-
-        for (size_t i = 0, iend = vpEdgesBody.size(); i < iend; i++) {
-            ORB_SLAM3::EdgeSE3ProjectXYZToBody *e = vpEdgesBody[i];
-            MapPoint *pMP = vpMapPointEdgeBody[i];
-
-            if (pMP->isBad())
-                continue;
-
-            if (e->chi2() > 5.991 || !e->isDepthPositive()) {
-                KeyFrame *pKFi = vpEdgeKFBody[i];
                 vToErase.push_back(make_pair(pKFi, pMP));
             }
         }
@@ -1118,9 +1747,514 @@ namespace ORB_SLAM3 {
             pMP->UpdateNormalAndDepth();
         }
 
-        pMap->IncreaseChangeIndex();
+        pMap->IncreaseChangeIdx();
     }
 
+    void Optimizer::LocalBAWithImu(KeyFrame *pCurKF, bool *pbStopFlag, Map *pMap, int &num_fixedKF, int &num_OptKF,
+                                   int &num_MPs, int &num_edges, bool bLarge, bool bRecInit) {
+        Map *pCurrentMap = pCurKF->GetMap();
+        const int nMaxOptVisKFs = 100;
+        const int nMaxFixKFs = 100;
+        int maxOpt = 10;
+        int nOptIterTimes = 10;
+        if (bLarge) {
+            maxOpt = 25;
+            nOptIterTimes = 4;
+        }
+        const int nMaxOptImuKFs = std::min((int) pCurrentMap->GetKeyFramesNumInMap() - 2, maxOpt);
+        const unsigned long nCurKFId = pCurKF->mnId;
+        vector<KeyFrame *> vpOptImuKFs;
+        list<KeyFrame *> lpOptVisKFs;
+
+        vpOptImuKFs.reserve(nMaxOptImuKFs);
+        vpOptImuKFs.push_back(pCurKF);
+        pCurKF->mnBAOptFlagInLM = pCurKF->mnId;
+        for (int i = 1; i < nMaxOptImuKFs; i++) {
+            if (vpOptImuKFs.back()->mPrevKF) {
+                vpOptImuKFs.push_back(vpOptImuKFs.back()->mPrevKF);
+                vpOptImuKFs.back()->mnBAOptFlagInLM = pCurKF->mnId;
+            } else {
+                break;
+            }
+        }
+
+        int nOptImuKFsNum = vpOptImuKFs.size();
+        // Optimizable points seen by temporal optimizable keyframes
+        list<MapPoint *> lLocalMapPoints;
+        for (int i = 0; i < nOptImuKFsNum; i++) {
+            vector<MapPoint *> vpMPs = vpOptImuKFs[i]->GetMapPointsInKF();
+            for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
+                MapPoint *pMP = *vit;
+                if (!pMP) {
+                    continue;
+                }
+                if (pMP->isBad()) {
+                    continue;
+                }
+                if (pMP->mnBAFlagInLocalMapping != pCurKF->mnId) {
+                    lLocalMapPoints.push_back(pMP);
+                    pMP->mnBAFlagInLocalMapping = pCurKF->mnId;
+                }
+            }
+        }
+
+        // Fixed Keyframe: First frame previous KF to optimization window)
+        list<KeyFrame *> lFixedKFs;
+        if (vpOptImuKFs.back()->mPrevKF) {
+            lFixedKFs.push_back(vpOptImuKFs.back()->mPrevKF);
+            vpOptImuKFs.back()->mPrevKF->mnBAFixFlagInLM = pCurKF->mnId;
+        } else {
+            vpOptImuKFs.back()->mnBAOptFlagInLM = 0;
+            vpOptImuKFs.back()->mnBAFixFlagInLM = pCurKF->mnId;
+            lFixedKFs.push_back(vpOptImuKFs.back());
+            vpOptImuKFs.pop_back();
+        }
+
+        // Optimizable visual KFs
+        const vector<KeyFrame *> vpNeighsKFs = pCurKF->GetVectorCovisibleKeyFrames();
+        for (int i = 0, iend = vpNeighsKFs.size(); i < iend; i++) {
+            if (lpOptVisKFs.size() >= nMaxOptVisKFs)
+                break;
+            KeyFrame *pKFi = vpNeighsKFs[i];
+            if (pKFi->mnBAOptFlagInLM == pCurKF->mnId || pKFi->mnBAFixFlagInLM == pCurKF->mnId)
+                continue;
+            pKFi->mnBAOptFlagInLM = pCurKF->mnId;
+            if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap) {
+                lpOptVisKFs.push_back(pKFi);
+                vector<MapPoint *> vpMPs = pKFi->GetMapPointsInKF();
+                for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
+                    MapPoint *pMP = *vit;
+                    if (!pMP) {
+                        continue;
+                    }
+                    if (pMP->isBad()) {
+                        continue;
+                    }
+                    if (pMP->mnBAFlagInLocalMapping != pCurKF->mnId) {
+                        lLocalMapPoints.push_back(pMP);
+                        pMP->mnBAFlagInLocalMapping = pCurKF->mnId;
+                    }
+                }
+            }
+        }
+
+        // Fixed KFs which are not covisible optimizable
+        for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
+             lit != lend; lit++) {
+            map<KeyFrame *, tuple<int, int>> observations = (*lit)->GetObsKFAndLRIdx();
+            for (map<KeyFrame *, tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
+                 mit != mend; mit++) {
+                KeyFrame *pKFi = mit->first;
+                if (pKFi->mnBAOptFlagInLM != pCurKF->mnId && pKFi->mnBAFixFlagInLM != pCurKF->mnId) {
+                    pKFi->mnBAFixFlagInLM = pCurKF->mnId;
+                    if (!pKFi->isBad()) {
+                        lFixedKFs.push_back(pKFi);
+                        break;
+                    }
+                }
+            }
+            if (lFixedKFs.size() >= nMaxFixKFs)
+                break;
+        }
+
+        // Setup optimizer
+        g2o::SparseOptimizer optimizer;
+        g2o::BlockSolverX::LinearSolverType *linearSolver;
+        linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
+
+        g2o::BlockSolverX *solver_ptr = new g2o::BlockSolverX(linearSolver);
+
+        if (bLarge) {
+            g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+            solver->setUserLambdaInit(1e-2); // to avoid iterating for finding optimal lambda
+            optimizer.setAlgorithm(solver);
+        } else {
+            g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+            solver->setUserLambdaInit(1e0);
+            optimizer.setAlgorithm(solver);
+        }
+        pCurrentMap->msOptImuKFs.clear();
+        pCurrentMap->msOptVisKFs.clear();
+        pCurrentMap->msFixedKFs.clear();
+
+        // Set Local temporal KeyFrame vertices
+        nOptImuKFsNum = vpOptImuKFs.size();
+        for (int i = 0; i < nOptImuKFsNum; i++) {
+            KeyFrame *pKFi = vpOptImuKFs[i];
+
+            VertexPose *VP = new VertexPose(pKFi);
+            VP->setId(pKFi->mnId);
+            VP->setFixed(false);
+            optimizer.addVertex(VP);
+
+            if (pKFi->bImu) {
+                VertexVelocity *VV = new VertexVelocity(pKFi);
+                VV->setId(nCurKFId + 3 * (pKFi->mnId) + 1);
+                VV->setFixed(false);
+                optimizer.addVertex(VV);
+                VertexGyroBias *VG = new VertexGyroBias(pKFi);
+                VG->setId(nCurKFId + 3 * (pKFi->mnId) + 2);
+                VG->setFixed(false);
+                optimizer.addVertex(VG);
+                VertexAccBias *VA = new VertexAccBias(pKFi);
+                VA->setId(nCurKFId + 3 * (pKFi->mnId) + 3);
+                VA->setFixed(false);
+                optimizer.addVertex(VA);
+                pCurrentMap->msOptImuKFs.insert(pKFi->mnId);
+            }
+        }
+
+
+        // Set Local visual KeyFrame vertices
+        for (list<KeyFrame *>::iterator it = lpOptVisKFs.begin(), itEnd = lpOptVisKFs.end(); it != itEnd; it++) {
+            KeyFrame *pKFi = *it;
+            VertexPose *VP = new VertexPose(pKFi);
+            VP->setId(pKFi->mnId);
+            VP->setFixed(false);
+            optimizer.addVertex(VP);
+            // DEBUG LBA
+            pCurrentMap->msOptVisKFs.insert(pKFi->mnId);
+        }
+
+        // Set Fixed KeyFrame vertices
+        for (list<KeyFrame *>::iterator lit = lFixedKFs.begin(), lend = lFixedKFs.end();
+             lit != lend; lit++) {
+            KeyFrame *pKFi = *lit;
+            VertexPose *VP = new VertexPose(pKFi);
+            VP->setId(pKFi->mnId);
+            VP->setFixed(true);
+            optimizer.addVertex(VP);
+            // DEBUG LBA
+            pCurrentMap->msFixedKFs.insert(pKFi->mnId);
+
+            if (pKFi->bImu) // This should be done only for keyframe just before temporal window
+            {
+                VertexVelocity *VV = new VertexVelocity(pKFi);
+                VV->setId(nCurKFId + 3 * (pKFi->mnId) + 1);
+                VV->setFixed(true);
+                optimizer.addVertex(VV);
+                VertexGyroBias *VG = new VertexGyroBias(pKFi);
+                VG->setId(nCurKFId + 3 * (pKFi->mnId) + 2);
+                VG->setFixed(true);
+                optimizer.addVertex(VG);
+                VertexAccBias *VA = new VertexAccBias(pKFi);
+                VA->setId(nCurKFId + 3 * (pKFi->mnId) + 3);
+                VA->setFixed(true);
+                optimizer.addVertex(VA);
+            }
+        }
+
+        // Create intertial constraints
+        vector<EdgeInertial *> vei(nOptImuKFsNum, (EdgeInertial *) NULL);
+        vector<EdgeGyrRW *> vegr(nOptImuKFsNum, (EdgeGyrRW *) NULL);
+        vector<EdgeAccRW *> vear(nOptImuKFsNum, (EdgeAccRW *) NULL);
+
+        for (int i = 0; i < nOptImuKFsNum; i++) {
+            KeyFrame *pKFi = vpOptImuKFs[i];
+            if (!pKFi->mPrevKF) {
+                cout << "NOT INERTIAL LINK TO PREVIOUS FRAME!!!!" << endl;
+                continue;
+            }
+            if (pKFi->bImu && pKFi->mPrevKF->bImu && pKFi->mpImuPreintegrated) {
+                pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
+                g2o::HyperGraph::Vertex *VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
+                g2o::HyperGraph::Vertex *VV1 = optimizer.vertex(nCurKFId + 3 * (pKFi->mPrevKF->mnId) + 1);
+                g2o::HyperGraph::Vertex *VG1 = optimizer.vertex(nCurKFId + 3 * (pKFi->mPrevKF->mnId) + 2);
+                g2o::HyperGraph::Vertex *VA1 = optimizer.vertex(nCurKFId + 3 * (pKFi->mPrevKF->mnId) + 3);
+                g2o::HyperGraph::Vertex *VP2 = optimizer.vertex(pKFi->mnId);
+                g2o::HyperGraph::Vertex *VV2 = optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 1);
+                g2o::HyperGraph::Vertex *VG2 = optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 2);
+                g2o::HyperGraph::Vertex *VA2 = optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 3);
+
+                if (!VP1 || !VV1 || !VG1 || !VA1 || !VP2 || !VV2 || !VG2 || !VA2) {
+                    cerr << "Error " << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", " << VV2
+                         << ", " << VG2 << ", " << VA2 << endl;
+                    continue;
+                }
+
+                vei[i] = new EdgeInertial(pKFi->mpImuPreintegrated);
+                vei[i]->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP1));
+                vei[i]->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV1));
+                vei[i]->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG1));
+                vei[i]->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VA1));
+                vei[i]->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP2));
+                vei[i]->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV2));
+
+                if (i == nOptImuKFsNum - 1 || bRecInit) {
+                    // All inertial residuals are included without robust cost function, but not that one linking the
+                    // last optimizable keyframe inside of the local window and the first fixed keyframe out. The
+                    // information matrix for this measurement is also downweighted. This is done to avoid accumulating
+                    // error due to fixing variables.
+                    g2o::RobustKernelHuber *rki = new g2o::RobustKernelHuber;
+                    vei[i]->setRobustKernel(rki);
+                    if (i == nOptImuKFsNum - 1)
+                        vei[i]->setInformation(vei[i]->information() * 1e-2);
+                    rki->setDelta(sqrt(16.92));
+                }
+                optimizer.addEdge(vei[i]);
+
+                vegr[i] = new EdgeGyrRW();
+                vegr[i]->setVertex(0, VG1);
+                vegr[i]->setVertex(1, VG2);
+                Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
+                vegr[i]->setInformation(InfoG);
+                optimizer.addEdge(vegr[i]);
+
+                vear[i] = new EdgeAccRW();
+                vear[i]->setVertex(0, VA1);
+                vear[i]->setVertex(1, VA2);
+                Eigen::Matrix3d InfoA = pKFi->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
+                vear[i]->setInformation(InfoA);
+                optimizer.addEdge(vear[i]);
+            } else {
+                cout << "ERROR building inertial edge" << endl;
+            }
+        }
+
+        // Set MapPoint vertices
+        const int nExpectedSize = (nOptImuKFsNum + lFixedKFs.size()) * lLocalMapPoints.size();
+
+        // Mono
+        vector<EdgeMono *> vpEdgesMono;
+        vpEdgesMono.reserve(nExpectedSize);
+
+        vector<KeyFrame *> vpEdgeKFMono;
+        vpEdgeKFMono.reserve(nExpectedSize);
+
+        vector<MapPoint *> vpMapPointEdgeMono;
+        vpMapPointEdgeMono.reserve(nExpectedSize);
+
+        // Stereo
+        vector<EdgeStereo *> vpEdgesStereo;
+        vpEdgesStereo.reserve(nExpectedSize);
+
+        vector<KeyFrame *> vpEdgeKFStereo;
+        vpEdgeKFStereo.reserve(nExpectedSize);
+
+        vector<MapPoint *> vpMapPointEdgeStereo;
+        vpMapPointEdgeStereo.reserve(nExpectedSize);
+
+
+        const float thHuberMono = sqrt(5.991);
+        const float chi2Mono2 = 5.991;
+        const float thHuberStereo = sqrt(7.815);
+        const float chi2Stereo2 = 7.815;
+
+        const unsigned long iniMPid = nCurKFId * 5;
+
+        map<int, int> mVisEdges;
+        for (int i = 0; i < nOptImuKFsNum; i++) {
+            KeyFrame *pKFi = vpOptImuKFs[i];
+            mVisEdges[pKFi->mnId] = 0;
+        }
+        for (list<KeyFrame *>::iterator lit = lFixedKFs.begin(), lend = lFixedKFs.end();
+             lit != lend; lit++) {
+            mVisEdges[(*lit)->mnId] = 0;
+        }
+        for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
+             lit != lend; lit++) {
+            MapPoint *pMP = *lit;
+            g2o::VertexSBAPointXYZ *vPoint = new g2o::VertexSBAPointXYZ();
+            vPoint->setEstimate(pMP->GetWorldPos().cast<double>());
+
+            unsigned long id = pMP->mnId + iniMPid + 1;
+            vPoint->setId(id);
+            vPoint->setMarginalized(true);
+            optimizer.addVertex(vPoint);
+            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
+
+            // Create visual constraints
+            for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin(), mend = observations.end();
+                 mit != mend; mit++) {
+                KeyFrame *pKFi = mit->first;
+
+                if (pKFi->mnBAOptFlagInLM != pCurKF->mnId && pKFi->mnBAFixFlagInLM != pCurKF->mnId)
+                    continue;
+
+                if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap) {
+                    const int leftIndex = get<0>(mit->second);
+
+                    cv::KeyPoint kpUn;
+
+                    // Monocular left observation
+                    if (leftIndex != -1 && pKFi->mvfXInRight[leftIndex] < 0) {
+                        mVisEdges[pKFi->mnId]++;
+
+                        kpUn = pKFi->mvKPsUn[leftIndex];
+                        Eigen::Matrix<double, 2, 1> obs;
+                        obs << kpUn.pt.x, kpUn.pt.y;
+
+                        EdgeMono *e = new EdgeMono(0);
+
+                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
+                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
+                        e->setMeasurement(obs);
+
+                        // Add here uncerteinty
+                        const float unc2 = pKFi->mpCamera->uncertainty2(obs);
+
+                        const float &invSigma2 = pKFi->mvfInvLevelSigma2[kpUn.octave] / unc2;
+                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
+
+                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+                        e->setRobustKernel(rk);
+                        rk->setDelta(thHuberMono);
+
+                        optimizer.addEdge(e);
+                        vpEdgesMono.push_back(e);
+                        vpEdgeKFMono.push_back(pKFi);
+                        vpMapPointEdgeMono.push_back(pMP);
+                    }
+                        // Stereo-observation
+                    else if (leftIndex != -1)// Stereo observation
+                    {
+                        kpUn = pKFi->mvKPsUn[leftIndex];
+                        mVisEdges[pKFi->mnId]++;
+
+                        const float kp_ur = pKFi->mvfXInRight[leftIndex];
+                        Eigen::Matrix<double, 3, 1> obs;
+                        obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
+
+                        EdgeStereo *e = new EdgeStereo(0);
+
+                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
+                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
+                        e->setMeasurement(obs);
+
+                        // Add here uncerteinty
+                        const float unc2 = pKFi->mpCamera->uncertainty2(obs.head(2));
+                        const float &invSigma2 = pKFi->mvfInvLevelSigma2[kpUn.octave] / unc2;
+                        e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
+
+                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
+                        e->setRobustKernel(rk);
+                        rk->setDelta(thHuberStereo);
+
+                        optimizer.addEdge(e);
+                        vpEdgesStereo.push_back(e);
+                        vpEdgeKFStereo.push_back(pKFi);
+                        vpMapPointEdgeStereo.push_back(pMP);
+                    }
+
+                }
+            }
+        }
+
+        //cout << "Total map points: " << lLocalMapPoints.size() << endl;
+        // TODO debug会报错先注释掉
+        for (map<int, int>::iterator mit = mVisEdges.begin(), mend = mVisEdges.end(); mit != mend; mit++) {
+            assert(mit->second >= 3);
+        }
+
+        optimizer.initializeOptimization();
+        optimizer.computeActiveErrors();
+        float fErrBegin = optimizer.activeRobustChi2();
+        optimizer.optimize(nOptIterTimes); // Originally to 2
+        float fErrEnd = optimizer.activeRobustChi2();
+        if (pbStopFlag)
+            optimizer.setForceStopFlag(pbStopFlag);
+
+        vector<pair<KeyFrame *, MapPoint *> > vToErase;
+        vToErase.reserve(vpEdgesMono.size() + vpEdgesStereo.size());
+
+        // Check inlier observations
+        // Mono
+        for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
+            EdgeMono *e = vpEdgesMono[i];
+            MapPoint *pMP = vpMapPointEdgeMono[i];
+            bool bClose = pMP->mTrackDepth < 10.f;
+
+            if (pMP->isBad())
+                continue;
+
+            if ((e->chi2() > chi2Mono2 && !bClose) || (e->chi2() > 1.5f * chi2Mono2 && bClose) ||
+                !e->isDepthPositive()) {
+                KeyFrame *pKFi = vpEdgeKFMono[i];
+                vToErase.push_back(make_pair(pKFi, pMP));
+            }
+        }
+
+
+        // Stereo
+        for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
+            EdgeStereo *e = vpEdgesStereo[i];
+            MapPoint *pMP = vpMapPointEdgeStereo[i];
+
+            if (pMP->isBad())
+                continue;
+
+            if (e->chi2() > chi2Stereo2) {
+                KeyFrame *pKFi = vpEdgeKFStereo[i];
+                vToErase.push_back(make_pair(pKFi, pMP));
+            }
+        }
+
+        // Get Map Mutex and erase outliers
+        unique_lock<mutex> lock(pMap->mMutexMapUpdate);
+
+
+        // TODO: Some convergence problems have been detected here
+        if ((2 * fErrBegin < fErrEnd || isnan(fErrBegin) || isnan(fErrEnd)) && !bLarge) //bGN)
+        {
+            cout << "FAIL LOCAL-INERTIAL BA!!!!" << endl;
+            return;
+        }
+
+
+        if (!vToErase.empty()) {
+            for (size_t i = 0; i < vToErase.size(); i++) {
+                KeyFrame *pKFi = vToErase[i].first;
+                MapPoint *pMPi = vToErase[i].second;
+                pKFi->EraseMapPointMatch(pMPi);
+                pMPi->EraseObservation(pKFi);
+            }
+        }
+
+        for (list<KeyFrame *>::iterator lit = lFixedKFs.begin(), lend = lFixedKFs.end(); lit != lend; lit++){
+            (*lit)->mnBAFixFlagInLM = 0;
+        }
+
+        // Recover optimized data
+        // Local temporal Keyframes
+        nOptImuKFsNum = vpOptImuKFs.size();
+        for (int i = 0; i < nOptImuKFsNum; i++) {
+            KeyFrame *pKFi = vpOptImuKFs[i];
+            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
+            Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
+            pKFi->SetPose(Tcw);
+            pKFi->mnBAOptFlagInLM = 0;
+
+            if (pKFi->bImu) {
+                VertexVelocity *VV = static_cast<VertexVelocity *>(optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 1));
+                pKFi->SetVelocity(VV->estimate().cast<float>());
+                VertexGyroBias *VG = static_cast<VertexGyroBias *>(optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 2));
+                VertexAccBias *VA = static_cast<VertexAccBias *>(optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 3));
+                Vector6d b;
+                b << VG->estimate(), VA->estimate();
+                pKFi->SetNewBias(IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]));
+            }
+        }
+
+        // Local visual KeyFrame
+        for (list<KeyFrame *>::iterator it = lpOptVisKFs.begin(), itEnd = lpOptVisKFs.end(); it != itEnd; it++) {
+            KeyFrame *pKFi = *it;
+            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
+            Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
+            pKFi->SetPose(Tcw);
+            pKFi->mnBAOptFlagInLM = 0;
+        }
+
+        //Points
+        for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
+             lit != lend; lit++) {
+            MapPoint *pMP = *lit;
+            g2o::VertexSBAPointXYZ *vPoint = static_cast<g2o::VertexSBAPointXYZ *>(optimizer.vertex(
+                    pMP->mnId + iniMPid + 1));
+            pMP->SetWorldPos(vPoint->estimate().cast<float>());
+            pMP->UpdateNormalAndDepth();
+        }
+        pMap->IncreaseChangeIdx();
+    }
 
     void Optimizer::OptimizeEssentialGraph(Map *pMap, KeyFrame *pLoopKF, KeyFrame *pCurKF,
                                            const LoopClosing::KeyFrameAndPose &NonCorrectedSim3,
@@ -1387,7 +2521,7 @@ namespace ORB_SLAM3 {
         }
 
         // TODO Check this changeindex
-        pMap->IncreaseChangeIndex();
+        pMap->IncreaseChangeIdx();
     }
 
     void Optimizer::OptimizeEssentialGraph(KeyFrame *pCurKF, vector<KeyFrame *> &vpFixedKFs,
@@ -1951,508 +3085,6 @@ namespace ORB_SLAM3 {
         return nIn;
     }
 
-    void Optimizer::LocalBAWithImu(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int &num_fixedKF, int &num_OptKF,
-                                   int &num_MPs, int &num_edges, bool bLarge, bool bRecInit) {
-        Map *pCurrentMap = pKF->GetMap();
-        int maxOpt = 10;
-        int opt_it = 10;
-        if (bLarge) {
-            maxOpt = 25;
-            opt_it = 4;
-        }
-        const int Nd = std::min((int) pCurrentMap->GetKeyFramesNumInMap() - 2, maxOpt);
-        const unsigned long maxKFid = pKF->mnId;
-
-        vector<KeyFrame *> vpOptimizableKFs;
-        const vector<KeyFrame *> vpNeighsKFs = pKF->GetVectorCovisibleKeyFrames();
-        list<KeyFrame *> lpOptVisKFs;
-
-        vpOptimizableKFs.reserve(Nd);
-        vpOptimizableKFs.push_back(pKF);
-        pKF->mnBAFlagInLocalMapping = pKF->mnId;
-        for (int i = 1; i < Nd; i++) {
-            if (vpOptimizableKFs.back()->mPrevKF) {
-                vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
-                vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pKF->mnId;
-            } else {
-                break;
-            }
-        }
-
-        int N = vpOptimizableKFs.size();
-        // Optimizable points seen by temporal optimizable keyframes
-        list<MapPoint *> lLocalMapPoints;
-        for (int i = 0; i < N; i++) {
-            vector<MapPoint *> vpMPs = vpOptimizableKFs[i]->GetMapPointsInKF();
-            for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
-                MapPoint *pMP = *vit;
-                if (!pMP) {
-                    continue;
-                }
-                if (pMP->isBad()) {
-                    continue;
-                }
-                if (pMP->mnBAFlagInLocalMapping != pKF->mnId) {
-                    lLocalMapPoints.push_back(pMP);
-                    pMP->mnBAFlagInLocalMapping = pKF->mnId;
-                }
-            }
-        }
-
-        // Fixed Keyframe: First frame previous KF to optimization window)
-        list<KeyFrame *> lFixedKeyFrames;
-        if (vpOptimizableKFs.back()->mPrevKF) {
-            lFixedKeyFrames.push_back(vpOptimizableKFs.back()->mPrevKF);
-            vpOptimizableKFs.back()->mPrevKF->mnBAFixedForKF = pKF->mnId;
-        } else {
-            vpOptimizableKFs.back()->mnBAFlagInLocalMapping = 0;
-            vpOptimizableKFs.back()->mnBAFixedForKF = pKF->mnId;
-            lFixedKeyFrames.push_back(vpOptimizableKFs.back());
-            vpOptimizableKFs.pop_back();
-        }
-
-        // Optimizable visual KFs
-        const int maxCovKF = 0;
-        for (int i = 0, iend = vpNeighsKFs.size(); i < iend; i++) {
-            if (lpOptVisKFs.size() >= maxCovKF)
-                break;
-            KeyFrame *pKFi = vpNeighsKFs[i];
-            if (pKFi->mnBAFlagInLocalMapping == pKF->mnId || pKFi->mnBAFixedForKF == pKF->mnId)
-                continue;
-            pKFi->mnBAFlagInLocalMapping = pKF->mnId;
-            if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap) {
-                lpOptVisKFs.push_back(pKFi);
-                vector<MapPoint *> vpMPs = pKFi->GetMapPointsInKF();
-                for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
-                    MapPoint *pMP = *vit;
-                    if (pMP)
-                        if (!pMP->isBad())
-                            if (pMP->mnBAFlagInLocalMapping != pKF->mnId) {
-                                lLocalMapPoints.push_back(pMP);
-                                pMP->mnBAFlagInLocalMapping = pKF->mnId;
-                            }
-                }
-            }
-        }
-
-        // Fixed KFs which are not covisible optimizable
-        const int maxFixKF = 200;
-        for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
-             lit != lend; lit++) {
-            map<KeyFrame *, tuple<int, int>> observations = (*lit)->GetObsKFAndLRIdx();
-            for (map<KeyFrame *, tuple<int, int>>::iterator mit = observations.begin(), mend = observations.end();
-                 mit != mend; mit++) {
-                KeyFrame *pKFi = mit->first;
-                if (pKFi->mnBAFlagInLocalMapping != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId) {
-                    pKFi->mnBAFixedForKF = pKF->mnId;
-                    if (!pKFi->isBad()) {
-                        lFixedKeyFrames.push_back(pKFi);
-                        break;
-                    }
-                }
-            }
-            if (lFixedKeyFrames.size() >= maxFixKF)
-                break;
-        }
-
-        bool bNonFixed = (lFixedKeyFrames.size() == 0);
-
-        // Setup optimizer
-        g2o::SparseOptimizer optimizer;
-        g2o::BlockSolverX::LinearSolverType *linearSolver;
-        linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
-
-        g2o::BlockSolverX *solver_ptr = new g2o::BlockSolverX(linearSolver);
-
-        if (bLarge) {
-            g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-            solver->setUserLambdaInit(1e-2); // to avoid iterating for finding optimal lambda
-            optimizer.setAlgorithm(solver);
-        } else {
-            g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-            solver->setUserLambdaInit(1e0);
-            optimizer.setAlgorithm(solver);
-        }
-
-
-        // Set Local temporal KeyFrame vertices
-        N = vpOptimizableKFs.size();
-        for (int i = 0; i < N; i++) {
-            KeyFrame *pKFi = vpOptimizableKFs[i];
-
-            VertexPose *VP = new VertexPose(pKFi);
-            VP->setId(pKFi->mnId);
-            VP->setFixed(false);
-            optimizer.addVertex(VP);
-
-            if (pKFi->bImu) {
-                VertexVelocity *VV = new VertexVelocity(pKFi);
-                VV->setId(maxKFid + 3 * (pKFi->mnId) + 1);
-                VV->setFixed(false);
-                optimizer.addVertex(VV);
-                VertexGyroBias *VG = new VertexGyroBias(pKFi);
-                VG->setId(maxKFid + 3 * (pKFi->mnId) + 2);
-                VG->setFixed(false);
-                optimizer.addVertex(VG);
-                VertexAccBias *VA = new VertexAccBias(pKFi);
-                VA->setId(maxKFid + 3 * (pKFi->mnId) + 3);
-                VA->setFixed(false);
-                optimizer.addVertex(VA);
-            }
-        }
-
-        // Set Local visual KeyFrame vertices
-        for (list<KeyFrame *>::iterator it = lpOptVisKFs.begin(), itEnd = lpOptVisKFs.end(); it != itEnd; it++) {
-            KeyFrame *pKFi = *it;
-            VertexPose *VP = new VertexPose(pKFi);
-            VP->setId(pKFi->mnId);
-            VP->setFixed(false);
-            optimizer.addVertex(VP);
-        }
-
-        // Set Fixed KeyFrame vertices
-        for (list<KeyFrame *>::iterator lit = lFixedKeyFrames.begin(), lend = lFixedKeyFrames.end();
-             lit != lend; lit++) {
-            KeyFrame *pKFi = *lit;
-            VertexPose *VP = new VertexPose(pKFi);
-            VP->setId(pKFi->mnId);
-            VP->setFixed(true);
-            optimizer.addVertex(VP);
-
-            if (pKFi->bImu) // This should be done only for keyframe just before temporal window
-            {
-                VertexVelocity *VV = new VertexVelocity(pKFi);
-                VV->setId(maxKFid + 3 * (pKFi->mnId) + 1);
-                VV->setFixed(true);
-                optimizer.addVertex(VV);
-                VertexGyroBias *VG = new VertexGyroBias(pKFi);
-                VG->setId(maxKFid + 3 * (pKFi->mnId) + 2);
-                VG->setFixed(true);
-                optimizer.addVertex(VG);
-                VertexAccBias *VA = new VertexAccBias(pKFi);
-                VA->setId(maxKFid + 3 * (pKFi->mnId) + 3);
-                VA->setFixed(true);
-                optimizer.addVertex(VA);
-            }
-        }
-
-        // Create intertial constraints
-        vector<EdgeInertial *> vei(N, (EdgeInertial *) NULL);
-        vector<EdgeGyroRW *> vegr(N, (EdgeGyroRW *) NULL);
-        vector<EdgeAccRW *> vear(N, (EdgeAccRW *) NULL);
-
-        for (int i = 0; i < N; i++) {
-            KeyFrame *pKFi = vpOptimizableKFs[i];
-
-            if (!pKFi->mPrevKF) {
-                cout << "NOT INERTIAL LINK TO PREVIOUS FRAME!!!!" << endl;
-                continue;
-            }
-            if (pKFi->bImu && pKFi->mPrevKF->bImu && pKFi->mpImuPreintegrated) {
-                pKFi->mpImuPreintegrated->SetNewBias(pKFi->mPrevKF->GetImuBias());
-                g2o::HyperGraph::Vertex *VP1 = optimizer.vertex(pKFi->mPrevKF->mnId);
-                g2o::HyperGraph::Vertex *VV1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 1);
-                g2o::HyperGraph::Vertex *VG1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 2);
-                g2o::HyperGraph::Vertex *VA1 = optimizer.vertex(maxKFid + 3 * (pKFi->mPrevKF->mnId) + 3);
-                g2o::HyperGraph::Vertex *VP2 = optimizer.vertex(pKFi->mnId);
-                g2o::HyperGraph::Vertex *VV2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1);
-                g2o::HyperGraph::Vertex *VG2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2);
-                g2o::HyperGraph::Vertex *VA2 = optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 3);
-
-                if (!VP1 || !VV1 || !VG1 || !VA1 || !VP2 || !VV2 || !VG2 || !VA2) {
-                    cerr << "Error " << VP1 << ", " << VV1 << ", " << VG1 << ", " << VA1 << ", " << VP2 << ", " << VV2
-                         << ", " << VG2 << ", " << VA2 << endl;
-                    continue;
-                }
-
-                vei[i] = new EdgeInertial(pKFi->mpImuPreintegrated);
-
-                vei[i]->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP1));
-                vei[i]->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV1));
-                vei[i]->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG1));
-                vei[i]->setVertex(3, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VA1));
-                vei[i]->setVertex(4, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP2));
-                vei[i]->setVertex(5, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV2));
-
-                if (i == N - 1 || bRecInit) {
-                    // All inertial residuals are included without robust cost function, but not that one linking the
-                    // last optimizable keyframe inside of the local window and the first fixed keyframe out. The
-                    // information matrix for this measurement is also downweighted. This is done to avoid accumulating
-                    // error due to fixing variables.
-                    g2o::RobustKernelHuber *rki = new g2o::RobustKernelHuber;
-                    vei[i]->setRobustKernel(rki);
-                    if (i == N - 1)
-                        vei[i]->setInformation(vei[i]->information() * 1e-2);
-                    rki->setDelta(sqrt(16.92));
-                }
-                optimizer.addEdge(vei[i]);
-
-                vegr[i] = new EdgeGyroRW();
-                vegr[i]->setVertex(0, VG1);
-                vegr[i]->setVertex(1, VG2);
-                Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
-                vegr[i]->setInformation(InfoG);
-                optimizer.addEdge(vegr[i]);
-
-                vear[i] = new EdgeAccRW();
-                vear[i]->setVertex(0, VA1);
-                vear[i]->setVertex(1, VA2);
-                Eigen::Matrix3d InfoA = pKFi->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
-                vear[i]->setInformation(InfoA);
-
-                optimizer.addEdge(vear[i]);
-            } else
-                cout << "ERROR building inertial edge" << endl;
-        }
-
-        // Set MapPoint vertices
-        const int nExpectedSize = (N + lFixedKeyFrames.size()) * lLocalMapPoints.size();
-
-        // Mono
-        vector<EdgeMono *> vpEdgesMono;
-        vpEdgesMono.reserve(nExpectedSize);
-
-        vector<KeyFrame *> vpEdgeKFMono;
-        vpEdgeKFMono.reserve(nExpectedSize);
-
-        vector<MapPoint *> vpMapPointEdgeMono;
-        vpMapPointEdgeMono.reserve(nExpectedSize);
-
-        // Stereo
-        vector<EdgeStereo *> vpEdgesStereo;
-        vpEdgesStereo.reserve(nExpectedSize);
-
-        vector<KeyFrame *> vpEdgeKFStereo;
-        vpEdgeKFStereo.reserve(nExpectedSize);
-
-        vector<MapPoint *> vpMapPointEdgeStereo;
-        vpMapPointEdgeStereo.reserve(nExpectedSize);
-
-
-        const float thHuberMono = sqrt(5.991);
-        const float chi2Mono2 = 5.991;
-        const float thHuberStereo = sqrt(7.815);
-        const float chi2Stereo2 = 7.815;
-
-        const unsigned long iniMPid = maxKFid * 5;
-
-        map<int, int> mVisEdges;
-        for (int i = 0; i < N; i++) {
-            KeyFrame *pKFi = vpOptimizableKFs[i];
-            mVisEdges[pKFi->mnId] = 0;
-        }
-        for (list<KeyFrame *>::iterator lit = lFixedKeyFrames.begin(), lend = lFixedKeyFrames.end();
-             lit != lend; lit++) {
-            mVisEdges[(*lit)->mnId] = 0;
-        }
-
-        for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
-             lit != lend; lit++) {
-            MapPoint *pMP = *lit;
-            g2o::VertexSBAPointXYZ *vPoint = new g2o::VertexSBAPointXYZ();
-            vPoint->setEstimate(pMP->GetWorldPos().cast<double>());
-
-            unsigned long id = pMP->mnId + iniMPid + 1;
-            vPoint->setId(id);
-            vPoint->setMarginalized(true);
-            optimizer.addVertex(vPoint);
-            const map<KeyFrame *, tuple<int, int>> observations = pMP->GetObsKFAndLRIdx();
-
-            // Create visual constraints
-            for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin(), mend = observations.end();
-                 mit != mend; mit++) {
-                KeyFrame *pKFi = mit->first;
-
-                if (pKFi->mnBAFlagInLocalMapping != pKF->mnId && pKFi->mnBAFixedForKF != pKF->mnId)
-                    continue;
-
-                if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap) {
-                    const int leftIndex = get<0>(mit->second);
-
-                    cv::KeyPoint kpUn;
-
-                    // Monocular left observation
-                    if (leftIndex != -1 && pKFi->mvfXInRight[leftIndex] < 0) {
-                        mVisEdges[pKFi->mnId]++;
-
-                        kpUn = pKFi->mvKPsUn[leftIndex];
-                        Eigen::Matrix<double, 2, 1> obs;
-                        obs << kpUn.pt.x, kpUn.pt.y;
-
-                        EdgeMono *e = new EdgeMono(0);
-
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
-                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
-                        e->setMeasurement(obs);
-
-                        // Add here uncerteinty
-                        const float unc2 = pKFi->mpCamera->uncertainty2(obs);
-
-                        const float &invSigma2 = pKFi->mvfInvLevelSigma2[kpUn.octave] / unc2;
-                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-
-                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(thHuberMono);
-
-                        optimizer.addEdge(e);
-                        vpEdgesMono.push_back(e);
-                        vpEdgeKFMono.push_back(pKFi);
-                        vpMapPointEdgeMono.push_back(pMP);
-                    }
-                        // Stereo-observation
-                    else if (leftIndex != -1)// Stereo observation
-                    {
-                        kpUn = pKFi->mvKPsUn[leftIndex];
-                        mVisEdges[pKFi->mnId]++;
-
-                        const float kp_ur = pKFi->mvfXInRight[leftIndex];
-                        Eigen::Matrix<double, 3, 1> obs;
-                        obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                        EdgeStereo *e = new EdgeStereo(0);
-
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
-                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
-                        e->setMeasurement(obs);
-
-                        // Add here uncerteinty
-                        const float unc2 = pKFi->mpCamera->uncertainty2(obs.head(2));
-
-                        const float &invSigma2 = pKFi->mvfInvLevelSigma2[kpUn.octave] / unc2;
-                        e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
-
-                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(thHuberStereo);
-
-                        optimizer.addEdge(e);
-                        vpEdgesStereo.push_back(e);
-                        vpEdgeKFStereo.push_back(pKFi);
-                        vpMapPointEdgeStereo.push_back(pMP);
-                    }
-
-                }
-            }
-        }
-
-        //cout << "Total map points: " << lLocalMapPoints.size() << endl;
-        // TODO debug会报错先注释掉
-        for (map<int, int>::iterator mit = mVisEdges.begin(), mend = mVisEdges.end(); mit != mend; mit++) {
-            assert(mit->second >= 3);
-        }
-
-        optimizer.initializeOptimization();
-        optimizer.computeActiveErrors();
-        float err = optimizer.activeRobustChi2();
-        optimizer.optimize(opt_it); // Originally to 2
-        float err_end = optimizer.activeRobustChi2();
-        if (pbStopFlag)
-            optimizer.setForceStopFlag(pbStopFlag);
-
-        vector<pair<KeyFrame *, MapPoint *> > vToErase;
-        vToErase.reserve(vpEdgesMono.size() + vpEdgesStereo.size());
-
-        // Check inlier observations
-        // Mono
-        for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            EdgeMono *e = vpEdgesMono[i];
-            MapPoint *pMP = vpMapPointEdgeMono[i];
-            bool bClose = pMP->mTrackDepth < 10.f;
-
-            if (pMP->isBad())
-                continue;
-
-            if ((e->chi2() > chi2Mono2 && !bClose) || (e->chi2() > 1.5f * chi2Mono2 && bClose) ||
-                !e->isDepthPositive()) {
-                KeyFrame *pKFi = vpEdgeKFMono[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
-            }
-        }
-
-
-        // Stereo
-        for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-            EdgeStereo *e = vpEdgesStereo[i];
-            MapPoint *pMP = vpMapPointEdgeStereo[i];
-
-            if (pMP->isBad())
-                continue;
-
-            if (e->chi2() > chi2Stereo2) {
-                KeyFrame *pKFi = vpEdgeKFStereo[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
-            }
-        }
-
-        // Get Map Mutex and erase outliers
-        unique_lock<mutex> lock(pMap->mMutexMapUpdate);
-
-
-        // TODO: Some convergence problems have been detected here
-        if ((2 * err < err_end || isnan(err) || isnan(err_end)) && !bLarge) //bGN)
-        {
-            cout << "FAIL LOCAL-INERTIAL BA!!!!" << endl;
-            return;
-        }
-
-
-        if (!vToErase.empty()) {
-            for (size_t i = 0; i < vToErase.size(); i++) {
-                KeyFrame *pKFi = vToErase[i].first;
-                MapPoint *pMPi = vToErase[i].second;
-                pKFi->EraseMapPointMatch(pMPi);
-                pMPi->EraseObservation(pKFi);
-            }
-        }
-
-        for (list<KeyFrame *>::iterator lit = lFixedKeyFrames.begin(), lend = lFixedKeyFrames.end(); lit != lend; lit++)
-            (*lit)->mnBAFixedForKF = 0;
-
-        // Recover optimized data
-        // Local temporal Keyframes
-        N = vpOptimizableKFs.size();
-        for (int i = 0; i < N; i++) {
-            KeyFrame *pKFi = vpOptimizableKFs[i];
-
-            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
-            Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
-            pKFi->SetPose(Tcw);
-            pKFi->mnBAFlagInLocalMapping = 0;
-
-            if (pKFi->bImu) {
-                VertexVelocity *VV = static_cast<VertexVelocity *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1));
-                pKFi->SetVelocity(VV->estimate().cast<float>());
-                VertexGyroBias *VG = static_cast<VertexGyroBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2));
-                VertexAccBias *VA = static_cast<VertexAccBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 3));
-                Vector6d b;
-                b << VG->estimate(), VA->estimate();
-                pKFi->SetNewBias(IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]));
-
-            }
-        }
-
-        // Local visual KeyFrame
-        for (list<KeyFrame *>::iterator it = lpOptVisKFs.begin(), itEnd = lpOptVisKFs.end(); it != itEnd; it++) {
-            KeyFrame *pKFi = *it;
-            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
-            Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
-            pKFi->SetPose(Tcw);
-            pKFi->mnBAFlagInLocalMapping = 0;
-        }
-
-        //Points
-        for (list<MapPoint *>::iterator lit = lLocalMapPoints.begin(), lend = lLocalMapPoints.end();
-             lit != lend; lit++) {
-            MapPoint *pMP = *lit;
-            g2o::VertexSBAPointXYZ *vPoint = static_cast<g2o::VertexSBAPointXYZ *>(optimizer.vertex(
-                    pMP->mnId + iniMPid + 1));
-            pMP->SetWorldPos(vPoint->estimate().cast<float>());
-            pMP->UpdateNormalAndDepth();
-        }
-
-        pMap->IncreaseChangeIndex();
-    }
 
     Eigen::MatrixXd Optimizer::Marginalize(const Eigen::MatrixXd &H, const int &start, const int &end) {
         // Goal
@@ -2708,9 +3340,7 @@ namespace ORB_SLAM3 {
         }
     }
 
-
-    void
-    Optimizer::InertialOptimization(Map *pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG, float priorA) {
+    void Optimizer::InertialOptimization(Map *pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG, float priorA) {
         int its = 200; // Check number of iterations
         long unsigned int maxKFid = pMap->GetMaxKFid();
         const vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
@@ -2972,8 +3602,7 @@ namespace ORB_SLAM3 {
         Rwg = VGDir->estimate().Rwg;
     }
 
-    void
-    Optimizer::LocalBundleAdjustment(KeyFrame *pMainKF, vector<KeyFrame *> vpAdjustKF, vector<KeyFrame *> vpFixedKF,
+    void Optimizer::LocalBundleAdjustment(KeyFrame *pMainKF, vector<KeyFrame *> vpAdjustKF, vector<KeyFrame *> vpFixedKF,
                                      bool *pbStopFlag) {
         bool bShowImages = false;
 
@@ -3303,7 +3932,7 @@ namespace ORB_SLAM3 {
             for (map<KeyFrame *, tuple<int, int>>::const_iterator mit = observations.begin();
                  mit != observations.end(); mit++) {
                 KeyFrame *pKF = mit->first;
-                if (pKF->isBad() || pKF->mnId > maxKFid || pKF->mnBAFlagInLocalMapping != pMainKF->mnId ||
+                if (pKF->isBad() || pKF->mnId > maxKFid || pKF->mnBAOptFlagInLM != pMainKF->mnId ||
                     !pKF->GetMapPoint(get<0>(mit->second)))
                     continue;
 
@@ -3392,7 +4021,6 @@ namespace ORB_SLAM3 {
         }
     }
 
-
     void Optimizer::MergeInertialBA(KeyFrame *pCurrKF, KeyFrame *pMergeKF, bool *pbStopFlag, Map *pMap,
                                     LoopClosing::KeyFrameAndPose &corrPoses) {
         const int Nd = 6;
@@ -3408,11 +4036,11 @@ namespace ORB_SLAM3 {
 
         // Add sliding window for current KF
         vpOptimizableKFs.push_back(pCurrKF);
-        pCurrKF->mnBAFlagInLocalMapping = pCurrKF->mnId;
+        pCurrKF->mnBAOptFlagInLM = pCurrKF->mnId;
         for (int i = 1; i < Nd; i++) {
             if (vpOptimizableKFs.back()->mPrevKF) {
                 vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
-                vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pCurrKF->mnId;
+                vpOptimizableKFs.back()->mnBAOptFlagInLM = pCurrKF->mnId;
             } else
                 break;
         }
@@ -3420,7 +4048,7 @@ namespace ORB_SLAM3 {
         list<KeyFrame *> lFixedKeyFrames;
         if (vpOptimizableKFs.back()->mPrevKF) {
             vpOptimizableCovKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
-            vpOptimizableKFs.back()->mPrevKF->mnBAFlagInLocalMapping = pCurrKF->mnId;
+            vpOptimizableKFs.back()->mPrevKF->mnBAOptFlagInLM = pCurrKF->mnId;
         } else {
             vpOptimizableCovKFs.push_back(vpOptimizableKFs.back());
             vpOptimizableKFs.pop_back();
@@ -3428,13 +4056,13 @@ namespace ORB_SLAM3 {
 
         // Add temporal neighbours to merge KF (previous and next KFs)
         vpOptimizableKFs.push_back(pMergeKF);
-        pMergeKF->mnBAFlagInLocalMapping = pCurrKF->mnId;
+        pMergeKF->mnBAOptFlagInLM = pCurrKF->mnId;
 
         // Previous KFs
         for (int i = 1; i < (Nd / 2); i++) {
             if (vpOptimizableKFs.back()->mPrevKF) {
                 vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
-                vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pCurrKF->mnId;
+                vpOptimizableKFs.back()->mnBAOptFlagInLM = pCurrKF->mnId;
             } else
                 break;
         }
@@ -3442,10 +4070,10 @@ namespace ORB_SLAM3 {
         // We fix just once the old map
         if (vpOptimizableKFs.back()->mPrevKF) {
             lFixedKeyFrames.push_back(vpOptimizableKFs.back()->mPrevKF);
-            vpOptimizableKFs.back()->mPrevKF->mnBAFixedForKF = pCurrKF->mnId;
+            vpOptimizableKFs.back()->mPrevKF->mnBAFixFlagInLM = pCurrKF->mnId;
         } else {
-            vpOptimizableKFs.back()->mnBAFlagInLocalMapping = 0;
-            vpOptimizableKFs.back()->mnBAFixedForKF = pCurrKF->mnId;
+            vpOptimizableKFs.back()->mnBAOptFlagInLM = 0;
+            vpOptimizableKFs.back()->mnBAFixFlagInLM = pCurrKF->mnId;
             lFixedKeyFrames.push_back(vpOptimizableKFs.back());
             vpOptimizableKFs.pop_back();
         }
@@ -3453,13 +4081,13 @@ namespace ORB_SLAM3 {
         // Next KFs
         if (pMergeKF->mNextKF) {
             vpOptimizableKFs.push_back(pMergeKF->mNextKF);
-            vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pCurrKF->mnId;
+            vpOptimizableKFs.back()->mnBAOptFlagInLM = pCurrKF->mnId;
         }
 
         while (vpOptimizableKFs.size() < (2 * Nd)) {
             if (vpOptimizableKFs.back()->mNextKF) {
                 vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mNextKF);
-                vpOptimizableKFs.back()->mnBAFlagInLocalMapping = pCurrKF->mnId;
+                vpOptimizableKFs.back()->mnBAOptFlagInLM = pCurrKF->mnId;
             } else
                 break;
         }
@@ -3472,7 +4100,7 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < N; i++) {
             vector<MapPoint *> vpMPs = vpOptimizableKFs[i]->GetMapPointsInKF();
             for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
-                // Using mnBAFlagInLocalMapping we avoid redundance here, one MP can not be added several times to lLocalMapPoints
+                // Using mnBAOptFlagInLM we avoid redundance here, one MP can not be added several times to lLocalMapPoints
                 MapPoint *pMP = *vit;
                 if (pMP)
                     if (!pMP->isBad())
@@ -3502,10 +4130,10 @@ namespace ORB_SLAM3 {
                  mit != mend; mit++) {
                 KeyFrame *pKFi = mit->first;
 
-                if (pKFi->mnBAFlagInLocalMapping != pCurrKF->mnId &&
-                    pKFi->mnBAFixedForKF != pCurrKF->mnId) // If optimizable or already included...
+                if (pKFi->mnBAOptFlagInLM != pCurrKF->mnId &&
+                    pKFi->mnBAFixFlagInLM != pCurrKF->mnId) // If optimizable or already included...
                 {
-                    pKFi->mnBAFlagInLocalMapping = pCurrKF->mnId;
+                    pKFi->mnBAOptFlagInLM = pCurrKF->mnId;
                     if (!pKFi->isBad()) {
                         vpOptimizableCovKFs.push_back(pKFi);
                         break;
@@ -3606,7 +4234,7 @@ namespace ORB_SLAM3 {
 
         // Create intertial constraints
         vector<EdgeInertial *> vei(N, (EdgeInertial *) NULL);
-        vector<EdgeGyroRW *> vegr(N, (EdgeGyroRW *) NULL);
+        vector<EdgeGyrRW *> vegr(N, (EdgeGyrRW *) NULL);
         vector<EdgeAccRW *> vear(N, (EdgeAccRW *) NULL);
         for (int i = 0; i < N; i++) {
             //cout << "inserting inertial edge " << i << endl;
@@ -3648,7 +4276,7 @@ namespace ORB_SLAM3 {
                 rki->setDelta(sqrt(16.92));
                 optimizer.addEdge(vei[i]);
 
-                vegr[i] = new EdgeGyroRW();
+                vegr[i] = new EdgeGyrRW();
                 vegr[i]->setVertex(0, VG1);
                 vegr[i]->setVertex(1, VG2);
                 Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
@@ -3722,7 +4350,7 @@ namespace ORB_SLAM3 {
                 if (!pKFi)
                     continue;
 
-                if ((pKFi->mnBAFlagInLocalMapping != pCurrKF->mnId) && (pKFi->mnBAFixedForKF != pCurrKF->mnId))
+                if ((pKFi->mnBAOptFlagInLM != pCurrKF->mnId) && (pKFi->mnBAFixFlagInLM != pCurrKF->mnId))
                     continue;
 
                 if (pKFi->mnId > maxKFid) {
@@ -3892,690 +4520,7 @@ namespace ORB_SLAM3 {
             pMP->UpdateNormalAndDepth();
         }
 
-        pMap->IncreaseChangeIndex();
-    }
-
-    int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit) {
-        g2o::SparseOptimizer optimizer;
-        g2o::BlockSolverX::LinearSolverType *linearSolver;
-
-        linearSolver = new g2o::LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>();
-
-        g2o::BlockSolverX *solver_ptr = new g2o::BlockSolverX(linearSolver);
-
-        g2o::OptimizationAlgorithmGaussNewton *solver = new g2o::OptimizationAlgorithmGaussNewton(solver_ptr);
-        optimizer.setVerbose(false);
-        optimizer.setAlgorithm(solver);
-
-        int nInitialMonoCorrespondences = 0;
-        int nInitialStereoCorrespondences = 0;
-        int nInitialCorrespondences = 0;
-
-        // Set Frame vertex
-        VertexPose *VP = new VertexPose(pFrame);
-        VP->setId(0);
-        VP->setFixed(false);
-        optimizer.addVertex(VP);
-        VertexVelocity *VV = new VertexVelocity(pFrame);
-        VV->setId(1);
-        VV->setFixed(false);
-        optimizer.addVertex(VV);
-        VertexGyroBias *VG = new VertexGyroBias(pFrame);
-        VG->setId(2);
-        VG->setFixed(false);
-        optimizer.addVertex(VG);
-        VertexAccBias *VA = new VertexAccBias(pFrame);
-        VA->setId(3);
-        VA->setFixed(false);
-        optimizer.addVertex(VA);
-
-        // Set MapPoint vertices
-        const int N = pFrame->mnKPsLeftNum;
-        const bool bRight = false;
-
-        vector<EdgeMonoOnlyPose *> vpEdgesMono;
-        vector<EdgeStereoOnlyPose *> vpEdgesStereo;
-        vector<size_t> vnIndexEdgeMono;
-        vector<size_t> vnIndexEdgeStereo;
-        vpEdgesMono.reserve(N);
-        vpEdgesStereo.reserve(N);
-        vnIndexEdgeMono.reserve(N);
-        vnIndexEdgeStereo.reserve(N);
-
-        const float thHuberMono = sqrt(5.991);
-        const float thHuberStereo = sqrt(7.815);
-
-        {
-            unique_lock<mutex> lock(MapPoint::mGlobalMutex);
-
-            for (int i = 0; i < N; i++) {
-                MapPoint *pMP = pFrame->mvpMPs[i];
-                if (pMP) {
-                    cv::KeyPoint kpUn;
-
-                    // Left monocular observation
-                    // 这里说的Left monocular包含两种情况：1.单目情况 2.两个相机情况下的相机1
-                    if (pFrame->mvfXInRight[i] < 0) {
-                        kpUn = pFrame->mvKPsUn[i];
-                        nInitialMonoCorrespondences++;
-                        pFrame->mvbOutlier[i] = false;
-
-                        Eigen::Matrix<double, 2, 1> obs;
-                        obs << kpUn.pt.x, kpUn.pt.y;
-
-                        EdgeMonoOnlyPose *e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
-
-                        e->setVertex(0, VP);
-                        e->setMeasurement(obs);
-
-                        // Add here uncerteinty
-                        const float unc2 = pFrame->mpCamera->uncertainty2(obs);
-
-                        const float invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave] / unc2;
-                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-
-                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(thHuberMono);
-
-                        optimizer.addEdge(e);
-
-                        vpEdgesMono.push_back(e);
-                        vnIndexEdgeMono.push_back(i);
-                    }
-                        // Stereo observation
-                    else {
-                        nInitialStereoCorrespondences++;
-                        pFrame->mvbOutlier[i] = false;
-
-                        kpUn = pFrame->mvKPsUn[i];
-                        const float kp_ur = pFrame->mvfXInRight[i];
-                        Eigen::Matrix<double, 3, 1> obs;
-                        obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                        EdgeStereoOnlyPose *e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
-
-                        e->setVertex(0, VP);
-                        e->setMeasurement(obs);
-
-                        // Add here uncerteinty
-                        const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
-
-                        const float &invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave] / unc2;
-                        e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
-
-                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(thHuberStereo);
-
-                        optimizer.addEdge(e);
-
-                        vpEdgesStereo.push_back(e);
-                        vnIndexEdgeStereo.push_back(i);
-                    }
-                }
-            }
-        }
-        nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
-
-        KeyFrame *pKF = pFrame->mpPrevKeyFrame;
-        VertexPose *VPk = new VertexPose(pKF);
-        VPk->setId(4);
-        VPk->setFixed(true);
-        optimizer.addVertex(VPk);
-        VertexVelocity *VVk = new VertexVelocity(pKF);
-        VVk->setId(5);
-        VVk->setFixed(true);
-        optimizer.addVertex(VVk);
-        VertexGyroBias *VGk = new VertexGyroBias(pKF);
-        VGk->setId(6);
-        VGk->setFixed(true);
-        optimizer.addVertex(VGk);
-        VertexAccBias *VAk = new VertexAccBias(pKF);
-        VAk->setId(7);
-        VAk->setFixed(true);
-        optimizer.addVertex(VAk);
-
-        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuFromPrevKF);
-
-        ei->setVertex(0, VPk);
-        ei->setVertex(1, VVk);
-        ei->setVertex(2, VGk);
-        ei->setVertex(3, VAk);
-        ei->setVertex(4, VP);
-        ei->setVertex(5, VV);
-        optimizer.addEdge(ei);
-
-        EdgeGyroRW *egr = new EdgeGyroRW();
-        egr->setVertex(0, VGk);
-        egr->setVertex(1, VG);
-        Eigen::Matrix3d InfoG = pFrame->mpImuFromPrevKF->C.block<3, 3>(9, 9).cast<double>().inverse();
-        egr->setInformation(InfoG);
-        optimizer.addEdge(egr);
-
-        EdgeAccRW *ear = new EdgeAccRW();
-        ear->setVertex(0, VAk);
-        ear->setVertex(1, VA);
-        Eigen::Matrix3d InfoA = pFrame->mpImuFromPrevKF->C.block<3, 3>(12, 12).cast<double>().inverse();
-        ear->setInformation(InfoA);
-        optimizer.addEdge(ear);
-
-        // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
-        // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
-        float chi2Mono[4] = {12, 7.5, 5.991, 5.991};
-        float chi2Stereo[4] = {15.6, 9.8, 7.815, 7.815};
-
-        int its[4] = {10, 10, 10, 10};
-
-        int nBad = 0;
-        int nBadMono = 0;
-        int nBadStereo = 0;
-        int nInliersMono = 0;
-        int nInliersStereo = 0;
-        int nInliers = 0;
-        for (size_t it = 0; it < 4; it++) {
-            optimizer.initializeOptimization(0);
-            optimizer.optimize(its[it]);
-
-            nBad = 0;
-            nBadMono = 0;
-            nBadStereo = 0;
-            nInliers = 0;
-            nInliersMono = 0;
-            nInliersStereo = 0;
-            float chi2close = 1.5 * chi2Mono[it];
-
-            // For monocular observations
-            for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-                EdgeMonoOnlyPose *e = vpEdgesMono[i];
-
-                const size_t idx = vnIndexEdgeMono[i];
-
-                if (pFrame->mvbOutlier[idx]) {
-                    e->computeError();
-                }
-
-                const float chi2 = e->chi2();
-                bool bClose = pFrame->mvpMPs[idx]->mTrackDepth < 10.f;
-
-                if ((chi2 > chi2Mono[it] && !bClose) || (bClose && chi2 > chi2close) || !e->isDepthPositive()) {
-                    pFrame->mvbOutlier[idx] = true;
-                    e->setLevel(1);
-                    nBadMono++;
-                } else {
-                    pFrame->mvbOutlier[idx] = false;
-                    e->setLevel(0);
-                    nInliersMono++;
-                }
-
-                if (it == 2)
-                    e->setRobustKernel(0);
-            }
-
-            // For stereo observations
-            for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-                EdgeStereoOnlyPose *e = vpEdgesStereo[i];
-
-                const size_t idx = vnIndexEdgeStereo[i];
-
-                if (pFrame->mvbOutlier[idx]) {
-                    e->computeError();
-                }
-
-                const float chi2 = e->chi2();
-
-                if (chi2 > chi2Stereo[it]) {
-                    pFrame->mvbOutlier[idx] = true;
-                    e->setLevel(1); // not included in next optimization
-                    nBadStereo++;
-                } else {
-                    pFrame->mvbOutlier[idx] = false;
-                    e->setLevel(0);
-                    nInliersStereo++;
-                }
-
-                if (it == 2)
-                    e->setRobustKernel(0);
-            }
-
-            nInliers = nInliersMono + nInliersStereo;
-            nBad = nBadMono + nBadStereo;
-
-            if (optimizer.edges().size() < 10) {
-                break;
-            }
-
-        }
-
-        // If not too much tracks, recover not too bad points
-        if ((nInliers < 30) && !bRecInit) {
-            nBad = 0;
-            const float chi2MonoOut = 18.f;
-            const float chi2StereoOut = 24.f;
-            EdgeMonoOnlyPose *e1;
-            EdgeStereoOnlyPose *e2;
-            for (size_t i = 0, iend = vnIndexEdgeMono.size(); i < iend; i++) {
-                const size_t idx = vnIndexEdgeMono[i];
-                e1 = vpEdgesMono[i];
-                e1->computeError();
-                if (e1->chi2() < chi2MonoOut)
-                    pFrame->mvbOutlier[idx] = false;
-                else
-                    nBad++;
-            }
-            for (size_t i = 0, iend = vnIndexEdgeStereo.size(); i < iend; i++) {
-                const size_t idx = vnIndexEdgeStereo[i];
-                e2 = vpEdgesStereo[i];
-                e2->computeError();
-                if (e2->chi2() < chi2StereoOut)
-                    pFrame->mvbOutlier[idx] = false;
-                else
-                    nBad++;
-            }
-        }
-
-        // Recover optimized pose, velocity and biases
-        pFrame->SetImuPoseVelocity(VP->estimate().Rwb.cast<float>(), VP->estimate().twb.cast<float>(),
-                                   VV->estimate().cast<float>());
-        Vector6d b;
-        b << VG->estimate(), VA->estimate();
-        pFrame->mImuBias = IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]);
-
-        // Recover Hessian, marginalize keyFframe states and generate new prior for frame
-        Eigen::Matrix<double, 15, 15> H;
-        H.setZero();
-
-        H.block<9, 9>(0, 0) += ei->GetHessian2();
-        H.block<3, 3>(9, 9) += egr->GetHessian2();
-        H.block<3, 3>(12, 12) += ear->GetHessian2();
-
-        int tot_in = 0, tot_out = 0;
-        for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            EdgeMonoOnlyPose *e = vpEdgesMono[i];
-
-            const size_t idx = vnIndexEdgeMono[i];
-
-            if (!pFrame->mvbOutlier[idx]) {
-                H.block<6, 6>(0, 0) += e->GetHessian();
-                tot_in++;
-            } else
-                tot_out++;
-        }
-
-        for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-            EdgeStereoOnlyPose *e = vpEdgesStereo[i];
-
-            const size_t idx = vnIndexEdgeStereo[i];
-
-            if (!pFrame->mvbOutlier[idx]) {
-                H.block<6, 6>(0, 0) += e->GetHessian();
-                tot_in++;
-            } else
-                tot_out++;
-        }
-
-        pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
-                                              VA->estimate(), H);
-
-        return nInitialCorrespondences - nBad;
-    }
-
-    int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit) {
-        g2o::SparseOptimizer optimizer;
-        g2o::BlockSolverX::LinearSolverType *linearSolver;
-
-        linearSolver = new g2o::LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>();
-
-        g2o::BlockSolverX *solver_ptr = new g2o::BlockSolverX(linearSolver);
-
-        g2o::OptimizationAlgorithmGaussNewton *solver = new g2o::OptimizationAlgorithmGaussNewton(solver_ptr);
-        optimizer.setAlgorithm(solver);
-        optimizer.setVerbose(false);
-
-        int nInitialMonoCorrespondences = 0;
-        int nInitialStereoCorrespondences = 0;
-        int nInitialCorrespondences = 0;
-
-        // Set Current Frame vertex
-        VertexPose *VP = new VertexPose(pFrame);
-        VP->setId(0);
-        VP->setFixed(false);
-        optimizer.addVertex(VP);
-        VertexVelocity *VV = new VertexVelocity(pFrame);
-        VV->setId(1);
-        VV->setFixed(false);
-        optimizer.addVertex(VV);
-        VertexGyroBias *VG = new VertexGyroBias(pFrame);
-        VG->setId(2);
-        VG->setFixed(false);
-        optimizer.addVertex(VG);
-        VertexAccBias *VA = new VertexAccBias(pFrame);
-        VA->setId(3);
-        VA->setFixed(false);
-        optimizer.addVertex(VA);
-
-        // Set MapPoint vertices
-        const int N = pFrame->mnKPsLeftNum;
-        const int Nleft = -1;
-        const bool bRight = false;
-
-        vector<EdgeMonoOnlyPose *> vpEdgesMono;
-        vector<EdgeStereoOnlyPose *> vpEdgesStereo;
-        vector<size_t> vnIndexEdgeMono;
-        vector<size_t> vnIndexEdgeStereo;
-        vpEdgesMono.reserve(N);
-        vpEdgesStereo.reserve(N);
-        vnIndexEdgeMono.reserve(N);
-        vnIndexEdgeStereo.reserve(N);
-
-        const float thHuberMono = sqrt(5.991);
-        const float thHuberStereo = sqrt(7.815);
-
-        {
-            unique_lock<mutex> lock(MapPoint::mGlobalMutex);
-
-            for (int i = 0; i < N; i++) {
-                MapPoint *pMP = pFrame->mvpMPs[i];
-                if (pMP) {
-                    cv::KeyPoint kpUn;
-                    // Left monocular observation
-                    // 这里说的Left monocular包含两种情况：1.单目情况 2.两个相机情况下的相机1
-                    if (pFrame->mvfXInRight[i] < 0) {
-                        kpUn = pFrame->mvKPsUn[i];
-                        nInitialMonoCorrespondences++;
-                        pFrame->mvbOutlier[i] = false;
-
-                        Eigen::Matrix<double, 2, 1> obs;
-                        obs << kpUn.pt.x, kpUn.pt.y;
-
-                        EdgeMonoOnlyPose *e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
-
-                        e->setVertex(0, VP);
-                        e->setMeasurement(obs);
-
-                        // Add here uncerteinty
-                        const float unc2 = pFrame->mpCamera->uncertainty2(obs);
-
-                        const float invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave] / unc2;
-                        e->setInformation(Eigen::Matrix2d::Identity() * invSigma2);
-
-                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(thHuberMono);
-
-                        optimizer.addEdge(e);
-
-                        vpEdgesMono.push_back(e);
-                        vnIndexEdgeMono.push_back(i);
-                    } else { // Stereo observation
-                        nInitialStereoCorrespondences++;
-                        pFrame->mvbOutlier[i] = false;
-
-                        kpUn = pFrame->mvKPsUn[i];
-                        const float kp_ur = pFrame->mvfXInRight[i];
-                        Eigen::Matrix<double, 3, 1> obs;
-                        obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                        EdgeStereoOnlyPose *e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
-
-                        e->setVertex(0, VP);
-                        e->setMeasurement(obs);
-
-                        // Add here uncerteinty
-                        const float unc2 = pFrame->mpCamera->uncertainty2(obs.head(2));
-
-                        const float &invSigma2 = pFrame->mvfInvLevelSigma2[kpUn.octave] / unc2;
-                        e->setInformation(Eigen::Matrix3d::Identity() * invSigma2);
-
-                        g2o::RobustKernelHuber *rk = new g2o::RobustKernelHuber;
-                        e->setRobustKernel(rk);
-                        rk->setDelta(thHuberStereo);
-
-                        optimizer.addEdge(e);
-
-                        vpEdgesStereo.push_back(e);
-                        vnIndexEdgeStereo.push_back(i);
-                    }
-                }
-            }
-        }
-
-        nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
-
-        // Set Previous Frame Vertex
-        Frame *pFp = pFrame->mpPrevFrame;
-
-        VertexPose *VPk = new VertexPose(pFp);
-        VPk->setId(4);
-        VPk->setFixed(false);
-        optimizer.addVertex(VPk);
-        VertexVelocity *VVk = new VertexVelocity(pFp);
-        VVk->setId(5);
-        VVk->setFixed(false);
-        optimizer.addVertex(VVk);
-        VertexGyroBias *VGk = new VertexGyroBias(pFp);
-        VGk->setId(6);
-        VGk->setFixed(false);
-        optimizer.addVertex(VGk);
-        VertexAccBias *VAk = new VertexAccBias(pFp);
-        VAk->setId(7);
-        VAk->setFixed(false);
-        optimizer.addVertex(VAk);
-
-        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuFromPrevFrame);
-
-        ei->setVertex(0, VPk);
-        ei->setVertex(1, VVk);
-        ei->setVertex(2, VGk);
-        ei->setVertex(3, VAk);
-        ei->setVertex(4, VP);
-        ei->setVertex(5, VV);
-        optimizer.addEdge(ei);
-
-        EdgeGyroRW *egr = new EdgeGyroRW();
-        egr->setVertex(0, VGk);
-        egr->setVertex(1, VG);
-        Eigen::Matrix3d InfoG = pFrame->mpImuFromPrevKF->C.block<3, 3>(9, 9).cast<double>().inverse();
-        egr->setInformation(InfoG);
-        optimizer.addEdge(egr);
-
-        EdgeAccRW *ear = new EdgeAccRW();
-        ear->setVertex(0, VAk);
-        ear->setVertex(1, VA);
-        Eigen::Matrix3d InfoA = pFrame->mpImuFromPrevKF->C.block<3, 3>(12, 12).cast<double>().inverse();
-        ear->setInformation(InfoA);
-        optimizer.addEdge(ear);
-
-        if (!pFp->mpcpi)
-            Verbose::PrintMess("pFp->mpcpi does not exist!!!\nPrevious Frame " + to_string(pFp->mnId),
-                               Verbose::VERBOSITY_NORMAL);
-
-        EdgePriorPoseImu *ep = new EdgePriorPoseImu(pFp->mpcpi);
-
-        ep->setVertex(0, VPk);
-        ep->setVertex(1, VVk);
-        ep->setVertex(2, VGk);
-        ep->setVertex(3, VAk);
-        g2o::RobustKernelHuber *rkp = new g2o::RobustKernelHuber;
-        ep->setRobustKernel(rkp);
-        rkp->setDelta(5);
-        optimizer.addEdge(ep);
-
-        // We perform 4 optimizations, after each optimization we classify observation as inlier/outlier
-        // At the next optimization, outliers are not included, but at the end they can be classified as inliers again.
-        const float chi2Mono[4] = {5.991, 5.991, 5.991, 5.991};
-        const float chi2Stereo[4] = {15.6f, 9.8f, 7.815f, 7.815f};
-        const int its[4] = {10, 10, 10, 10};
-
-        int nBad = 0;
-        int nBadMono = 0;
-        int nBadStereo = 0;
-        int nInliersMono = 0;
-        int nInliersStereo = 0;
-        int nInliers = 0;
-        for (size_t it = 0; it < 4; it++) {
-            optimizer.initializeOptimization(0);
-            optimizer.optimize(its[it]);
-
-            nBad = 0;
-            nBadMono = 0;
-            nBadStereo = 0;
-            nInliers = 0;
-            nInliersMono = 0;
-            nInliersStereo = 0;
-            float chi2close = 1.5 * chi2Mono[it];
-
-            for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-                EdgeMonoOnlyPose *e = vpEdgesMono[i];
-
-                const size_t idx = vnIndexEdgeMono[i];
-                bool bClose = pFrame->mvpMPs[idx]->mTrackDepth < 10.f;
-
-                if (pFrame->mvbOutlier[idx]) {
-                    e->computeError();
-                }
-
-                const float chi2 = e->chi2();
-
-                if ((chi2 > chi2Mono[it] && !bClose) || (bClose && chi2 > chi2close) || !e->isDepthPositive()) {
-                    pFrame->mvbOutlier[idx] = true;
-                    e->setLevel(1);
-                    nBadMono++;
-                } else {
-                    pFrame->mvbOutlier[idx] = false;
-                    e->setLevel(0);
-                    nInliersMono++;
-                }
-
-                if (it == 2)
-                    e->setRobustKernel(0);
-
-            }
-
-            for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-                EdgeStereoOnlyPose *e = vpEdgesStereo[i];
-
-                const size_t idx = vnIndexEdgeStereo[i];
-
-                if (pFrame->mvbOutlier[idx]) {
-                    e->computeError();
-                }
-
-                const float chi2 = e->chi2();
-
-                if (chi2 > chi2Stereo[it]) {
-                    pFrame->mvbOutlier[idx] = true;
-                    e->setLevel(1);
-                    nBadStereo++;
-                } else {
-                    pFrame->mvbOutlier[idx] = false;
-                    e->setLevel(0);
-                    nInliersStereo++;
-                }
-
-                if (it == 2)
-                    e->setRobustKernel(0);
-            }
-
-            nInliers = nInliersMono + nInliersStereo;
-            nBad = nBadMono + nBadStereo;
-
-            if (optimizer.edges().size() < 10) {
-                break;
-            }
-        }
-
-
-        if ((nInliers < 30) && !bRecInit) {
-            nBad = 0;
-            const float chi2MonoOut = 18.f;
-            const float chi2StereoOut = 24.f;
-            EdgeMonoOnlyPose *e1;
-            EdgeStereoOnlyPose *e2;
-            for (size_t i = 0, iend = vnIndexEdgeMono.size(); i < iend; i++) {
-                const size_t idx = vnIndexEdgeMono[i];
-                e1 = vpEdgesMono[i];
-                e1->computeError();
-                if (e1->chi2() < chi2MonoOut)
-                    pFrame->mvbOutlier[idx] = false;
-                else
-                    nBad++;
-
-            }
-            for (size_t i = 0, iend = vnIndexEdgeStereo.size(); i < iend; i++) {
-                const size_t idx = vnIndexEdgeStereo[i];
-                e2 = vpEdgesStereo[i];
-                e2->computeError();
-                if (e2->chi2() < chi2StereoOut)
-                    pFrame->mvbOutlier[idx] = false;
-                else
-                    nBad++;
-            }
-        }
-
-        nInliers = nInliersMono + nInliersStereo;
-
-
-        // Recover optimized pose, velocity and biases
-        pFrame->SetImuPoseVelocity(VP->estimate().Rwb.cast<float>(), VP->estimate().twb.cast<float>(),
-                                   VV->estimate().cast<float>());
-        Vector6d b;
-        b << VG->estimate(), VA->estimate();
-        pFrame->mImuBias = IMU::Bias(b[3], b[4], b[5], b[0], b[1], b[2]);
-
-        // Recover Hessian, marginalize previous frame states and generate new prior for frame
-        Eigen::Matrix<double, 30, 30> H;
-        H.setZero();
-
-        H.block<24, 24>(0, 0) += ei->GetHessian();
-
-        Eigen::Matrix<double, 6, 6> Hgr = egr->GetHessian();
-        H.block<3, 3>(9, 9) += Hgr.block<3, 3>(0, 0);
-        H.block<3, 3>(9, 24) += Hgr.block<3, 3>(0, 3);
-        H.block<3, 3>(24, 9) += Hgr.block<3, 3>(3, 0);
-        H.block<3, 3>(24, 24) += Hgr.block<3, 3>(3, 3);
-
-        Eigen::Matrix<double, 6, 6> Har = ear->GetHessian();
-        H.block<3, 3>(12, 12) += Har.block<3, 3>(0, 0);
-        H.block<3, 3>(12, 27) += Har.block<3, 3>(0, 3);
-        H.block<3, 3>(27, 12) += Har.block<3, 3>(3, 0);
-        H.block<3, 3>(27, 27) += Har.block<3, 3>(3, 3);
-
-        H.block<15, 15>(0, 0) += ep->GetHessian();
-
-        int tot_in = 0, tot_out = 0;
-        for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            EdgeMonoOnlyPose *e = vpEdgesMono[i];
-
-            const size_t idx = vnIndexEdgeMono[i];
-
-            if (!pFrame->mvbOutlier[idx]) {
-                H.block<6, 6>(15, 15) += e->GetHessian();
-                tot_in++;
-            } else
-                tot_out++;
-        }
-
-        for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-            EdgeStereoOnlyPose *e = vpEdgesStereo[i];
-
-            const size_t idx = vnIndexEdgeStereo[i];
-
-            if (!pFrame->mvbOutlier[idx]) {
-                H.block<6, 6>(15, 15) += e->GetHessian();
-                tot_in++;
-            } else
-                tot_out++;
-        }
-
-        H = Marginalize(H, 0, 14);
-
-        pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
-                                              VA->estimate(), H.block<15, 15>(15, 15));
-        delete pFp->mpcpi;
-        pFp->mpcpi = NULL;
-
-        return nInitialCorrespondences - nBad;
+        pMap->IncreaseChangeIdx();
     }
 
     void Optimizer::OptimizeEssentialGraph4DoF(Map *pMap, KeyFrame *pLoopKF, KeyFrame *pCurKF,
@@ -4860,7 +4805,7 @@ namespace ORB_SLAM3 {
 
             pMP->UpdateNormalAndDepth();
         }
-        pMap->IncreaseChangeIndex();
+        pMap->IncreaseChangeIdx();
     }
 
 } //namespace ORB_SLAM

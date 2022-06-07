@@ -155,6 +155,11 @@ namespace ORB_SLAM3 {
         mpCurrentMap->SetReferenceMapPoints(vpMPs);
     }
 
+    void Atlas::SetReferenceKeyFrames(const std::vector<KeyFrame *> &vpKPs) {
+        unique_lock<mutex> lock(mMutexAtlas);
+        mpCurrentMap->SetReferenceKeyFrames(vpKPs);
+    }
+
     void Atlas::InformNewBigChange() {
         unique_lock<mutex> lock(mMutexAtlas);
         mpCurrentMap->InformNewBigChange();

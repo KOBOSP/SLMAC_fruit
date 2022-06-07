@@ -24,11 +24,12 @@
 namespace ORB_SLAM3 {
 
     long unsigned int KeyFrame::nNextId = 0;
+    int KeyFrame::mnStrongCovisTh;
 
     KeyFrame::KeyFrame()
             : mnFrameId(0), mdTimestamp(0), mnGridCols(FRAME_GRID_COLS), mnGridRows(FRAME_GRID_ROWS),
               mfGridElementWidthInv(0), mfGridElementHeightInv(0),
-              mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAFlagInLocalMapping(0), mnBAFixedForKF(0),
+              mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAOptFlagInLM(0), mnBAFixFlagInLM(0),
               mnBALocalForMerge(0),
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnMergeQuery(0), mnMergeWords(0),
               mnBAGlobalForKF(0),
@@ -45,8 +46,7 @@ namespace ORB_SLAM3 {
               mnMaxX(0),
               mnMaxY(0), mPrevKF(static_cast<KeyFrame *>(NULL)), mNextKF(static_cast<KeyFrame *>(NULL)),
               mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
-              mbToBeErased(false), mbBad(false), mHalfBaseline(0), mbCurrentPlaceRecognition(false),
-              mnMergeCorrectedForKF(0), mnNumberOfOpt(0), mbHasVelocity(false) {
+              mbToBeErased(false), mbBad(false), mHalfBaseline(0), mbHasVelocity(false) {
     }
 
     KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB)
@@ -54,7 +54,7 @@ namespace ORB_SLAM3 {
               mnGridCols(FRAME_GRID_COLS),
               mnGridRows(FRAME_GRID_ROWS),
               mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
-              mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAFlagInLocalMapping(0), mnBAFixedForKF(0),
+              mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAOptFlagInLM(0), mnBAFixFlagInLM(0),
               mnBALocalForMerge(0),
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnBAGlobalForKF(0),
               mnRecognitionFlagInLoopClosing(0), mnRecognitionCommonWords(0), mPlaceRecognitionScore(0),
@@ -70,12 +70,9 @@ namespace ORB_SLAM3 {
               mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL),
               mbNotErase(false),
               mbToBeErased(false), mbBad(false), mHalfBaseline(F.mfBaseline / 2), mpMap(pMap),
-              mbCurrentPlaceRecognition(false),
-              mnMergeCorrectedForKF(0),
               mpCamera(F.mpCamera),
               mTlr(F.GetStereoTlr()),
-              mvKPsRight(F.mvKPsRight), mTrl(F.GetStereoTrl()),
-              mnNumberOfOpt(0), mbHasVelocity(false) {
+              mvKPsRight(F.mvKPsRight), mTrl(F.GetStereoTrl()), mbHasVelocity(false) {
         mnId = nNextId++;
 
         // 根据指定的普通帧, 初始化用于加速匹配的网格对象信息; 其实就把每个网格中有的特征点的索引复制过来
@@ -438,7 +435,6 @@ namespace ORB_SLAM3 {
         int nmax = 0;
         KeyFrame *pKFmax = NULL;
         // 至少有15个共视地图点
-        int th = 15;
 
         // vPairs记录与其它关键帧共视帧数大于th的关键帧
         // pair<int,KeyFrame*>将关键帧的权重写在前面，关键帧写在后面方便后面排序
@@ -454,7 +450,7 @@ namespace ORB_SLAM3 {
                 nmax = mit->second;
                 pKFmax = mit->first;
             }
-            if (mit->second >= th) {
+            if (mit->second >= mnStrongCovisTh) {
                 // 对应权重需要大于阈值，对这些关键帧建立连接
                 vPairs.push_back(make_pair(mit->second, mit->first));
                 // 对方关键帧也要添加这个信息

@@ -87,22 +87,15 @@ namespace ORB_SLAM3 {
         }
         // 如果是有imu的传感器类型，设置mbIsInertial = true;以后的跟踪和预积分将和这个标志有关
         mpAtlas->SetInertialSensor();
+        KeyFrame::mnStrongCovisTh = mSettings->mnStrongCovisTh;
 
         mpFrameDrawer = new FrameDrawer(mpAtlas, mSettings->mnColorNum);
         mpMapDrawer = new MapDrawer(mpAtlas, sSettingFile, mSettings);
-
-        //(it will live in the main thread of execution, the one that called this constructor)
         cout << "Seq. Name: " << sSeqName << endl;
         mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
                                  mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSettings, sSeqName);
-
-
         mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, mSettings);
         mptLocalMapping = new thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
-
-
-
-
         mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSettings->mbOpenLoop, mSettings);
         mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
@@ -145,7 +138,6 @@ namespace ORB_SLAM3 {
                 mbDeactivateLocalizationMode = false;
             }
         }
-
         // Check reset
         {
             unique_lock<mutex> lock(mMutexReset);
@@ -162,7 +154,6 @@ namespace ORB_SLAM3 {
                 return Sophus::SE3<float>();
             }
         }
-
         cv::Mat ImgLeftToTrack, ImgRightToTrack;
         if (mSettings && mSettings->mbNeedToRectify) {
             cv::Mat MXL = mSettings->Map1X;
@@ -178,7 +169,6 @@ namespace ORB_SLAM3 {
             ImgLeftToTrack = ImgLeft.clone();
             ImgRightToTrack = ImgRight.clone();
         }
-
         ImgLeftToTrack.copyTo(mpTracker->mImgLeft);
         ImgRightToTrack.copyTo(mpTracker->mImgRight);
         if (mImgLeftToViewer.channels() == 3) {
@@ -259,13 +249,13 @@ namespace ORB_SLAM3 {
             if(mpLoopCloser->CheckRunningGBA()){
                 cout << "mpLoopCloser is running GBA" << endl;
             }
-            usleep(500);
+            usleep(1000);
         }
 
         if (mpViewer) {
             mpViewer->RequestFinish();
             while (!mpViewer->CheckFinished()){
-                usleep(500);
+                usleep(1000);
             }
         }
 

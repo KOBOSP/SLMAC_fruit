@@ -78,8 +78,13 @@ namespace ORB_SLAM3 {
 
         Map *pActiveMap = mpAtlas->GetCurrentMap();
         // DEBUG LBA
-        std::set<long unsigned int> sOptKFs = pActiveMap->msOptKFs;
+        std::set<long unsigned int> sOptVisKFs = pActiveMap->msOptVisKFs;
         std::set<long unsigned int> sFixedKFs = pActiveMap->msFixedKFs;
+        std::set<long unsigned int> sOptImuKFs = pActiveMap->msOptImuKFs;
+
+        const vector<KeyFrame *> &vpRefKFs = pActiveMap->GetReferenceKeyFrames();
+        set<KeyFrame *> spRefKFs(vpRefKFs.begin(), vpRefKFs.end());
+
 
         if (!pActiveMap)
             return;
@@ -102,15 +107,21 @@ namespace ORB_SLAM3 {
                     //cout << "Child KF: " << vpKFs[i]->mnId << endl;
                     glLineWidth(mKeyFrameLineWidth);
                     if (bDrawOptFixKF) {
-                        if (sOptKFs.find(pKF->mnId) != sOptKFs.end()) {
-                            glColor3f(0.0f, 1.0f, 0.0f); // Green -> Opt KFs
+                        if (sOptVisKFs.find(pKF->mnId) != sOptVisKFs.end()) {
+                            glColor3f(0.0f, 1.0f, 0.0f); // Green -> OptVis KFs
+                        } else if (sOptImuKFs.find(pKF->mnId) != sOptImuKFs.end()) {
+                            glColor3f(1.0f, 0.0f, 0.0f); // Red -> OptImu KFs
                         } else if (sFixedKFs.find(pKF->mnId) != sFixedKFs.end()) {
-                            glColor3f(1.0f, 0.0f, 0.0f); // Red -> Fixed KFs
-                        } else {
+                            glColor3f(1.0f, 1.0f, 0.0f); // yellow -> Fixed KFs
+                        }else {
                             glColor3f(0.0f, 0.0f, 1.0f); // Basic color
                         }
                     } else {
-                        glColor3f(0.0f, 0.0f, 1.0f); // Basic color
+                        if (spRefKFs.count(pKF)) {
+                            glColor3f(1.0f, 0.0f, 0.0f);
+                        } else {
+                            glColor3f(0.0f, 0.0f, 1.0f);
+                        }
                     }
                     glBegin(GL_LINES);
                 }

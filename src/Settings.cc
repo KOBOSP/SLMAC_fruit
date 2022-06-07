@@ -256,6 +256,7 @@ namespace ORB_SLAM3 {
         mbOpenLoop = ReadParameter<int>(fSettings, "LoopClosing.OpenLoop", found);
         mfCullKFRedundantTh = ReadParameter<float>(fSettings, "LocalMapping.CullKFRedundantTh", found);
         mnStrongCovisTh = ReadParameter<int>(fSettings, "LocalMapping.StrongCovisTh", found);
+        mnSingleMaxCullKFsNum = ReadParameter<int>(fSettings, "LocalMapping.SingleMaxCullKFsNum", found);
         mnWeakCovisTh = ReadParameter<int>(fSettings, "LocalMapping.WeakCovisTh", found);
         mfThTimeRescueLost = ReadParameter<float>(fSettings, "Tracking.ThTimeRescueLost", found);
     }

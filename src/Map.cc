@@ -25,9 +25,9 @@ namespace ORB_SLAM3 {
     long unsigned int Map::nNextId = 0;
 
     Map::Map()
-            : mnMaxKFid(0), mnBigChangeIdx(0), mbImuInitialized(false), mnMapChange(0),
+            : mnMaxKFid(0), mnBigChangeIdx(0), mbImuInitialized(false), mnMapChangeIdx(0),
               mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
-              mbFail(false), mIsInUse(false), mHasTumbnail(false), mbBad(false), mnMapChangeInTrack(0),
+              mbFail(false), mIsInUse(false), mHasTumbnail(false), mbBad(false), mnLastMapChangeIdx(0),
               mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false) {
         mnId = nNextId++;
         mThumbnail = static_cast<GLubyte *>(NULL);
@@ -38,7 +38,7 @@ namespace ORB_SLAM3 {
               mIsInUse(false),
               mHasTumbnail(false), mbBad(false), mbImuInitialized(false),
               mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
-              mnMapChange(0), mbFail(false), mnMapChangeInTrack(0), mbIsInertial(false), mbIMU_BA1(false),
+              mnMapChangeIdx(0), mbFail(false), mnLastMapChangeIdx(0), mbIsInertial(false), mbIMU_BA1(false),
               mbIMU_BA2(false) {
         mnId = nNextId++;
         mThumbnail = static_cast<GLubyte *>(NULL);
@@ -56,7 +56,7 @@ namespace ORB_SLAM3 {
         mThumbnail = static_cast<GLubyte *>(NULL);
 
         mvpReferenceMapPoints.clear();
-        mvpKeyFrameOrigins.clear();
+        mvpInitKeyFrames.clear();
     }
 
 // 在地图中插入关键帧,同时更新关键帧的最大id
@@ -124,9 +124,14 @@ namespace ORB_SLAM3 {
  * 设置参考地图点用于绘图显示局部地图点（红色）
  * @param vpMPs Local MapPoints
  */
-    void Map::SetReferenceMapPoints(const vector<MapPoint *> &vpMPs) {
+    void Map::SetReferenceMapPoints(const std::vector<MapPoint *> &vpMPs) {
         unique_lock<mutex> lock(mMutexMap);
         mvpReferenceMapPoints = vpMPs;
+    }
+
+    void Map::SetReferenceKeyFrames(const std::vector<KeyFrame *> &vpKFs) {
+        unique_lock<mutex> lock(mMutexMap);
+        mvpReferenceKeyFrames = vpKFs;
     }
 
     void Map::InformNewBigChange() {
@@ -167,6 +172,10 @@ namespace ORB_SLAM3 {
     vector<MapPoint *> Map::GetReferenceMapPoints() {
         unique_lock<mutex> lock(mMutexMap);
         return mvpReferenceMapPoints;
+    }
+    vector<KeyFrame *> Map::GetReferenceKeyFrames() {
+        unique_lock<mutex> lock(mMutexMap);
+        return mvpReferenceKeyFrames;
     }
 
     long unsigned int Map::GetId() {
@@ -215,7 +224,7 @@ namespace ORB_SLAM3 {
         mnMaxKFid = mnInitKFid;
         mbImuInitialized = false;
         mvpReferenceMapPoints.clear();
-        mvpKeyFrameOrigins.clear();
+        mvpInitKeyFrames.clear();
         mbIMU_BA1 = false;
         mbIMU_BA2 = false;
     }
@@ -280,7 +289,7 @@ namespace ORB_SLAM3 {
             pMP->SetWorldPos(s * Ryw * pMP->GetWorldPos() + tyw);
             pMP->UpdateNormalAndDepth();
         }
-        mnMapChange++;
+        mnMapChangeIdx++;
     }
 
     void Map::SetInertialSensor() {
@@ -326,24 +335,24 @@ namespace ORB_SLAM3 {
         return 0;
     }
 
-    int Map::GetMapChangeIndex() {
+    int Map::GetMapChangeIdx() {
         unique_lock<mutex> lock(mMutexMap);
-        return mnMapChange;
+        return mnMapChangeIdx;
     }
 
-    void Map::IncreaseChangeIndex() {
+    void Map::IncreaseChangeIdx() {
         unique_lock<mutex> lock(mMutexMap);
-        mnMapChange++;
+        mnMapChangeIdx++;
     }
 
-    int Map::GetLastMapChange() {
+    int Map::GetLastMapChangeIdx() {
         unique_lock<mutex> lock(mMutexMap);
-        return mnMapChangeInTrack;
+        return mnLastMapChangeIdx;
     }
 
-    void Map::SetLastMapChange(int currentChangeId) {
+    void Map::SetLastMapChangeIdx(int currentChangeId) {
         unique_lock<mutex> lock(mMutexMap);
-        mnMapChangeInTrack = currentChangeId;
+        mnLastMapChangeIdx = currentChangeId;
     }
 
 /** 预保存，也就是把想保存的信息保存到备份的变量中
@@ -371,9 +380,9 @@ namespace ORB_SLAM3 {
         // Saves the id of KF origins
         // 2. 保存最开始的帧的id，貌似一个map的mvpKeyFrameOrigins里面只有一个，可以验证一下
         mvBackupKeyFrameOriginsId.clear();
-        mvBackupKeyFrameOriginsId.reserve(mvpKeyFrameOrigins.size());
-        for (int i = 0, numEl = mvpKeyFrameOrigins.size(); i < numEl; ++i) {
-            mvBackupKeyFrameOriginsId.push_back(mvpKeyFrameOrigins[i]->mnId);
+        mvBackupKeyFrameOriginsId.reserve(mvpInitKeyFrames.size());
+        for (int i = 0, numEl = mvpInitKeyFrames.size(); i < numEl; ++i) {
+            mvBackupKeyFrameOriginsId.push_back(mvpInitKeyFrames[i]->mnId);
         }
 
         // Backup of MapPoints
@@ -470,10 +479,10 @@ namespace ORB_SLAM3 {
             mpKFlowerID = mpKeyFrameId[mnBackupKFlowerID];
         }
 
-        mvpKeyFrameOrigins.clear();
-        mvpKeyFrameOrigins.reserve(mvBackupKeyFrameOriginsId.size());
+        mvpInitKeyFrames.clear();
+        mvpInitKeyFrames.reserve(mvBackupKeyFrameOriginsId.size());
         for (int i = 0; i < mvBackupKeyFrameOriginsId.size(); ++i) {
-            mvpKeyFrameOrigins.push_back(mpKeyFrameId[mvBackupKeyFrameOriginsId[i]]);
+            mvpInitKeyFrames.push_back(mpKeyFrameId[mvBackupKeyFrameOriginsId[i]]);
         }
 
         mvpBackupMapPoints.clear();
