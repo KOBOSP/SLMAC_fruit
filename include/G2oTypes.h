@@ -86,7 +86,7 @@ public:
 
     void Update(const double *pu);                                                   // update in the imu reference
     void UpdateW(const double *pu);                                                  // update in the world reference
-    Eigen::Vector2d Project(const Eigen::Vector3d &Xw, int cam_idx = 0) const;       // Mono
+    Eigen::Vector2d ProjectMono(const Eigen::Vector3d &Xw, int cam_idx = 0) const;       // Mono
     Eigen::Vector3d ProjectStereo(const Eigen::Vector3d &Xw, int cam_idx = 0) const; // Stereo
     bool isDepthPositive(const Eigen::Vector3d &Xw, int cam_idx = 0) const;
 
@@ -414,7 +414,7 @@ public:
         const g2o::VertexSBAPointXYZ *VPoint = static_cast<const g2o::VertexSBAPointXYZ *>(_vertices[0]);
         const VertexPose *VPose = static_cast<const VertexPose *>(_vertices[1]);
         const Eigen::Vector2d obs(_measurement);
-        _error = obs - VPose->estimate().Project(VPoint->estimate(), cam_idx);
+        _error = obs - VPose->estimate().ProjectMono(VPoint->estimate(), cam_idx);
     }
 
     virtual void linearizeOplus();
@@ -467,7 +467,7 @@ public:
     {
         const VertexPose *VPose = static_cast<const VertexPose *>(_vertices[0]);
         const Eigen::Vector2d obs(_measurement);
-        _error = obs - VPose->estimate().Project(Xw, cam_idx);
+        _error = obs - VPose->estimate().ProjectMono(Xw, cam_idx);
     }
 
     virtual void linearizeOplus();

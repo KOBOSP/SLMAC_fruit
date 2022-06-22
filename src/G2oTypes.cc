@@ -152,11 +152,10 @@ void ImuCamPose::SetParam(
 /** 
  * @brief 单目投影
  */
-Eigen::Vector2d ImuCamPose::Project(const Eigen::Vector3d &Xw, int cam_idx) const
+Eigen::Vector2d ImuCamPose::ProjectMono(const Eigen::Vector3d &Xw, int cam_idx) const
 {
     Eigen::Vector3d Xc = Rcw[cam_idx] * Xw + tcw[cam_idx];
-
-    return pCamera[cam_idx]->project(Xc);
+    return pCamera[cam_idx]->ProjectMPToKP(Xc);
 }
 
 /** 
@@ -168,7 +167,7 @@ Eigen::Vector3d ImuCamPose::ProjectStereo(const Eigen::Vector3d &Xw, int cam_idx
     Eigen::Vector3d Pc = Rcw[cam_idx] * Xw + tcw[cam_idx];
     Eigen::Vector3d pc;
     double invZ = 1/Pc(2);
-    pc.head(2) = pCamera[cam_idx]->project(Pc);
+    pc.head(2) = pCamera[cam_idx]->ProjectMPToKP(Pc);
     pc(2) = pc(0) - bf*invZ;
     return pc;
 }
@@ -293,9 +292,9 @@ bool VertexPose::read(std::istream& is)
         }
 
         float nextParam;
-        for(size_t i = 0; i < _estimate.pCamera[idx]->size(); i++){
+        for(size_t i = 0; i < _estimate.pCamera[idx]->ParameterSize(); i++){
             is >> nextParam;
-            _estimate.pCamera[idx]->setParameter(nextParam,i);
+            _estimate.pCamera[idx]->SetParameter(nextParam, i);
         }
     }
 
@@ -338,7 +337,7 @@ bool VertexPose::write(std::ostream& os) const
             os << tbc[idx](i) << " ";
         }
 
-        for(size_t i = 0; i < _estimate.pCamera[idx]->size(); i++){
+        for(size_t i = 0; i < _estimate.pCamera[idx]->ParameterSize(); i++){
             os << _estimate.pCamera[idx]->GetParameter(i) << " ";
         }
     }
@@ -364,7 +363,7 @@ void EdgeMono::linearizeOplus()
     const Eigen::Vector3d Xb = VPose->estimate().Rbc[cam_idx]*Xc+VPose->estimate().tbc[cam_idx];
     const Eigen::Matrix3d &Rcb = VPose->estimate().Rcb[cam_idx];
 
-    const Eigen::Matrix<double,2,3> proj_jac = VPose->estimate().pCamera[cam_idx]->projectJac(Xc);
+    const Eigen::Matrix<double,2,3> proj_jac = VPose->estimate().pCamera[cam_idx]->ProjectJac(Xc);
     _jacobianOplusXi = -proj_jac * Rcw;
 
     Eigen::Matrix<double,3,6> SE3deriv;
@@ -393,7 +392,7 @@ void EdgeMonoOnlyPose::linearizeOplus()
     const Eigen::Vector3d Xb = VPose->estimate().Rbc[cam_idx]*Xc+VPose->estimate().tbc[cam_idx];
     const Eigen::Matrix3d &Rcb = VPose->estimate().Rcb[cam_idx];
 
-    Eigen::Matrix<double,2,3> proj_jac = VPose->estimate().pCamera[cam_idx]->projectJac(Xc);
+    Eigen::Matrix<double,2,3> proj_jac = VPose->estimate().pCamera[cam_idx]->ProjectJac(Xc);
 
     Eigen::Matrix<double,3,6> SE3deriv;
     double x = Xb(0);
@@ -424,7 +423,7 @@ void EdgeStereo::linearizeOplus()
     const double inv_z2 = 1.0/(Xc(2)*Xc(2));
 
     Eigen::Matrix<double,3,3> proj_jac;
-    proj_jac.block<2,3>(0,0) = VPose->estimate().pCamera[cam_idx]->projectJac(Xc);
+    proj_jac.block<2,3>(0,0) = VPose->estimate().pCamera[cam_idx]->ProjectJac(Xc);
     proj_jac.block<1,3>(2,0) = proj_jac.block<1,3>(0,0);
     proj_jac(2,2) += bf*inv_z2;
 
@@ -459,7 +458,7 @@ void EdgeStereoOnlyPose::linearizeOplus()
     const double inv_z2 = 1.0/(Xc(2)*Xc(2));
 
     Eigen::Matrix<double,3,3> proj_jac;
-    proj_jac.block<2,3>(0,0) = VPose->estimate().pCamera[cam_idx]->projectJac(Xc);
+    proj_jac.block<2,3>(0,0) = VPose->estimate().pCamera[cam_idx]->ProjectJac(Xc);
     proj_jac.block<1,3>(2,0) = proj_jac.block<1,3>(0,0);
     proj_jac(2,2) += bf*inv_z2;
 

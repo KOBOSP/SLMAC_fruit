@@ -388,7 +388,7 @@ namespace ORB_SLAM3 {
         if (PcZ < 0.0f)
             return false;
 
-        const Eigen::Vector2f uv = mpCamera->project(Pc);
+        const Eigen::Vector2f uv = mpCamera->ProjectMPToKP(Pc);
 
         // Step 3 关卡二：将MapPoint投影到当前帧的像素坐标(u,v), 并判断是否在图像有效范围内
         // 判断是否在图像边界中，只要不在那么就说明无法在当前帧下进行重投影

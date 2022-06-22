@@ -65,7 +65,7 @@ void serializeDiagonalMatrix(Archive &ar, Eigen::DiagonalMatrix<float, dim> &D, 
         dense = D.toDenseMatrix();
     }
 
-    ar & boost::serialization::make_array(dense.data(), dense.size());
+    ar & boost::serialization::make_array(dense.data(), dense.ParameterSize());
 
     if (Archive::is_loading::value)
     {

@@ -312,10 +312,10 @@ namespace ORB_SLAM3 {
         list<double>::iterator lFT = mpTracker->mlTimestamp.begin();
         list<bool>::iterator lbL = mpTracker->mlbLost.begin();
 
-        //cout << "size mlpRefKFs: " << mpTracker->mlpRefKFs.size() << endl;
-        //cout << "size mlRelativeFramePoses: " << mpTracker->mlRelativeFramePoses.size() << endl;
-        //cout << "size mpTracker->mlTimestamp: " << mpTracker->mlTimestamp.size() << endl;
-        //cout << "size mpTracker->mlbLost: " << mpTracker->mlbLost.size() << endl;
+        //cout << "ParameterSize mlpRefKFs: " << mpTracker->mlpRefKFs.size() << endl;
+        //cout << "size mlRelativeFramePoses: " << mpTracker->mlRelativeFramePoses.ParameterSize() << endl;
+        //cout << "size mpTracker->mlTimestamp: " << mpTracker->mlTimestamp.ParameterSize() << endl;
+        //cout << "ParameterSize mpTracker->mlbLost: " << mpTracker->mlbLost.size() << endl;
 
 
         for (auto lit = mpTracker->mlRelativeFramePoses.begin(),

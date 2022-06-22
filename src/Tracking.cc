@@ -960,7 +960,7 @@ namespace ORB_SLAM3 {
         // 清空当前帧的地图点
         fill(mCurFrame.mvpMPs.begin(), mCurFrame.mvpMPs.end(), static_cast<MapPoint *>(NULL));
 
-        // Project points seen in previous frame
+        // ProjectMono points seen in previous frame
         // 设置特征匹配过程中的搜索半径
         int th = 15;
 
@@ -1382,7 +1382,7 @@ namespace ORB_SLAM3 {
         // 准备进行投影匹配的点的数目
         int nToMatch = 0;
 
-        // Project points in frame and check its visibility
+        // ProjectMono points in frame and check its visibility
         // Step 2：判断所有局部地图点中除当前帧地图点外的点，是否在当前帧视野范围内
         for (vector<MapPoint *>::iterator vit = mvpLocalMapPoints.begin(), vend = mvpLocalMapPoints.end();
              vit != vend; vit++) {
@@ -1397,7 +1397,7 @@ namespace ORB_SLAM3 {
             if (pMP->mnLastFrameSeen == mCurFrame.mnId) {
                 continue;
             }
-            // Project (this fills MapPoint variables for matching)
+            // ProjectMono (this fills MapPoint variables for matching)
             // 判断地图点是否在在当前帧视野内
             if (mCurFrame.isInFrustum(pMP, 0.5)) {
                 // 观测到该点的帧数加1
@@ -1963,7 +1963,7 @@ namespace ORB_SLAM3 {
         mState = NO_IMAGES_YET; //NOT_INITIALIZED;
 
         list<bool> lbLost;
-        // lbLost.reserve(mlbLost.size());
+        // lbLost.reserve(mlbLost.ParameterSize());
         unsigned int index = mnFirstFrameId;
         cout << "mnFirstFrameId = " << mnFirstFrameId << endl;
         for (Map *pMap : mpAtlas->GetAllMaps()) {

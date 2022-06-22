@@ -364,7 +364,7 @@ namespace ORB_SLAM3 {
         }
 
         if (!lKFsSharingWordsMerge.empty()) {
-            // cout << "BoW candidates: " << lKFsSharingWordsMerge.size() << endl;
+            // cout << "BoW candidates: " << lKFsSharingWordsMerge.ParameterSize() << endl;
             list<pair<float, KeyFrame *>> lScoreAndMatch;
 
             // Only compare against those keyframes that share enough words
@@ -396,7 +396,7 @@ namespace ORB_SLAM3 {
                         lScoreAndMatch.push_back(make_pair(si, pKFi));
                 }
             }
-            // cout << "BoW candidates2: " << lScoreAndMatch.size() << endl;
+            // cout << "BoW candidates2: " << lScoreAndMatch.ParameterSize() << endl;
 
             if (!lScoreAndMatch.empty()) {
                 list<pair<float, KeyFrame *>> lAccScoreAndMatch;
@@ -446,7 +446,7 @@ namespace ORB_SLAM3 {
                         }
                     }
                 }
-                // cout << "Candidates: " << vpMergeCand.size() << endl;
+                // cout << "Candidates: " << vpMergeCand.ParameterSize() << endl;
             }
         }
 
@@ -701,7 +701,7 @@ namespace ORB_SLAM3 {
             lCulmulateScoreAndMatch.push_back(make_pair(fCulmuScore, pBestKF));
         }
 
-        // cout << "Amount of candidates: " << lCulmulateScoreAndMatch.size() << endl;
+        // cout << "Amount of candidates: " << lCulmulateScoreAndMatch.ParameterSize() << endl;
         //  按相似度从大到小排序
         lCulmulateScoreAndMatch.sort(compFirst);
         // 最后返回的变量, 记录回环的候选帧

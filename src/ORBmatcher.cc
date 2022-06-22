@@ -57,7 +57,7 @@ namespace ORB_SLAM3 {
                 // 通过距离预测的金字塔层数，该层数相对于当前的帧
                 const int &nPredictedLevel = pMP->mnTrackScaleLevel;
 
-                // The size of the window will depend on the viewing direction
+                // The ParameterSize of the window will depend on the viewing direction
                 // Step 2 设定搜索搜索窗口的大小。取决于视角, 若当前视角和平均视角夹角较小时, r取一个较小的值
                 float r = RadiusByViewingCos(pMP->mTrackViewCos) * th;
 
@@ -309,7 +309,7 @@ namespace ORB_SLAM3 {
 
         int nmatches = 0;
 
-        // For each Candidate MapPoint Project and Match
+        // For each Candidate MapPoint ProjectMono and Match
         // Step 2 遍历闭环KF及其共视KF的所有地图点（不考虑当前KF已经匹配的地图点）投影到当前KF
         for (int iMP = 0, iendMP = vpPoints.size(); iMP < iendMP; iMP++) {
             MapPoint *pMP = vpPoints[iMP];
@@ -331,8 +331,8 @@ namespace ORB_SLAM3 {
             if (p3Dc(2) < 0.0)
                 continue;
 
-            // Project into Image
-            const Eigen::Vector2f uv = pKF->mpCamera->project(p3Dc);
+            // ProjectMono into Image
+            const Eigen::Vector2f uv = pKF->mpCamera->ProjectMPToKP(p3Dc);
 
             // Point must be inside the image
             // 在图像范围内
@@ -427,7 +427,7 @@ namespace ORB_SLAM3 {
 
         int nmatches = 0;
 
-        // For each Candidate MapPoint Project and Match
+        // For each Candidate MapPoint ProjectMono and Match
         for (int iMP = 0, iendMP = vpPoints.size(); iMP < iendMP; iMP++) {
             MapPoint *pMP = vpPoints[iMP];
             KeyFrame *pKFi = vpPointsKFs[iMP];
@@ -446,7 +446,7 @@ namespace ORB_SLAM3 {
             if (p3Dc(2) < 0.0)
                 continue;
 
-            // Project into Image
+            // ProjectMono into Image
             const float invz = 1 / p3Dc(2);
             const float x = p3Dc(0) * invz;
             const float y = p3Dc(1) * invz;
@@ -802,7 +802,7 @@ namespace ORB_SLAM3 {
         Eigen::Vector3f Cw = pKF1->GetCameraCenter();
         Eigen::Vector3f C2 = T2w * Cw;
 
-        Eigen::Vector2f ep = pKF2->mpCamera->project(C2);
+        Eigen::Vector2f ep = pKF2->mpCamera->ProjectMPToKP(C2);
         Sophus::SE3f T12;
         Sophus::SE3f Tll, Tlr, Trl, Trr;
         Eigen::Matrix3f R12; // for fastest computation
@@ -921,7 +921,7 @@ namespace ORB_SLAM3 {
 
                         // Step 2.8 计算特征点kp2到kp1对应极线的距离是否小于阈值
                         if (bCoarse ||
-                            pCamera1->epipolarConstrain(pCamera2, kp1, kp2, R12, t12, pKF1->mvfLevelSigma2[kp1.octave],
+                            pCamera1->EpipolarConstrain(pCamera2, kp1, kp2, R12, t12, pKF1->mvfLevelSigma2[kp1.octave],
                                                         pKF2->mvfLevelSigma2[kp2.octave])) // MODIFICATION_2
                         {
                             // bestIdx2，bestDist 是 kp1 对应 KF2中的最佳匹配点 index及匹配距离
@@ -1048,7 +1048,7 @@ namespace ORB_SLAM3 {
             // Step 2 得到地图点投影到关键帧的图像坐标
             const float invz = 1 / p3Dc(2);
 
-            const Eigen::Vector2f uv = pCamera->project(p3Dc);
+            const Eigen::Vector2f uv = pCamera->ProjectMPToKP(p3Dc);
 
             // Point must be inside the image
             // 投影点需要在有效范围内
@@ -1207,7 +1207,7 @@ namespace ORB_SLAM3 {
         // 与当前帧闭环匹配上的关键帧及其共视关键帧组成的地图点
         const int nPoints = vpPoints.size();
 
-        // For each candidate MapPoint project and match
+        // For each candidate MapPoint ProjectMPToKP and match
         // 遍历所有的地图点
         for (int iMP = 0; iMP < nPoints; iMP++) {
             MapPoint *pMP = vpPoints[iMP];
@@ -1228,9 +1228,9 @@ namespace ORB_SLAM3 {
             if (p3Dc(2) < 0.0f)
                 continue;
 
-            // Project into Image
+            // ProjectMono into Image
             // Step 3 得到地图点投影到当前帧的图像坐标
-            const Eigen::Vector2f uv = pKF->mpCamera->project(p3Dc);
+            const Eigen::Vector2f uv = pKF->mpCamera->ProjectMPToKP(p3Dc);
 
             // Point must be inside the image
             // 投影点必须在图像范围内
@@ -1610,7 +1610,7 @@ namespace ORB_SLAM3 {
                         continue;
 
                     // 投影到当前帧中
-                    Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dc);
+                    Eigen::Vector2f uv = CurrentFrame.mpCamera->ProjectMPToKP(x3Dc);
 
                     if (uv(0) < CurrentFrame.mfMinX || uv(0) > CurrentFrame.mfMaxX)
                         continue;
@@ -1751,11 +1751,11 @@ namespace ORB_SLAM3 {
             if (pMP) {
                 // 地图点存在 并且 不在已有地图点集合里
                 if (!pMP->isBad() && !sAlreadyFound.count(pMP)) {
-                    //Project
+                    //ProjectMono
                     Eigen::Vector3f x3Dw = pMP->GetWorldPos();
                     Eigen::Vector3f x3Dc = Tcw * x3Dw;
 
-                    const Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dc);
+                    const Eigen::Vector2f uv = CurrentFrame.mpCamera->ProjectMPToKP(x3Dc);
 
                     if (uv(0) < CurrentFrame.mfMinX || uv(0) > CurrentFrame.mfMaxX)
                         continue;

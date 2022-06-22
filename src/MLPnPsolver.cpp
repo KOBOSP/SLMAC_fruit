@@ -106,7 +106,7 @@ MLPnPsolver::MLPnPsolver(const Frame &F,                                // 输�
 
                 // Bearing vector should be normalized
                 //  特征点投影，并计算单位向量
-                cv::Point3f cv_br = mpCamera->unproject(kp.pt);
+                cv::Point3f cv_br = mpCamera->UnprojectCv(kp.pt);
                 cv_br /= cv_br.z;
                 bearingVector_t br(cv_br.x, cv_br.y, cv_br.z);
                 mvBearingVecs.push_back(br);
@@ -375,7 +375,7 @@ void MLPnPsolver::CheckInliers()
 
         // 将相机坐标系下的3D进行投影
         cv::Point3f P3Dc(xc, yc, zc);
-        cv::Point2f uv = mpCamera->project(P3Dc);
+        cv::Point2f uv = mpCamera->ProjectMPToKP(P3Dc);
 
         // 计算残差
         float distX = P2D.x - uv.x;
@@ -420,7 +420,7 @@ bool MLPnPsolver::Refine()
     points_t p3DS;
     vector<int> indexes;
 
-    // 注意这里是用所有内点vIndices.size()来进行相机位姿估计
+    // 注意这里是用所有内点vIndices.ParameterSize()来进行相机位姿估计
     // 而iterate里面是用最小集mRansacMinSet(6个)来进行相机位姿估计
     // TODO:有什么区别呢？答：肯定有啦，mRansacMinSet只是粗略解，
     // 这里之所以要Refine就是要用所有满足模型的内点来更加精确地近似表达模型

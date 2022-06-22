@@ -263,9 +263,9 @@ namespace ORB_SLAM3 {
 
     void Settings::PrecomputeRectificationMaps() {
         //Precompute rectification maps, new calibrations, ...
-        cv::Mat K1 = static_cast<Pinhole*>(mCalibration1)->toK();
+        cv::Mat K1 = static_cast<Pinhole *>(mCalibration1)->GetKCv();
         K1.convertTo(K1,CV_64F);
-        cv::Mat K2 = static_cast<Pinhole*>(mCalibration2)->toK();
+        cv::Mat K2 = static_cast<Pinhole *>(mCalibration2)->GetKCv();
         K2.convertTo(K2,CV_64F);
 
         cv::Mat cvTlr;
@@ -296,10 +296,10 @@ namespace ORB_SLAM3 {
                                     mImgSize, CV_32F, Map2X, Map2Y);
 
         //Update calibration
-        mCalibration1->setParameter(P1.at<double>(0, 0), 0);
-        mCalibration1->setParameter(P1.at<double>(1, 1), 1);
-        mCalibration1->setParameter(P1.at<double>(0, 2), 2);
-        mCalibration1->setParameter(P1.at<double>(1, 2), 3);
+        mCalibration1->SetParameter(P1.at<double>(0, 0), 0);
+        mCalibration1->SetParameter(P1.at<double>(1, 1), 1);
+        mCalibration1->SetParameter(P1.at<double>(0, 2), 2);
+        mCalibration1->SetParameter(P1.at<double>(1, 2), 3);
 
         //Update bf
         mfBaselineFocal = mfBaseline * P1.at<double>(0, 0);
@@ -315,7 +315,7 @@ namespace ORB_SLAM3 {
         output << "SLAM settings: " << endl;
 
         output << "\t-Camera 1 parameters: [";
-        for(size_t i = 0; i < settings.mCalibration1->size(); i++){
+        for(size_t i = 0; i < settings.mCalibration1->ParameterSize(); i++){
             output << " " << settings.mCalibration1->GetParameter(i);
         }
         output << " ]" << endl;
@@ -326,7 +326,7 @@ namespace ORB_SLAM3 {
         output << " ]" << endl;
 
         output << "\t-Camera 2 parameters: [";
-        for(size_t i = 0; i < settings.mCalibration2->size(); i++){
+        for(size_t i = 0; i < settings.mCalibration2->ParameterSize(); i++){
             output << " " << settings.mCalibration2->GetParameter(i);
         }
         output << " ]" << endl;
@@ -336,12 +336,12 @@ namespace ORB_SLAM3 {
         }
         output << " ]" << endl;
 
-        output << "\t-Original image size: [ " << settings.mOriginalImSize.width << " , " << settings.mOriginalImSize.height << " ]" << endl;
-        output << "\t-Current image size: [ " << settings.mImgSize.width << " , " << settings.mImgSize.height << " ]" << endl;
+        output << "\t-Original image ParameterSize: [ " << settings.mOriginalImSize.width << " , " << settings.mOriginalImSize.height << " ]" << endl;
+        output << "\t-Current image ParameterSize: [ " << settings.mImgSize.width << " , " << settings.mImgSize.height << " ]" << endl;
 
 
         output << "\t-Camera 1 parameters after rectification: [ ";
-        for(size_t i = 0; i < settings.mCalibration1->size(); i++){
+        for(size_t i = 0; i < settings.mCalibration1->ParameterSize(); i++){
             output << " " << settings.mCalibration1->GetParameter(i);
         }
         output << " ]" << endl;

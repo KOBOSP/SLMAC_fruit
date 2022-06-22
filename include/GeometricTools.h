@@ -44,7 +44,7 @@ public:
         const float epsilon = 1e-3;
         // std::cout << cvMat.cols - cols << cvMat.rows - rows << std::endl;
         if(rows != cvMat.rows || cols != cvMat.cols) {
-            std::cout << "wrong cvmat size\n";
+            std::cout << "wrong cvmat ParameterSize\n";
             return false;
         }
         for(int i = 0; i < rows; i++)

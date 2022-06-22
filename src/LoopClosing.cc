@@ -67,10 +67,8 @@ namespace ORB_SLAM3 {
  */
     void LoopClosing::Run() {
         mbFinished = false;
-
         // 线程主循环
         while (1) {
-
             //NEW LOOP AND MERGE DETECTION ALGORITHM
             //----------------------------
 
@@ -599,7 +597,7 @@ namespace ORB_SLAM3 {
         vector<int> vnMatchesStage(nNumCandKFs, 0);
         int index = 0;
 
-        //Verbose::PrintMess("BoW candidates: There are " + to_string(vpBowCandKFs.size()) + " possible candidates ", Verbose::VERBOSITY_DEBUG);
+        //Verbose::PrintMess("BoW candidates: There are " + to_string(vpBowCandKFs.ParameterSize()) + " possible candidates ", Verbose::VERBOSITY_DEBUG);
         // 2. 对每个候选关键帧都进行详细的分析
         for (KeyFrame *pKFi : vpBowCandKFs) {
             if (!pKFi || pKFi->isBad()){
@@ -739,7 +737,7 @@ namespace ORB_SLAM3 {
                     // 这个后面没有用到
                     set<KeyFrame *> spCheckKFs(vpCovKFi.begin(), vpCovKFi.end());
 
-                    //std::cout << "There are " << vpCovKFi.size() <<" near KFs" << std::endl;
+                    //std::cout << "There are " << vpCovKFi.ParameterSize() <<" near KFs" << std::endl;
 
                     // 辅助容器,避免重复添加地图点
                     set<MapPoint *> spMapPoints;
@@ -766,7 +764,7 @@ namespace ORB_SLAM3 {
                         }
                     }
 
-                    //std::cout << "There are " << vpKeyFrames.size() <<" KFs which view all the mappoints" << std::endl;
+                    //std::cout << "There are " << vpKeyFrames.ParameterSize() <<" KFs which view all the mappoints" << std::endl;
 
                     // 拿到solver 估计的 Scm初始值, 为后续的非线性优化做准备, 在这里 c 表示当前关键帧, m 表示回环/融合候选帧
                     g2o::Sim3 gScm(solver.GetEstimatedRotation().cast<double>(),
@@ -792,7 +790,7 @@ namespace ORB_SLAM3 {
                                                                                              vpMatchedMP,
                                                                                              vpMatchedKF, 8,
                                                                                              1.5);
-                    //cout <<"BoW: " << numProjMatches << " matches between " << vpMapPoints.size() << " points with coarse Sim3" << endl;
+                    //cout <<"BoW: " << numProjMatches << " matches between " << vpMapPoints.ParameterSize() << " points with coarse Sim3" << endl;
 
                     // 如果拿到了足够多的匹配点, nProjMatches = 50
                     if (numProjMatches >= nProjMatches) {
@@ -1109,7 +1107,7 @@ namespace ORB_SLAM3 {
         mvpCurrentConnectedKFs = mpCurrentKF->GetVectorCovisibleKeyFrames();
         mvpCurrentConnectedKFs.push_back(mpCurrentKF);
 
-        //std::cout << "Loop: number of connected KFs -> " + to_string(mvpCurrentConnectedKFs.size()) << std::endl;
+        //std::cout << "Loop: number of connected KFs -> " + to_string(mvpCurrentConnectedKFs.ParameterSize()) << std::endl;
         // CorrectedSim3：存放闭环g2o优化后当前关键帧的共视关键帧的世界坐标系下Sim3 变换
         // NonCorrectedSim3：存放没有矫正的当前关键帧的共视关键帧的世界坐标系下Sim3 变换
         KeyFrameAndPose CorrectedSim3, NonCorrectedSim3;
@@ -1184,7 +1182,7 @@ namespace ORB_SLAM3 {
                         continue;
                     if (pMPi->mnCorrectedByKF == mpCurrentKF->mnId)  // 标记，防止重复矫正
                         continue;
-                    // Project with non-corrected pose and project back with corrected pose
+                    // ProjectMono with non-corrected pose and ProjectMPToKP back with corrected pose
                     // 矫正过程本质上也是基于当前关键帧的优化后的位姿展开的
                     // 将该未校正的eigP3Dw先从世界坐标系映射到未校正的pKFi相机坐标系，然后再反映射到校正后的世界坐标系下
                     Eigen::Vector3d P3Dw = pMPi->GetWorldPos().cast<double>();
@@ -1241,7 +1239,7 @@ namespace ORB_SLAM3 {
             //cout << "LC: end replacing duplicated" << endl;
         }
 
-        // Project MapPoints observed in the neighborhood of the loop keyframe
+        // ProjectMono MapPoints observed in the neighborhood of the loop keyframe
         // into the current keyframe and neighbors using corrected poses.
         // SearchKFAndMapPointsByProjection duplications.
         // Step 5. 将闭环相连关键帧组mvpLoopMapPoints 投影到当前关键帧组中，进行匹配，融合，新增或替换当前关键帧组中KF的地图点
@@ -1462,7 +1460,7 @@ namespace ORB_SLAM3 {
             spLocalWindowMPs.insert(spMPs.begin(), spMPs.end());
         }
 
-        //std::cout << "[Merge]: Ma = " << to_string(pCurrentMap->GetId()) << "; #KFs = " << to_string(spLocalWindowKFs.size()) << "; #MPs = " << to_string(spLocalWindowMPs.size()) << std::endl;
+        //std::cout << "[Merge]: Ma = " << to_string(pCurrentMap->GetId()) << "; #KFs = " << to_string(spLocalWindowKFs.size()) << "; #MPs = " << to_string(spLocalWindowMPs.ParameterSize()) << std::endl;
 
         // Step 1.3 构造融合帧的共视帧窗口
         // 融合关键帧的共视关键帧们
@@ -1529,7 +1527,7 @@ namespace ORB_SLAM3 {
         // 把spMapPointMerge拷贝到vpCheckFuseMapPoint里
         std::copy(spMapPointMerge.begin(), spMapPointMerge.end(), std::back_inserter(vpCheckFuseMapPoint));
 
-        //std::cout << "[Merge]: Mm = " << to_string(pMergeMap->GetId()) << "; #KFs = " << to_string(spMergeConnectedKFs.size()) << "; #MPs = " << to_string(spMapPointMerge.size()) << std::endl;
+        //std::cout << "[Merge]: Mm = " << to_string(pMergeMap->GetId()) << "; #KFs = " << to_string(spMergeConnectedKFs.size()) << "; #MPs = " << to_string(spMapPointMerge.ParameterSize()) << std::endl;
 
 
         // Step 2 根据之前的Sim3初始值, 记录当前帧窗口内关键帧,地图点的矫正前的值,和矫正后的初始值
@@ -1636,7 +1634,7 @@ namespace ORB_SLAM3 {
             // 拿到矫正前的参考关键帧的位姿
             g2o::Sim3 g2oNonCorrectedSiw = vNonCorrectedSim3[pKFref];
 
-            // Project with non-corrected pose and project back with corrected pose
+            // ProjectMono with non-corrected pose and ProjectMPToKP back with corrected pose
             // 先把3D点转换到参考关键帧矫正前的坐标系中
             Eigen::Vector3d P3Dw = pMPi->GetWorldPos().cast<double>();
             // 再转换到矫正后的初始坐标系中
@@ -1654,7 +1652,7 @@ namespace ORB_SLAM3 {
         /*if(numPointsWithCorrection>0)
     {
         std::cout << "[Merge]: " << std::to_string(numPointsWithCorrection) << " points removed from Ma due to its reference KF is not in welding area" << std::endl;
-        std::cout << "[Merge]: Ma has " << std::to_string(spLocalWindowMPs.size()) << " points" << std::endl;
+        std::cout << "[Merge]: Ma has " << std::to_string(spLocalWindowMPs.ParameterSize()) << " points" << std::endl;
     }*/
         // Step 3 两个地图以新（当前帧所在地图）换旧（融合帧所在地图），包括关键帧及地图点关联地图的以新换旧、地图集的以新换旧
         {
@@ -1664,7 +1662,7 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> mergeLock(
                     pMergeMap->mMutexMapUpdate); // We remove the Kfs and MPs in the merged area from the old map
 
-            //std::cout << "Merge local window: " << spLocalWindowKFs.size() << std::endl;
+            //std::cout << "Merge local window: " << spLocalWindowKFs.ParameterSize() << std::endl;
             //std::cout << "[Merge]: init merging maps " << std::endl;
             // 对于当前关键帧共视窗口内的每一个关键帧
             // Step 3.1 更新当前关键帧共视窗口内的关键帧信息
@@ -1762,10 +1760,10 @@ namespace ORB_SLAM3 {
         // 重新拿到融合帧局部的共视帧窗窗口
         vpMergeConnectedKFs = mpMergeMatchedKF->GetVectorCovisibleKeyFrames();
         vpMergeConnectedKFs.push_back(mpMergeMatchedKF);
-        //vpCheckFuseMapPoint.reserve(spMapPointMerge.size());
+        //vpCheckFuseMapPoint.reserve(spMapPointMerge.ParameterSize());
         //std::copy(spMapPointMerge.begin(), spMapPointMerge.end(), std::back_inserter(vpCheckFuseMapPoint));
 
-        // Project MapPoints observed in the neighborhood of the merge keyframe
+        // ProjectMono MapPoints observed in the neighborhood of the merge keyframe
         // into the current keyframe and neighbors using corrected poses.
         // SearchKFAndMapPointsByProjection duplications.
         //std::cout << "[Merge]: start fuse points" << std::endl;
@@ -1837,7 +1835,7 @@ namespace ORB_SLAM3 {
                 unique_lock<mutex> mergeLock(
                         pMergeMap->mMutexMapUpdate); // We remove the Kfs and MPs in the merged area from the old map
 
-                //std::cout << "Merge outside KFs: " << vpCurrentMapKFs.size() << std::endl;
+                //std::cout << "Merge outside KFs: " << vpCurrentMapKFs.ParameterSize() << std::endl;
                 // 确保融合后信息被更新
                 for (KeyFrame *pKFi : vpCurrentMapKFs) {
                     if (!pKFi || pKFi->isBad() || pKFi->GetMap() != pCurrentMap) {
@@ -2128,7 +2126,7 @@ namespace ORB_SLAM3 {
 
         /*cout << "vpCurrentConnectedKFs.size() " << vpCurrentConnectedKFs.size() << endl;
     cout << "mvpMergeConnectedKFs.size() " << mvpMergeConnectedKFs.size() << endl;
-    cout << "spMapPointMerge.size() " << spMapPointMerge.size() << endl;*/
+    cout << "spMapPointMerge.size() " << spMapPointMerge.ParameterSize() << endl;*/
 
 
         vpCheckFuseMapPoint.reserve(spMapPointMerge.size());
@@ -2257,8 +2255,8 @@ namespace ORB_SLAM3 {
         int total_replaces = 0;
 
         // 遍历每个关键帧
-        //cout << "[FUSE]: Initially there are " << vpMapPoints.size() << " MPs" << endl;
-        //cout << "FUSE: Intially there are " << CorrectedPosesMap.size() << " KFs" << endl;
+        //cout << "[FUSE]: Initially there are " << vpMapPoints.ParameterSize() << " MPs" << endl;
+        //cout << "FUSE: Intially there are " << CorrectedPosesMap.ParameterSize() << " KFs" << endl;
         for (KeyFrameAndPose::const_iterator mit = CorrectedPosesMap.begin(), mend = CorrectedPosesMap.end();
              mit != mend; mit++) {
             int num_replaces = 0;
@@ -2308,8 +2306,8 @@ namespace ORB_SLAM3 {
 
         int total_replaces = 0;
 
-        //cout << "FUSE-POSE: Initially there are " << vpMapPoints.size() << " MPs" << endl;
-        //cout << "FUSE-POSE: Intially there are " << vConectedKFs.size() << " KFs" << endl;
+        //cout << "FUSE-POSE: Initially there are " << vpMapPoints.ParameterSize() << " MPs" << endl;
+        //cout << "FUSE-POSE: Intially there are " << vConectedKFs.ParameterSize() << " KFs" << endl;
         for (auto mit = vConectedKFs.begin(), mend = vConectedKFs.end(); mit != mend; mit++) {
             int num_replaces = 0;
             KeyFrame *pKF = (*mit);
@@ -2466,7 +2464,7 @@ namespace ORB_SLAM3 {
                 while (!lpKFtoCheck.empty()) {
                     KeyFrame *pKF = lpKFtoCheck.front();
                     const set<KeyFrame *> sChilds = pKF->GetChilds();
-                    //cout << "---Updating KF " << pKF->mnId << " with " << sChilds.size() << " childs" << endl;
+                    //cout << "---Updating KF " << pKF->mnId << " with " << sChilds.ParameterSize() << " childs" << endl;
                     //cout << " KF mnBAGlobalForKF: " << pKF->mnBAGlobalForKF << endl;
                     Sophus::SE3f Twc = pKF->GetPoseInverse();
                     //cout << "Twc: " << Twc << endl;
@@ -2529,7 +2527,7 @@ namespace ORB_SLAM3 {
                 if(dist > 1)
                 {
                     cout << "--To much distance correction: It has " << pKF->GetConnectedKeyFrames().size() << " connected KFs" << endl;
-                    cout << "--It has " << pKF->GetCovisiblesByWeight(80).size() << " connected KF with 80 common matches or more" << endl;
+                    cout << "--It has " << pKF->GetCovisiblesByWeight(80).ParameterSize() << " connected KF with 80 common matches or more" << endl;
                     cout << "--It has " << pKF->GetCovisiblesByWeight(50).size() << " connected KF with 50 common matches or more" << endl;
                     cout << "--It has " << pKF->GetCovisiblesByWeight(20).size() << " connected KF with 20 common matches or more" << endl;
 

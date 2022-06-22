@@ -69,7 +69,7 @@ void EdgeSE3ProjectXYZOnlyPose::linearizeOplus()
         -z, 0.f, x, 0.f, 1.f, 0.f,
         y, -x, 0.f, 0.f, 0.f, 1.f;
 
-    _jacobianOplusXi = -pCamera->projectJac(xyz_trans) * SE3deriv;
+    _jacobianOplusXi = -pCamera->ProjectJac(xyz_trans) * SE3deriv;
 }
 
 bool EdgeSE3ProjectXYZOnlyPoseToBody::read(std::istream &is)
@@ -130,7 +130,7 @@ void EdgeSE3ProjectXYZOnlyPoseToBody::linearizeOplus()
     让Pr 对 ξlw 求雅克比
     相当于Rrl*(Pl 对 ξlw的雅克比)
     */
-    _jacobianOplusXi = -pCamera->projectJac(X_r) * mTrl.rotation().toRotationMatrix() * SE3deriv;
+    _jacobianOplusXi = -pCamera->ProjectJac(X_r) * mTrl.rotation().toRotationMatrix() * SE3deriv;
 }
 
 EdgeSE3ProjectXYZ::EdgeSE3ProjectXYZ() : BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, g2o::VertexSE3Expmap>()
@@ -184,7 +184,7 @@ void EdgeSE3ProjectXYZ::linearizeOplus()
     double y = xyz_trans[1];
     double z = xyz_trans[2];
 
-    auto projectJac = -pCamera->projectJac(xyz_trans);
+    auto projectJac = -pCamera->ProjectJac(xyz_trans);
     // Pc = Rcw*Pw + tcw  先求Pw改变对Pc的影响，所以直接为Rcw，前面再乘Pc对像素的影响
     _jacobianOplusXi = projectJac * T.rotation().toRotationMatrix();
 
@@ -245,7 +245,7 @@ void EdgeSE3ProjectXYZToBody::linearizeOplus()
     Eigen::Vector3d X_l = T_lw.map(X_w);
     Eigen::Vector3d X_r = mTrl.map(T_lw.map(X_w));
 
-    _jacobianOplusXi = -pCamera->projectJac(X_r) * T_rw.rotation().toRotationMatrix();
+    _jacobianOplusXi = -pCamera->ProjectJac(X_r) * T_rw.rotation().toRotationMatrix();
 
     double x = X_l[0];
     double y = X_l[1];
@@ -261,7 +261,7 @@ void EdgeSE3ProjectXYZToBody::linearizeOplus()
         让Pr 对 ξlw 求雅克比
         相当于Rrl*(Pl 对 ξlw的雅克比)
         */
-    _jacobianOplusXj = -pCamera->projectJac(X_r) * mTrl.rotation().toRotationMatrix() * SE3deriv;
+    _jacobianOplusXj = -pCamera->ProjectJac(X_r) * mTrl.rotation().toRotationMatrix() * SE3deriv;
 }
 
 VertexSim3Expmap::VertexSim3Expmap() : BaseVertex<7, g2o::Sim3>()
@@ -280,16 +280,16 @@ bool VertexSim3Expmap::read(std::istream &is)
     is >> cam2world[6];
 
     float nextParam;
-    for (size_t i = 0; i < pCamera1->size(); i++)
+    for (size_t i = 0; i < pCamera1->ParameterSize(); i++)
     {
         is >> nextParam;
-        pCamera1->setParameter(nextParam, i);
+        pCamera1->SetParameter(nextParam, i);
     }
 
-    for (size_t i = 0; i < pCamera2->size(); i++)
+    for (size_t i = 0; i < pCamera2->ParameterSize(); i++)
     {
         is >> nextParam;
-        pCamera2->setParameter(nextParam, i);
+        pCamera2->SetParameter(nextParam, i);
     }
 
     setEstimate(g2o::Sim3(cam2world).inverse());
@@ -305,12 +305,12 @@ bool VertexSim3Expmap::write(std::ostream &os) const
         os << lv[i] << " ";
     }
 
-    for (size_t i = 0; i < pCamera1->size(); i++)
+    for (size_t i = 0; i < pCamera1->ParameterSize(); i++)
     {
         os << pCamera1->GetParameter(i) << " ";
     }
 
-    for (size_t i = 0; i < pCamera2->size(); i++)
+    for (size_t i = 0; i < pCamera2->ParameterSize(); i++)
     {
         os << pCamera2->GetParameter(i) << " ";
     }

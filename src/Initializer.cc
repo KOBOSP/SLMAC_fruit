@@ -1619,7 +1619,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
 
         // Step 5 第三关：计算空间点在参考帧和当前帧上的重投影误差，如果大于阈值则舍弃
         // Check reprojection error in first image
-        cv::Point2f uv1 = mpCamera->project(p3dC1);
+        cv::Point2f uv1 = mpCamera->ProjectMPToKP(p3dC1);
 		//参考帧上的重投影误差，这个的确就是按照定义来的
         float squareError1 = (uv1.x-kp1.pt.x)*(uv1.x-kp1.pt.x)+(uv1.y-kp1.pt.y)*(uv1.y-kp1.pt.y);
 
@@ -1628,7 +1628,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
             continue;
 
         // Check reprojection error in second image
-        cv::Point2f uv2 = mpCamera->project(p3dC2);
+        cv::Point2f uv2 = mpCamera->ProjectMPToKP(p3dC2);
         float squareError2 = (uv2.x-kp2.pt.x)*(uv2.x-kp2.pt.x)+(uv2.y-kp2.pt.y)*(uv2.y-kp2.pt.y);
 
         // 重投影误差太大，跳过淘汰
