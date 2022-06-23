@@ -1306,10 +1306,12 @@ namespace ORB_SLAM3 {
             // 5. 承接上一步纯imu优化，按照之前的结果更新了尺度信息及适应重力方向，所以要结合地图进行一次视觉加imu的全局优化，这次带了MP等信息
             // 1.0版本里面不直接赋值了，而是将所有优化后的信息保存到变量里面
             if (priorA != 0.f)
-                Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId, NULL, true,
-                                          priorG, priorA);
+                Optimizer::GlobalBundleAdjustemetWithImu(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId,
+                                                         NULL, true,
+                                                         priorG, priorA);
             else
-                Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId, NULL, false);
+                Optimizer::GlobalBundleAdjustemetWithImu(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId,
+                                                         NULL, false);
         }
         Verbose::PrintMess("Global Bundle Adjustment finished\nUpdating map ...", Verbose::VERBOSITY_NORMAL);
 

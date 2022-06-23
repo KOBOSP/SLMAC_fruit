@@ -2420,13 +2420,15 @@ namespace ORB_SLAM3 {
         const bool bImuInit = pActiveMap->isImuInitialized();
 
         if (!bImuInit)
-            Optimizer::GlobalBundleAdjustemnt(pActiveMap, 10, &mbStopGBA, nLoopKF, false);
-        else
+            Optimizer::GlobalBundleAdjustemntWithoutImu(pActiveMap, 10, &mbStopGBA, nLoopKF, false);
+        else{
             // 仅有一个地图且内部关键帧<200，并且IMU完成了第一阶段初始化后才会进行下面
-            Optimizer::FullInertialBA(pActiveMap, 7, false, nLoopKF, &mbStopGBA);
+            Optimizer::GlobalBundleAdjustemetWithImu(pActiveMap, 7, false, nLoopKF, &mbStopGBA);
+        }
+
         // 记录GBA已经迭代次数,用来检查全局BA过程是否是因为意外结束的
         int idx = mnFullBAIdx;
-        // Optimizer::GlobalBundleAdjustemnt(mpMap,10,&mbStopGBA,nLoopKF,false);
+        // Optimizer::GlobalBundleAdjustemntWithoutImu(mpMap,10,&mbStopGBA,nLoopKF,false);
 
         // Update all MapPoints and KeyFrames
         // Local Mapping was active during BA, that means that there might be new keyframes
@@ -2505,59 +2507,6 @@ namespace ORB_SLAM3 {
                     pKF->mTcwBefGBA = pKF->GetPose();
                     //cout << "pKF->mTcwBefGBA: " << pKF->mTcwBefGBA << endl;
                     pKF->SetPose(pKF->mTcwGBA);
-                    /*cv::Mat Tco_cn = pKF->mTcwBefGBA * pKF->mTcwGBA.inv();
-                cv::Vec3d trasl = Tco_cn.rowRange(0,3).col(3);
-                double dist = cv::norm(trasl);
-                cout << "GBA: KF " << pKF->mnId << " had been moved " << dist << " meters" << endl;
-                double desvX = 0;
-                double desvY = 0;
-                double desvZ = 0;
-                if(pKF->mbHasHessian)
-                {
-                    cv::Mat hessianInv = pKF->mHessianPose.inv();
-
-                    double covX = hessianInv.at<double>(3,3);
-                    desvX = std::sqrt(covX);
-                    double covY = hessianInv.at<double>(4,4);
-                    desvY = std::sqrt(covY);
-                    double covZ = hessianInv.at<double>(5,5);
-                    desvZ = std::sqrt(covZ);
-                    pKF->mbHasHessian = false;
-                }
-                if(dist > 1)
-                {
-                    cout << "--To much distance correction: It has " << pKF->GetConnectedKeyFrames().size() << " connected KFs" << endl;
-                    cout << "--It has " << pKF->GetCovisiblesByWeight(80).ParameterSize() << " connected KF with 80 common matches or more" << endl;
-                    cout << "--It has " << pKF->GetCovisiblesByWeight(50).size() << " connected KF with 50 common matches or more" << endl;
-                    cout << "--It has " << pKF->GetCovisiblesByWeight(20).size() << " connected KF with 20 common matches or more" << endl;
-
-                    cout << "--STD in meters(x, y, z): " << desvX << ", " << desvY << ", " << desvZ << endl;
-
-
-                    string strNameFile = pKF->mNameFile;
-                    cv::Mat imLeft = cv::imread(strNameFile, CV_LOAD_IMAGE_UNCHANGED);
-
-                    cv::cvtColor(imLeft, imLeft, CV_GRAY2BGR);
-
-                    vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointsInKF();
-                    int num_MPs = 0;
-                    for(int i=0; i<vpMapPointsKF.size(); ++i)
-                    {
-                        if(!vpMapPointsKF[i] || vpMapPointsKF[i]->isBad())
-                        {
-                            continue;
-                        }
-                        num_MPs += 1;
-                        string strNumOBs = to_string(vpMapPointsKF[i]->GetObsTimes());
-                        cv::circle(imLeft, pKF->mvKPsLeft[i].pt, 2, cv::Scalar(0, 255, 0));
-                        cv::putText(imLeft, strNumOBs, pKF->mvKPsLeft[i].pt, CV_FONT_HERSHEY_DUPLEX, 1, cv::Scalar(255, 0, 0));
-                    }
-                    cout << "--It has " << num_MPs << " MPs matched in the map" << endl;
-
-                    string namefile = "./test_GBA/GBA_" + to_string(nLoopKF) + "_KF" + to_string(pKF->mnId) +"_D" + to_string(dist) +".png";
-                    cv::imwrite(namefile, imLeft);
-                }*/
-
 
                     if (pKF->bImu) {
                         //cout << "-------Update inertial values" << endl;
@@ -2621,7 +2570,6 @@ namespace ORB_SLAM3 {
                 mpLocalMapper->CancelPause();
                 Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
             }
-
             mbFinishedGBA = true;
             mbRunningGBA = false;
         }

@@ -47,22 +47,12 @@ namespace ORB_SLAM3 {
         return (a.second < b.second);
     }
 
-    void Optimizer::GlobalBundleAdjustemnt(Map *pMap, int nIterations, bool *pbStopFlag, const unsigned long nLoopKF,
-                                           const bool bRobust) {
+    void Optimizer::GlobalBundleAdjustemntWithoutImu(Map *pMap, int nIterations, bool *pbStopFlag, const unsigned long nLoopKF,
+                                                     const bool bRobust) {
         vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
         vector<MapPoint *> vpMP = pMap->GetAllMapPoints();
-        BundleAdjustment(vpKFs, vpMP, nIterations, pbStopFlag, nLoopKF, bRobust);
-    }
-
-
-    void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<MapPoint *> &vpMP,
-                                     int nIterations, bool *pbStopFlag, const unsigned long nLoopKF,
-                                     const bool bRobust) {
         vector<bool> vbNotIncludedMP;
         vbNotIncludedMP.resize(vpMP.size());
-
-        Map *pMap = vpKFs[0]->GetMap();
-
         g2o::SparseOptimizer optimizer;
         g2o::BlockSolver_6_3::LinearSolverType *linearSolver;
 
@@ -81,7 +71,7 @@ namespace ORB_SLAM3 {
 
         const int nExpectedSize = (vpKFs.size()) * vpMP.size();
 
-        vector<ORB_SLAM3::EdgeSE3ProjectXYZ *> vpEdgesMono;
+        vector<ORB_SLAM3::EdgeLeftCameraAndMP *> vpEdgesMono;
         vpEdgesMono.reserve(nExpectedSize);
         vector<KeyFrame *> vpEdgeKFMono;
         vpEdgeKFMono.reserve(nExpectedSize);
@@ -148,7 +138,7 @@ namespace ORB_SLAM3 {
                     Eigen::Matrix<double, 2, 1> obs;
                     obs << kpUn.pt.x, kpUn.pt.y;
 
-                    ORB_SLAM3::EdgeSE3ProjectXYZ *e = new ORB_SLAM3::EdgeSE3ProjectXYZ();
+                    ORB_SLAM3::EdgeLeftCameraAndMP *e = new ORB_SLAM3::EdgeLeftCameraAndMP();
 
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
                     e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKF->mnId)));
@@ -246,7 +236,7 @@ namespace ORB_SLAM3 {
                     vector<MapPoint *> vpMonoMPsOpt, vpStereoMPsOpt;
 
                     for (size_t i2 = 0, iend = vpEdgesMono.size(); i2 < iend; i2++) {
-                        ORB_SLAM3::EdgeSE3ProjectXYZ *e = vpEdgesMono[i2];
+                        ORB_SLAM3::EdgeLeftCameraAndMP *e = vpEdgesMono[i2];
                         MapPoint *pMP = vpMapPointEdgeMono[i2];
                         KeyFrame *pKFedge = vpEdgeKFMono[i2];
 
@@ -312,9 +302,9 @@ namespace ORB_SLAM3 {
         }
     }
 
-    void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const long unsigned int nLoopId,
-                                   bool *pbStopFlag, bool bInit, float priorG, float priorA, Eigen::VectorXd *vSingVal,
-                                   bool *bHess) {
+    void Optimizer::GlobalBundleAdjustemetWithImu(Map *pMap, int its, const bool bFixLocal, const long unsigned int nLoopKF,
+                                                  bool *pbStopFlag, bool bInit, float priorG, float priorA, Eigen::VectorXd *vSingVal,
+                                                  bool *bHess) {
         long unsigned int maxKFid = pMap->GetMaxKFid();
         const vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
         const vector<MapPoint *> vpMPs = pMap->GetAllMapPoints();
@@ -601,16 +591,16 @@ namespace ORB_SLAM3 {
             if (pKFi->mnId > maxKFid)
                 continue;
             VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
-            if (nLoopId == 0) {
+            if (nLoopKF == 0) {
                 Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
                 pKFi->SetPose(Tcw);
             } else {
                 pKFi->mTcwGBA = Sophus::SE3f(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
-                pKFi->mnBAGlobalForKF = nLoopId;
+                pKFi->mnBAGlobalForKF = nLoopKF;
             }
             if (pKFi->bImu) {
                 VertexVelocity *VV = static_cast<VertexVelocity *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1));
-                if (nLoopId == 0) {
+                if (nLoopKF == 0) {
                     pKFi->SetVelocity(VV->estimate().cast<float>());
                 } else {
                     pKFi->mVwbGBA = VV->estimate().cast<float>();
@@ -629,7 +619,7 @@ namespace ORB_SLAM3 {
                 Vector6d vb;
                 vb << VG->estimate(), VA->estimate();
                 IMU::Bias b(vb[3], vb[4], vb[5], vb[0], vb[1], vb[2]);
-                if (nLoopId == 0) {
+                if (nLoopKF == 0) {
                     pKFi->SetNewBias(b);
                 } else {
                     pKFi->mBiasGBA = b;
@@ -646,12 +636,12 @@ namespace ORB_SLAM3 {
             g2o::VertexSBAPointXYZ *vPoint = static_cast<g2o::VertexSBAPointXYZ *>(optimizer.vertex(
                     pMP->mnId + iniMPid + 1));
 
-            if (nLoopId == 0) {
+            if (nLoopKF == 0) {
                 pMP->SetWorldPos(vPoint->estimate().cast<float>());
                 pMP->UpdateNormalAndDepth();
             } else {
                 pMP->mPosGBA = vPoint->estimate().cast<float>();
-                pMP->mnBAGlobalForKF = nLoopId;
+                pMP->mnBAGlobalForKF = nLoopKF;
             }
         }
         pMap->IncreaseChangeIdx();
@@ -1088,7 +1078,6 @@ namespace ORB_SLAM3 {
 
         pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
                                               VA->estimate(), H);
-
         return nInitialCorrespondences - nBad;
     }
 
@@ -1570,7 +1559,7 @@ namespace ORB_SLAM3 {
         // Set MapPoint vertices
         const int nExpectedSize = (lLocalKeyFrames.size() + lFixedKFs.size()) * lLocalMapPoints.size();
 
-        vector<ORB_SLAM3::EdgeSE3ProjectXYZ *> vpEdgesMono;
+        vector<ORB_SLAM3::EdgeLeftCameraAndMP *> vpEdgesMono;
         vpEdgesMono.reserve(nExpectedSize);
         vector<KeyFrame *> vpEdgeKFMono;
         vpEdgeKFMono.reserve(nExpectedSize);
@@ -1618,7 +1607,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 2, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y;
 
-                        ORB_SLAM3::EdgeSE3ProjectXYZ *e = new ORB_SLAM3::EdgeSE3ProjectXYZ();
+                        ORB_SLAM3::EdgeLeftCameraAndMP *e = new ORB_SLAM3::EdgeLeftCameraAndMP();
 
                         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
                         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
@@ -1688,7 +1677,7 @@ namespace ORB_SLAM3 {
 
         // Check inlier observations
         for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            ORB_SLAM3::EdgeSE3ProjectXYZ *e = vpEdgesMono[i];
+            ORB_SLAM3::EdgeLeftCameraAndMP *e = vpEdgesMono[i];
             MapPoint *pMP = vpMapPointEdgeMono[i];
 
             if (pMP->isBad())
@@ -3697,7 +3686,7 @@ namespace ORB_SLAM3 {
 
         const int nExpectedSize = (vpAdjustKF.size() + vpFixedKF.size()) * vpMPs.size();
 
-        vector<ORB_SLAM3::EdgeSE3ProjectXYZ *> vpEdgesMono;
+        vector<ORB_SLAM3::EdgeLeftCameraAndMP *> vpEdgesMono;
         vpEdgesMono.reserve(nExpectedSize);
 
         vector<KeyFrame *> vpEdgeKFMono;
@@ -3755,7 +3744,7 @@ namespace ORB_SLAM3 {
                     Eigen::Matrix<double, 2, 1> obs;
                     obs << kpUn.pt.x, kpUn.pt.y;
 
-                    ORB_SLAM3::EdgeSE3ProjectXYZ *e = new ORB_SLAM3::EdgeSE3ProjectXYZ();
+                    ORB_SLAM3::EdgeLeftCameraAndMP *e = new ORB_SLAM3::EdgeLeftCameraAndMP();
 
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
                     e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKF->mnId)));
@@ -3831,7 +3820,7 @@ namespace ORB_SLAM3 {
             // Check inlier observations
             int badMonoMP = 0, badStereoMP = 0;
             for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-                ORB_SLAM3::EdgeSE3ProjectXYZ *e = vpEdgesMono[i];
+                ORB_SLAM3::EdgeLeftCameraAndMP *e = vpEdgesMono[i];
                 MapPoint *pMP = vpMapPointEdgeMono[i];
 
                 if (pMP->isBad())
@@ -3874,7 +3863,7 @@ namespace ORB_SLAM3 {
         // Check inlier observations
         int badMonoMP = 0, badStereoMP = 0;
         for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            ORB_SLAM3::EdgeSE3ProjectXYZ *e = vpEdgesMono[i];
+            ORB_SLAM3::EdgeLeftCameraAndMP *e = vpEdgesMono[i];
             MapPoint *pMP = vpMapPointEdgeMono[i];
 
             if (pMP->isBad())
@@ -3962,7 +3951,7 @@ namespace ORB_SLAM3 {
             vector<MapPoint *> vpMonoMPsBad, vpStereoMPsBad;
 
             for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-                ORB_SLAM3::EdgeSE3ProjectXYZ *e = vpEdgesMono[i];
+                ORB_SLAM3::EdgeLeftCameraAndMP *e = vpEdgesMono[i];
                 MapPoint *pMP = vpMapPointEdgeMono[i];
                 KeyFrame *pKFedge = vpEdgeKFMono[i];
 
