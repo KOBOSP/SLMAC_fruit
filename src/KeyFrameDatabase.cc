@@ -38,7 +38,7 @@ namespace ORB_SLAM3 {
 
         // 为每一个word添加该KeyFrame
         for (DBoW2::BowVector::const_iterator vit = pKF->mBowVec.begin(), vend = pKF->mBowVec.end(); vit != vend; vit++)
-            mvInvertedFile[vit->first].push_back(pKF);
+            mvInvertedFile[vit->first].emplace_back(pKF);
     }
 
 // 关键帧被删除后，更新数据库的倒排索引
@@ -131,7 +131,7 @@ namespace ORB_SLAM3 {
                             if (!spConnectedKeyFrames.count(pKFi)) {
                                 // 没有共视就标记作为闭环候选关键帧，放到lKFsSharingWords里
                                 pKFi->mnLoopQuery = pKF->mnId;
-                                lKFsSharingWords.push_back(pKFi);
+                                lKFsSharingWords.emplace_back(pKFi);
                             }
                         }
                         pKFi->mnLoopWords++; // 记录pKFi与pKF具有相同word的个数
@@ -174,7 +174,7 @@ namespace ORB_SLAM3 {
 
                 pKFi->mLoopScore = si;
                 if (si >= minScore)
-                    lScoreAndMatch.push_back(make_pair(si, pKFi));
+                    lScoreAndMatch.emplace_back(make_pair(si, pKFi));
             }
         }
 
@@ -209,7 +209,7 @@ namespace ORB_SLAM3 {
                 }
             }
 
-            lAccScoreAndMatch.push_back(make_pair(accScore, pBestKF));
+            lAccScoreAndMatch.emplace_back(make_pair(accScore, pBestKF));
             // 记录所有组中组得分最高的组，用于确定相对阈值
             if (accScore > bestAccScore)
                 bestAccScore = accScore;
@@ -230,7 +230,7 @@ namespace ORB_SLAM3 {
                 KeyFrame *pKFi = it->second;
                 // spAlreadyAddedKF 是为了防止重复添加
                 if (!spAlreadyAddedKF.count(pKFi)) {
-                    vpLoopCandidates.push_back(pKFi);
+                    vpLoopCandidates.emplace_back(pKFi);
                     spAlreadyAddedKF.insert(pKFi);
                 }
             }
@@ -262,7 +262,7 @@ namespace ORB_SLAM3 {
                             pKFi->mnLoopWords = 0;
                             if (!spConnectedKeyFrames.count(pKFi)) {
                                 pKFi->mnLoopQuery = pKF->mnId;
-                                lKFsSharingWordsLoop.push_back(pKFi);
+                                lKFsSharingWordsLoop.emplace_back(pKFi);
                             }
                         }
                         pKFi->mnLoopWords++;
@@ -271,7 +271,7 @@ namespace ORB_SLAM3 {
                             pKFi->mnMergeWords = 0;
                             if (!spConnectedKeyFrames.count(pKFi)) {
                                 pKFi->mnMergeQuery = pKF->mnId;
-                                lKFsSharingWordsMerge.push_back(pKFi);
+                                lKFsSharingWordsMerge.emplace_back(pKFi);
                             }
                         }
                         pKFi->mnMergeWords++;
@@ -310,7 +310,7 @@ namespace ORB_SLAM3 {
 
                     pKFi->mLoopScore = si;
                     if (si >= minScore)
-                        lScoreAndMatch.push_back(make_pair(si, pKFi));
+                        lScoreAndMatch.emplace_back(make_pair(si, pKFi));
                 }
             }
 
@@ -339,7 +339,7 @@ namespace ORB_SLAM3 {
                         }
                     }
 
-                    lAccScoreAndMatch.push_back(make_pair(accScore, pBestKF));
+                    lAccScoreAndMatch.emplace_back(make_pair(accScore, pBestKF));
                     if (accScore > bestAccScore)
                         bestAccScore = accScore;
                 }
@@ -355,7 +355,7 @@ namespace ORB_SLAM3 {
                     if (it->first > minScoreToRetain) {
                         KeyFrame *pKFi = it->second;
                         if (!spAlreadyAddedKF.count(pKFi)) {
-                            vpLoopCand.push_back(pKFi);
+                            vpLoopCand.emplace_back(pKFi);
                             spAlreadyAddedKF.insert(pKFi);
                         }
                     }
@@ -393,7 +393,7 @@ namespace ORB_SLAM3 {
 
                     pKFi->mMergeScore = si;
                     if (si >= minScore)
-                        lScoreAndMatch.push_back(make_pair(si, pKFi));
+                        lScoreAndMatch.emplace_back(make_pair(si, pKFi));
                 }
             }
             // cout << "BoW candidates2: " << lScoreAndMatch.ParameterSize() << endl;
@@ -423,7 +423,7 @@ namespace ORB_SLAM3 {
                         }
                     }
 
-                    lAccScoreAndMatch.push_back(make_pair(accScore, pBestKF));
+                    lAccScoreAndMatch.emplace_back(make_pair(accScore, pBestKF));
                     if (accScore > bestAccScore)
                         bestAccScore = accScore;
                 }
@@ -441,7 +441,7 @@ namespace ORB_SLAM3 {
                     if (it->first > minScoreToRetain) {
                         KeyFrame *pKFi = it->second;
                         if (!spAlreadyAddedKF.count(pKFi)) {
-                            vpMergeCand.push_back(pKFi);
+                            vpMergeCand.emplace_back(pKFi);
                             spAlreadyAddedKF.insert(pKFi);
                         }
                     }
@@ -486,7 +486,7 @@ namespace ORB_SLAM3 {
                     if (pKFi->mnRecognitionFlagInLoopClosing != pKF->mnId) {
                         pKFi->mnRecognitionCommonWords = 0;
                         pKFi->mnRecognitionFlagInLoopClosing = pKF->mnId;
-                        lKFsSharingWords.push_back(pKFi);
+                        lKFsSharingWords.emplace_back(pKFi);
                     }
                     pKFi->mnRecognitionCommonWords++;
                 }
@@ -522,7 +522,7 @@ namespace ORB_SLAM3 {
                 nscores++;
                 float si = mpVoc->score(pKF->mBowVec, pKFi->mBowVec);
                 pKFi->mPlaceRecognitionScore = si;
-                lScoreAndMatch.push_back(make_pair(si, pKFi));
+                lScoreAndMatch.emplace_back(make_pair(si, pKFi));
             }
         }
 
@@ -552,7 +552,7 @@ namespace ORB_SLAM3 {
                     bestScore = pKF2->mPlaceRecognitionScore;
                 }
             }
-            lAccScoreAndMatch.push_back(make_pair(accScore, pBestKF));
+            lAccScoreAndMatch.emplace_back(make_pair(accScore, pBestKF));
             if (accScore > bestAccScore)
                 bestAccScore = accScore;
         }
@@ -569,9 +569,9 @@ namespace ORB_SLAM3 {
                 KeyFrame *pKFi = it->second;
                 if (!spAlreadyAddedKF.count(pKFi)) {
                     if (pKF->GetMap() == pKFi->GetMap()) {
-                        vpLoopCand.push_back(pKFi);
+                        vpLoopCand.emplace_back(pKFi);
                     } else {
-                        vpMergeCand.push_back(pKFi);
+                        vpMergeCand.emplace_back(pKFi);
                     }
                     spAlreadyAddedKF.insert(pKFi);
                 }
@@ -621,7 +621,7 @@ namespace ORB_SLAM3 {
                             // 标记该关键帧被当前关键帧访问到（也就是有公共单词）
                             pKFi->mnRecognitionFlagInLoopClosing = pKF->mnId;
                             // 把当前关键帧添加到有公共单词的关键帧列表中
-                            lKFsCommonWords.push_back(pKFi);
+                            lKFsCommonWords.emplace_back(pKFi);
                         }
                     }
                     // 递增该关键帧与当前关键帧的公共单词数
@@ -660,7 +660,7 @@ namespace ORB_SLAM3 {
                 // 记录该候选帧与当前帧的相似度
                 pKFi->mPlaceRecognitionScore = si;
                 // 记录到容器里, 每个元素是<相似度,候选帧的指针>
-                lScoreAndMatchKF.push_back(make_pair(si, pKFi));
+                lScoreAndMatchKF.emplace_back(make_pair(si, pKFi));
             }
         }
         // 如果为空,直接返回,表示没有符合上述条件的关键帧
@@ -698,7 +698,7 @@ namespace ORB_SLAM3 {
                 }
             }
             // 统计以组为单位的累计相似度和组内相似度最高的关键帧, 每个pair为<小组总相似度,组内相似度最高的关键帧指针>
-            lCulmulateScoreAndMatch.push_back(make_pair(fCulmuScore, pBestKF));
+            lCulmulateScoreAndMatch.emplace_back(make_pair(fCulmuScore, pBestKF));
         }
 
         // cout << "Amount of candidates: " << lCulmulateScoreAndMatch.ParameterSize() << endl;
@@ -728,13 +728,13 @@ namespace ORB_SLAM3 {
                 // 如果候选帧与当前关键帧在同一个地图里,且候选者数量还不足够
                 if (pKF->GetMap() == pKFi->GetMap() && vpLoopCand.size() < nNumCandidates) {
                     // 添加到回环候选帧里
-                    vpLoopCand.push_back(pKFi);
+                    vpLoopCand.emplace_back(pKFi);
                 }
                     // 如果候选者与当前关键帧不再同一个地图里, 且候选者数量还不足够, 且候选者所在地图不是bad
                 else if (pKF->GetMap() != pKFi->GetMap() && vpMergeCand.size() < nNumCandidates &&
                          !pKFi->GetMap()->IsBad()) {
                     // 添加到融合候选帧里
-                    vpMergeCand.push_back(pKFi);
+                    vpMergeCand.emplace_back(pKFi);
                 }
                 // 防止重复添加
                 spAlreadyAddedKF.insert(pKFi);
@@ -760,7 +760,7 @@ namespace ORB_SLAM3 {
                     if (pKFi->mnRelocQuery != F->mnId) {
                         pKFi->mnRelocWords = 0;
                         pKFi->mnRelocQuery = F->mnId;
-                        lKFsSharingWords.push_back(pKFi);
+                        lKFsSharingWords.emplace_back(pKFi);
                     }
                     pKFi->mnRelocWords++;
                 }
@@ -792,7 +792,7 @@ namespace ORB_SLAM3 {
                 nscores++;
                 float si = mpVoc->score(F->mBowVec, pKFi->mBowVec);
                 pKFi->mRelocScore = si;
-                lScoreAndMatch.push_back(make_pair(si, pKFi));
+                lScoreAndMatch.emplace_back(make_pair(si, pKFi));
             }
         }
 
@@ -822,7 +822,7 @@ namespace ORB_SLAM3 {
                     bestScore = pKF2->mRelocScore;
                 }
             }
-            lAccScoreAndMatch.push_back(make_pair(accScore, pBestKF));
+            lAccScoreAndMatch.emplace_back(make_pair(accScore, pBestKF));
             if (accScore > bestAccScore)
                 bestAccScore = accScore;
         }
@@ -840,7 +840,7 @@ namespace ORB_SLAM3 {
                 if (pKFi->GetMap() != pMap)
                     continue;
                 if (!spAlreadyAddedKF.count(pKFi)) {
-                    vpRelocCandidates.push_back(pKFi);
+                    vpRelocCandidates.emplace_back(pKFi);
                     spAlreadyAddedKF.insert(pKFi);
                 }
             }

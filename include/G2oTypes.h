@@ -88,9 +88,11 @@ namespace ORB_SLAM3 {
 
         ImuCamPose(Eigen::Matrix3d &_Rwc, Eigen::Vector3d &_twc, KeyFrame *pKF);
 
-        void SetParam(const std::vector<Eigen::Matrix3d> &_Rcw, const std::vector<Eigen::Vector3d> &_tcw,
+        void SetParam(const std::vector<Eigen::Matrix3d> &_Rcw,
+                      const std::vector<Eigen::Vector3d> &_tcw,
                       const std::vector<Eigen::Matrix3d> &_Rbc,
-                      const std::vector<Eigen::Vector3d> &_tbc, const double &_bf);
+                      const std::vector<Eigen::Vector3d> &_tbc,
+                      const double &_bf);
 
         void Update(const double *pu);                                                   // update in the imu reference
         void UpdateW(const double *pu);                                                  // update in the world reference
@@ -114,42 +116,23 @@ namespace ORB_SLAM3 {
         // For posegraph 4DoF
         Eigen::Matrix3d Rwb0;
         Eigen::Matrix3d DR;
-
         int its; // 记录更新次数
     };
 
-// 逆深度点，后面节点虽然有用到，但是声明的节点并没有使用到，暂时不看
-    class InvDepthPoint {
-    public:
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-        InvDepthPoint() {}
-
-        InvDepthPoint(double _rho, double _u, double _v, KeyFrame *pHostKF);
-
-        void Update(const double *pu);
-
-        double rho;
-        double u, v; // they are not variables, observation in the host frame
-
-        double fx, fy, cx, cy, bf; // from host frame
-
-        int its;
-    };
 
 // Optimizable parameters are IMU pose
 // 优化中关于位姿的节点，6自由度
-    class VertexPose : public g2o::BaseVertex<6, ImuCamPose> {
+    class VertexPose6DoF : public g2o::BaseVertex<6, ImuCamPose> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        VertexPose() {}
+        VertexPose6DoF() {}
 
-        VertexPose(KeyFrame *pKF) {
+        VertexPose6DoF(KeyFrame *pKF) {
             setEstimate(ImuCamPose(pKF));
         }
 
-        VertexPose(Frame *pF) {
+        VertexPose6DoF(Frame *pF) {
             setEstimate(ImuCamPose(pF));
         }
 
@@ -241,15 +224,15 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 陀螺仪偏置节点
  */
-    class VertexGyroBias : public g2o::BaseVertex<3, Eigen::Vector3d> {
+    class VertexGyrBias : public g2o::BaseVertex<3, Eigen::Vector3d> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        VertexGyroBias() {}
+        VertexGyrBias() {}
 
-        VertexGyroBias(KeyFrame *pKF);
+        VertexGyrBias(KeyFrame *pKF);
 
-        VertexGyroBias(Frame *pF);
+        VertexGyrBias(Frame *pF);
 
         virtual bool read(std::istream &is) { return false; }
 
@@ -294,13 +277,13 @@ namespace ORB_SLAM3 {
 
 // Gravity direction vertex
 // 重力方向
-    class GDirection {
+    class GraDir {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        GDirection() {}
+        GraDir() {}
 
-        GDirection(Eigen::Matrix3d pRwg) : Rwg(pRwg) {}
+        GraDir(Eigen::Matrix3d pRwg) : Rwg(pRwg) {}
 
         void Update(const double *pu) {
             Rwg = Rwg * ExpSO3(pu[0], pu[1], 0.0);
@@ -314,14 +297,14 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 重力方向节点
  */
-    class VertexGDir : public g2o::BaseVertex<2, GDirection> {
+    class VertexGraDir : public g2o::BaseVertex<2, GraDir> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        VertexGDir() {}
+        VertexGraDir() {}
 
-        VertexGDir(Eigen::Matrix3d pRwg) {
-            setEstimate(GDirection(pRwg));
+        VertexGraDir(Eigen::Matrix3d pRwg) {
+            setEstimate(GraDir(pRwg));
         }
 
         virtual bool read(std::istream &is) { return false; }
@@ -366,10 +349,26 @@ namespace ORB_SLAM3 {
         }
     };
 
+
+// 逆深度点，后面节点虽然有用到，但是声明的节点并没有使用到，暂时不看
+    class InvDepthPoint {
+    public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        InvDepthPoint() {}
+
+        InvDepthPoint(double _rho, double _u, double _v, KeyFrame *pHostKF);
+
+        void Update(const double *pu);
+
+        double rho;
+        double u, v; // they are not variables, observation in the host frame
+
+        double fx, fy, cx, cy, bf; // from host frame
+
+        int its;
+    };
 // Inverse depth point (just one parameter, inverse depth at the host frame)
-/** 
- * @brief 没用
- */
     class VertexInvDepth : public g2o::BaseVertex<1, InvDepthPoint> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -401,11 +400,11 @@ namespace ORB_SLAM3 {
  * 因此，边也需要重新写，并且在imu优化时使用这个边
  */
 // 误差为2维， 类型为Eigen::Vector2d， 节点1类型为g2o::VertexSBAPointXYZ，节点二类型为VertexPose
-    class EdgeMono : public g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, VertexPose> {
+    class EdgeMonoAndMPWithImu : public g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, VertexPose6DoF> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgeMono(int cam_idx_ = 0) : cam_idx(cam_idx_) {
+        EdgeMonoAndMPWithImu(int cam_idx_ = 0) : cam_idx(cam_idx_) {
         }
 
         virtual bool read(std::istream &is) { return false; }
@@ -415,7 +414,7 @@ namespace ORB_SLAM3 {
         // 计算重投影误差
         void computeError() {
             const g2o::VertexSBAPointXYZ *VPoint = static_cast<const g2o::VertexSBAPointXYZ *>(_vertices[0]);
-            const VertexPose *VPose = static_cast<const VertexPose *>(_vertices[1]);
+            const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[1]);
             const Eigen::Vector2d obs(_measurement);
             _error = obs - VPose->estimate().ProjectMono(VPoint->estimate(), cam_idx);
         }
@@ -424,7 +423,7 @@ namespace ORB_SLAM3 {
 
         bool isDepthPositive() {
             const g2o::VertexSBAPointXYZ *VPoint = static_cast<const g2o::VertexSBAPointXYZ *>(_vertices[0]);
-            const VertexPose *VPose = static_cast<const VertexPose *>(_vertices[1]);
+            const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[1]);
             return VPose->estimate().isDepthPositive(VPoint->estimate(), cam_idx);
         }
 
@@ -452,19 +451,18 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 单目纯位姿一元边
  */
-    class EdgeMonoOnlyPose : public g2o::BaseUnaryEdge<2, Eigen::Vector2d, VertexPose> {
+    class EdgeMonoOnlyWithImu : public g2o::BaseUnaryEdge<2, Eigen::Vector2d, VertexPose6DoF> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgeMonoOnlyPose(const Eigen::Vector3f &Xw_, int cam_idx_ = 0) : Xw(Xw_.cast<double>()),
-                                                                         cam_idx(cam_idx_) {}
+        EdgeMonoOnlyWithImu(const Eigen::Vector3f &Xw_, int cam_idx_ = 0) : Xw(Xw_.cast<double>()), cam_idx(cam_idx_) {}
 
         virtual bool read(std::istream &is) { return false; }
 
         virtual bool write(std::ostream &os) const { return false; }
 
         void computeError() {
-            const VertexPose *VPose = static_cast<const VertexPose *>(_vertices[0]);
+            const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[0]);
             const Eigen::Vector2d obs(_measurement);
             _error = obs - VPose->estimate().ProjectMono(Xw, cam_idx);
         }
@@ -472,7 +470,7 @@ namespace ORB_SLAM3 {
         virtual void linearizeOplus();
 
         bool isDepthPositive() {
-            const VertexPose *VPose = static_cast<const VertexPose *>(_vertices[0]);
+            const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[0]);
             return VPose->estimate().isDepthPositive(Xw, cam_idx);
         }
 
@@ -489,12 +487,12 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 双目位姿三维点二元边
  */
-    class EdgeStereo : public g2o::BaseBinaryEdge<3, Eigen::Vector3d, g2o::VertexSBAPointXYZ, VertexPose> {
+    class EdgeStereoAndMPWithImu : public g2o::BaseBinaryEdge<3, Eigen::Vector3d, g2o::VertexSBAPointXYZ, VertexPose6DoF> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
         // 代码中都是0
-        EdgeStereo(int cam_idx_ = 0) : cam_idx(cam_idx_) {}
+        EdgeStereoAndMPWithImu(int cam_idx_ = 0) : cam_idx(cam_idx_) {}
 
         virtual bool read(std::istream &is) { return false; }
 
@@ -502,7 +500,7 @@ namespace ORB_SLAM3 {
 
         void computeError() {
             const g2o::VertexSBAPointXYZ *VPoint = static_cast<const g2o::VertexSBAPointXYZ *>(_vertices[0]);
-            const VertexPose *VPose = static_cast<const VertexPose *>(_vertices[1]);
+            const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[1]);
             const Eigen::Vector3d obs(_measurement);
             _error = obs - VPose->estimate().ProjectStereo(VPoint->estimate(), cam_idx);
         }
@@ -516,7 +514,6 @@ namespace ORB_SLAM3 {
             J.block<3, 6>(0, 3) = _jacobianOplusXj;
             return J;
         }
-
         Eigen::Matrix<double, 9, 9> GetHessian() {
             linearizeOplus();
             Eigen::Matrix<double, 3, 9> J;
@@ -524,7 +521,6 @@ namespace ORB_SLAM3 {
             J.block<3, 6>(0, 3) = _jacobianOplusXj;
             return J.transpose() * information() * J;
         }
-
     public:
         const int cam_idx;
     };
@@ -532,18 +528,18 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 双目纯位姿一元边
  */
-    class EdgeStereoOnlyPose : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, VertexPose> {
+    class EdgeStereoOnlyWithImu : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, VertexPose6DoF> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgeStereoOnlyPose(const Eigen::Vector3f &Xw_, int cam_idx_ = 0) : Xw(Xw_.cast<double>()), cam_idx(cam_idx_) {}
+        EdgeStereoOnlyWithImu(const Eigen::Vector3f &Xw_, int cam_idx_ = 0) : Xw(Xw_.cast<double>()), cam_idx(cam_idx_) {}
 
         virtual bool read(std::istream &is) { return false; }
 
         virtual bool write(std::ostream &os) const { return false; }
 
         void computeError() {
-            const VertexPose *VPose = static_cast<const VertexPose *>(_vertices[0]);
+            const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[0]);
             const Eigen::Vector3d obs(_measurement);
             _error = obs - VPose->estimate().ProjectStereo(Xw, cam_idx);
         }
@@ -563,11 +559,11 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 惯性边（误差为残差）
  */
-    class EdgeInertial : public g2o::BaseMultiEdge<9, Vector9d> {
+    class EdgeImuRVPOnly : public g2o::BaseMultiEdge<9, Vector9d> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgeInertial(IMU::Preintegrated *pInt);
+        EdgeImuRVPOnly(IMU::Preintegrated *pInt);
 
         virtual bool read(std::istream &is) { return false; }
 
@@ -624,12 +620,12 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 初始化惯性边（误差为残差）
  */
-    class EdgeInertialGS : public g2o::BaseMultiEdge<9, Vector9d> {
+    class EdgeImuRVPWithGS : public g2o::BaseMultiEdge<9, Vector9d> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        // EdgeInertialGS(IMU::Preintegrated* pInt);
-        EdgeInertialGS(IMU::Preintegrated *pInt);
+        // EdgeImuRVPWithGS(IMU::Preintegrated* pInt);
+        EdgeImuRVPWithGS(IMU::Preintegrated *pInt);
 
         virtual bool read(std::istream &is) { return false; }
 
@@ -715,19 +711,19 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 陀螺仪偏置的二元边，除了残差及重投影误差外的第三个边，控制偏置变化
  */
-    class EdgeGyrRW : public g2o::BaseBinaryEdge<3, Eigen::Vector3d, VertexGyroBias, VertexGyroBias> {
+    class EdgeGyrBias : public g2o::BaseBinaryEdge<3, Eigen::Vector3d, VertexGyrBias, VertexGyrBias> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgeGyrRW() {}
+        EdgeGyrBias() {}
 
         virtual bool read(std::istream &is) { return false; }
 
         virtual bool write(std::ostream &os) const { return false; }
 
         void computeError() {
-            const VertexGyroBias *VG1 = static_cast<const VertexGyroBias *>(_vertices[0]);
-            const VertexGyroBias *VG2 = static_cast<const VertexGyroBias *>(_vertices[1]);
+            const VertexGyrBias *VG1 = static_cast<const VertexGyrBias *>(_vertices[0]);
+            const VertexGyrBias *VG2 = static_cast<const VertexGyrBias *>(_vertices[1]);
             _error = VG2->estimate() - VG1->estimate();
         }
 
@@ -753,11 +749,11 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 加速度计偏置的二元边，除了残差及重投影误差外的第三个边，控制偏置变化
  */
-    class EdgeAccRW : public g2o::BaseBinaryEdge<3, Eigen::Vector3d, VertexAccBias, VertexAccBias> {
+    class EdgeAccBias : public g2o::BaseBinaryEdge<3, Eigen::Vector3d, VertexAccBias, VertexAccBias> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgeAccRW() {}
+        EdgeAccBias() {}
 
         virtual bool read(std::istream &is) { return false; }
 
@@ -791,11 +787,11 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 先验类
  */
-    class ConstraintPoseImu {
+    class PriorRVPAndBiasGA {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        ConstraintPoseImu(
+        PriorRVPAndBiasGA(
                 const Eigen::Matrix3d &Rwb_, const Eigen::Vector3d &twb_, const Eigen::Vector3d &vwb_,
                 const Eigen::Vector3d &bg_, const Eigen::Vector3d &ba_, const Matrix15d &H_)
                 : Rwb(Rwb_), twb(twb_), vwb(vwb_), bg(bg_), ba(ba_), H(H_) {
@@ -820,11 +816,11 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 先验边，前端优化单帧用到
  */
-    class EdgePriorPoseImu : public g2o::BaseMultiEdge<15, Vector15d> {
+    class EdgePriorRVPAndBiasGA : public g2o::BaseMultiEdge<15, Vector15d> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgePriorPoseImu(ConstraintPoseImu *c);
+        EdgePriorRVPAndBiasGA(PriorRVPAndBiasGA *c);
 
         virtual bool read(std::istream &is) { return false; }
 
@@ -862,11 +858,11 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 根据给定值的加速度计先验边，目的是把优化量维持在先验附近
  */
-    class EdgePriorAcc : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, VertexAccBias> {
+    class EdgePriorAccBias : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, VertexAccBias> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgePriorAcc(const Eigen::Vector3f &bprior_) : bprior(bprior_.cast<double>()) {}
+        EdgePriorAccBias(const Eigen::Vector3f &bprior_) : bprior(bprior_.cast<double>()) {}
 
         virtual bool read(std::istream &is) { return false; }
 
@@ -890,18 +886,18 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 根据给定值的陀螺仪先验边，目的是把优化量维持在先验附近
  */
-    class EdgePriorGyro : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, VertexGyroBias> {
+    class EdgePriorGyrBias : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, VertexGyrBias> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgePriorGyro(const Eigen::Vector3f &bprior_) : bprior(bprior_.cast<double>()) {}
+        EdgePriorGyrBias(const Eigen::Vector3f &bprior_) : bprior(bprior_.cast<double>()) {}
 
         virtual bool read(std::istream &is) { return false; }
 
         virtual bool write(std::ostream &os) const { return false; }
 
         void computeError() {
-            const VertexGyroBias *VG = static_cast<const VertexGyroBias *>(_vertices[0]);
+            const VertexGyrBias *VG = static_cast<const VertexGyrBias *>(_vertices[0]);
             _error = bprior - VG->estimate();
         }
 
@@ -918,11 +914,11 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 4DOF的二元边，误差为给定的旋转平移改变量 与 两个输入节点之间的旋转平移改变量的偏差
  */
-    class Edge4DoF : public g2o::BaseBinaryEdge<6, Vector6d, VertexPose4DoF, VertexPose4DoF> {
+    class EdgeRTOnly : public g2o::BaseBinaryEdge<6, Vector6d, VertexPose4DoF, VertexPose4DoF> {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        Edge4DoF(const Eigen::Matrix4d &deltaT) {
+        EdgeRTOnly(const Eigen::Matrix4d &deltaT) {
             dTij = deltaT;
             dRij = deltaT.block<3, 3>(0, 0);
             dtij = deltaT.block<3, 1>(0, 3);

@@ -143,10 +143,10 @@ namespace ORB_SLAM3 {
                             Verbose::PrintMess("Merge finished!", Verbose::VERBOSITY_QUIET);
                         }
                         // 记录时间戳
-                        vdPR_CurrentTime.push_back(mpCurrentKF->mdTimestamp);
-                        vdPR_MatchedTime.push_back(mpMergeMatchedKF->mdTimestamp);
+                        vdPR_CurrentTime.emplace_back(mpCurrentKF->mdTimestamp);
+                        vdPR_MatchedTime.emplace_back(mpMergeMatchedKF->mdTimestamp);
                         // 标记Place recognition结果为地图融合
-                        vnPR_TypeRecogn.push_back(1);
+                        vnPR_TypeRecogn.emplace_back(1);
 
                         // CheckRequestReset all variables
                         // 重置所有融合相关变量
@@ -175,9 +175,9 @@ namespace ORB_SLAM3 {
                     if (mbLoopDetected) {
                         // 标记时间戳
                         bool bGoodLoop = true;
-                        vdPR_CurrentTime.push_back(mpCurrentKF->mdTimestamp);
-                        vdPR_MatchedTime.push_back(mpLoopMatchedKF->mdTimestamp);
-                        vnPR_TypeRecogn.push_back(0);
+                        vdPR_CurrentTime.emplace_back(mpCurrentKF->mdTimestamp);
+                        vdPR_MatchedTime.emplace_back(mpLoopMatchedKF->mdTimestamp);
+                        vnPR_TypeRecogn.emplace_back(0);
                         Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);
                         // 更新 mg2oLoopScw
                         mg2oLoopScw = mg2oLoopSlw; //*mvg2oSim3LoopTcw[nCurrentIndex];
@@ -234,7 +234,7 @@ namespace ORB_SLAM3 {
             if (CheckRequestFinish()) {
                 break;
             }
-            usleep(1000);
+            usleep(5000);
         }
         SetFinished();
     }
@@ -245,7 +245,7 @@ namespace ORB_SLAM3 {
     void LoopClosing::InsertKeyFrame(KeyFrame *pKF) {
         unique_lock<mutex> lock(mMutexLoopQueue);
         if (pKF->mnId != 0)
-            mlpLoopKeyFrameQueue.push_back(pKF);
+            mlpLoopKeyFrameQueue.emplace_back(pKF);
     }
 
 /**
@@ -611,10 +611,10 @@ namespace ORB_SLAM3 {
             std::vector<KeyFrame *> vpCovKFi = pKFi->GetBestCovisibilityKeyFrames(nNumCovisibles);
             if (vpCovKFi.empty()) {
                 std::cout << "Covisible list empty" << std::endl;
-                vpCovKFi.push_back(pKFi);
+                vpCovKFi.emplace_back(pKFi);
             } else {
                 // 再加上候选关键帧自己(这里操作比较迷,看起来只是为了把候选关键帧放到容器的第一顺位)
-                vpCovKFi.push_back(vpCovKFi[0]);
+                vpCovKFi.emplace_back(vpCovKFi[0]);
                 vpCovKFi[0] = pKFi;
             }
 
@@ -733,7 +733,7 @@ namespace ORB_SLAM3 {
                     vpCovKFi.clear();
                     // 拿到窗口内匹配最多的帧的最佳10个共视帧和它自己组成的窗口
                     vpCovKFi = pMostBoWMatchesKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
-                    vpCovKFi.push_back(pMostBoWMatchesKF);
+                    vpCovKFi.emplace_back(pMostBoWMatchesKF);
                     // 这个后面没有用到
                     set<KeyFrame *> spCheckKFs(vpCovKFi.begin(), vpCovKFi.end());
 
@@ -758,8 +758,8 @@ namespace ORB_SLAM3 {
                             // 避免重复添加
                             if (spMapPoints.find(pCovMPij) == spMapPoints.end()) {
                                 spMapPoints.insert(pCovMPij);
-                                vpMapPoints.push_back(pCovMPij);
-                                vpKeyFrames.push_back(pCovKFi);
+                                vpMapPoints.emplace_back(pCovMPij);
+                                vpKeyFrames.emplace_back(pCovKFi);
                             }
                         }
                     }
@@ -993,7 +993,7 @@ namespace ORB_SLAM3 {
         vector<KeyFrame *> vpMatchCovKFs = pMatchedKFw->GetBestCovisibilityKeyFrames(nCurCovKFs);
         int nMatchCovKFs = vpMatchCovKFs.size();
         // 把自己也加进去, 组成一个局部窗口
-        vpMatchCovKFs.push_back(pMatchedKFw);
+        vpMatchCovKFs.emplace_back(pMatchedKFw);
 
         // 辅助容器,防止重复添加
         set<KeyFrame *> spMatchKFs(vpMatchCovKFs.begin(), vpMatchCovKFs.end());
@@ -1040,7 +1040,7 @@ namespace ORB_SLAM3 {
                 // 如果没有被重复添加
                 if (spMatchCovMPs.find(pMPij) == spMatchCovMPs.end()) {
                     spMatchCovMPs.insert(pMPij);
-                    vpMapPoints.push_back(pMPij);
+                    vpMapPoints.emplace_back(pMPij);
                 }
             }
         }
@@ -1088,7 +1088,7 @@ namespace ORB_SLAM3 {
         // Wait until Local Mapping has effectively stopped
         // 一直等到局部地图线程结束再继续
         while (!mpLocalMapper->CheckPaused()) {
-            usleep(500);
+            usleep(5000);
         }
 
         // Ensure current keyframe is updated
@@ -1105,7 +1105,7 @@ namespace ORB_SLAM3 {
         // 通过相对位姿关系，可以确定这些相连的关键帧与世界坐标系之间的Sim3变换
         // 取出当前关键帧及其共视关键帧，称为“当前关键帧组”
         mvpCurrentConnectedKFs = mpCurrentKF->GetVectorCovisibleKeyFrames();
-        mvpCurrentConnectedKFs.push_back(mpCurrentKF);
+        mvpCurrentConnectedKFs.emplace_back(mpCurrentKF);
 
         //std::cout << "Loop: number of connected KFs -> " + to_string(mvpCurrentConnectedKFs.ParameterSize()) << std::endl;
         // CorrectedSim3：存放闭环g2o优化后当前关键帧的共视关键帧的世界坐标系下Sim3 变换
@@ -1355,7 +1355,7 @@ namespace ORB_SLAM3 {
         // Wait until Local Mapping has effectively stopped
         // 等待局部建图工作停止
         while (!mpLocalMapper->CheckPaused()) {
-            usleep(500);
+            usleep(5000);
         }
         //cout << "Local Map stopped" << endl;
 
@@ -1440,7 +1440,7 @@ namespace ORB_SLAM3 {
                 for (KeyFrame *pKFcov : vpKFiCov) {
                     // 如果指针不为空,且关键帧没有被标记为bad,且没有被添加过则加到窗口内
                     if (pKFcov && !pKFcov->isBad() && spLocalWindowKFs.find(pKFcov) == spLocalWindowKFs.end()) {
-                        vpNewCovKFs.push_back(pKFcov);
+                        vpNewCovKFs.emplace_back(pKFcov);
                     }
 
                 }
@@ -1502,7 +1502,7 @@ namespace ORB_SLAM3 {
                 for (KeyFrame *pKFcov : vpKFiCov) {
                     // 如果指针不为空,且关键帧没有被标记为bad,且没有被添加过则加到窗口内
                     if (pKFcov && !pKFcov->isBad() && spMergeConnectedKFs.find(pKFcov) == spMergeConnectedKFs.end()) {
-                        vpNewCovKFs.push_back(pKFcov);
+                        vpNewCovKFs.emplace_back(pKFcov);
                     }
 
                 }
@@ -1759,7 +1759,7 @@ namespace ORB_SLAM3 {
 
         // 重新拿到融合帧局部的共视帧窗窗口
         vpMergeConnectedKFs = mpMergeMatchedKF->GetVectorCovisibleKeyFrames();
-        vpMergeConnectedKFs.push_back(mpMergeMatchedKF);
+        vpMergeConnectedKFs.emplace_back(mpMergeMatchedKF);
         //vpCheckFuseMapPoint.reserve(spMapPointMerge.ParameterSize());
         //std::copy(spMapPointMerge.begin(), spMapPointMerge.end(), std::back_inserter(vpCheckFuseMapPoint));
 
@@ -1817,7 +1817,7 @@ namespace ORB_SLAM3 {
             mpLocalMapper->RequestPause();
             // Wait until Local Mapping has effectively stopped
             while (!mpLocalMapper->CheckPaused()) {
-                usleep(500);
+                usleep(5000);
             }
 
             // Optimize graph (and update the loop position for each element form the begining to the end)
@@ -1938,7 +1938,7 @@ namespace ORB_SLAM3 {
         // Wait until Local Mapping has effectively stopped
         // 等待直到完全停掉
         while (!mpLocalMapper->CheckPaused()) {
-            usleep(500);
+            usleep(5000);
         }
         //cout << "Local Map stopped" << endl;
 
@@ -2097,19 +2097,19 @@ namespace ORB_SLAM3 {
 
         // 为后续SearchAndFuse准备数据
         // 拿出融合帧的局部窗口, 确保最后是(1+5), 1: 融合帧自己 2: 5个共视关键帧
-        mvpMergeConnectedKFs.push_back(mpMergeMatchedKF);
+        mvpMergeConnectedKFs.emplace_back(mpMergeMatchedKF);
         vector<KeyFrame *> aux = mpMergeMatchedKF->GetVectorCovisibleKeyFrames();
         mvpMergeConnectedKFs.insert(mvpMergeConnectedKFs.end(), aux.begin(), aux.end());
         if (mvpMergeConnectedKFs.size() > 6)
             mvpMergeConnectedKFs.erase(mvpMergeConnectedKFs.begin() + 6, mvpMergeConnectedKFs.end());
         /*mvpMergeConnectedKFs = mpMergeMatchedKF->GetVectorCovisibleKeyFrames();
-    mvpMergeConnectedKFs.push_back(mpMergeMatchedKF);*/
+    mvpMergeConnectedKFs.emplace_back(mpMergeMatchedKF);*/
 
         // 拿出当前关键帧的局部窗口, 确保最后是(1+5), 1: 融合帧自己 2: 5个共视关键帧
         mpCurrentKF->UpdateCovisGraph();
-        vpCurrentConnectedKFs.push_back(mpCurrentKF);
+        vpCurrentConnectedKFs.emplace_back(mpCurrentKF);
         /*vpCurrentConnectedKFs = mpCurrentKF->GetVectorCovisibleKeyFrames();
-    vpCurrentConnectedKFs.push_back(mpCurrentKF);*/
+    vpCurrentConnectedKFs.emplace_back(mpCurrentKF);*/
         aux = mpCurrentKF->GetVectorCovisibleKeyFrames();
         vpCurrentConnectedKFs.insert(vpCurrentConnectedKFs.end(), aux.begin(), aux.end());
         if (vpCurrentConnectedKFs.size() > 6)
@@ -2354,7 +2354,7 @@ namespace ORB_SLAM3 {
                 if (!mbResetRequested)
                     break;
             }
-            usleep(500);
+            usleep(5000);
         }
         cout << "LC: LoopCloser Reset Done" << endl;
     }
@@ -2372,7 +2372,7 @@ namespace ORB_SLAM3 {
                 if (!mbResetActiveMapRequested)
                     break;
             }
-            usleep(500);
+            usleep(5000);
         }
         cout << "LC: ActiveMap Reset Done" << endl;
 
@@ -2450,7 +2450,7 @@ namespace ORB_SLAM3 {
                 // Wait until Local Mapping has effectively stopped
 
                 while (!mpLocalMapper->CheckPaused() && !mpLocalMapper->CheckFinished()) {
-                    usleep(500);
+                    usleep(5000);
                 }
 
                 // Get Map Mutex
@@ -2500,7 +2500,7 @@ namespace ORB_SLAM3 {
                             pChild->mnBAGlobalForKF = nLoopKF;  // 标记成更新过的
 
                         }
-                        lpKFtoCheck.push_back(pChild);
+                        lpKFtoCheck.emplace_back(pChild);
                     }
 
                     //cout << "-------Update pose" << endl;

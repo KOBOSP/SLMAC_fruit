@@ -366,10 +366,10 @@ namespace ORB_SLAM3 {
                 int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
 
                 if (leftIndex != -1) {
-                    vDescriptors.push_back(pKF->mDescriptors.row(leftIndex));
+                    vDescriptors.emplace_back(pKF->mDescriptors.row(leftIndex));
                 }
                 if (rightIndex != -1) {
-                    vDescriptors.push_back(pKF->mDescriptors.row(rightIndex));
+                    vDescriptors.emplace_back(pKF->mDescriptors.row(rightIndex));
                 }
             }
         }

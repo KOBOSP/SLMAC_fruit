@@ -202,9 +202,9 @@ namespace ORB_SLAM3 {
  * @param sFileName 文件名字，貌似调试用的
  */
     Sophus::SE3f
-    Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &dTimestamp) {
+    Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, Eigen::Matrix<float, 3, 1> trw, const double &dTimestamp) {
         std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-        mCurFrame = Frame(imRectLeft, imRectRight, dTimestamp, mpORBextractorLeft, mpORBextractorRight,
+        mCurFrame = Frame(imRectLeft, imRectRight, trw, dTimestamp, mpORBextractorLeft, mpORBextractorRight,
                           mpORBVocabulary, mCvK, mfBaselineFocal, mfThDepth, mpCamera, &mLastFrame,
                           *mpImuCalib);
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -213,7 +213,7 @@ namespace ORB_SLAM3 {
         if (bStepByStep) {
             std::cout << "Tracking: Waiting to the next step" << std::endl;
             while (!mbDoNext && bStepByStep)
-                usleep(500);
+                usleep(5000);
             mbDoNext = false;
         }
 
@@ -231,7 +231,7 @@ namespace ORB_SLAM3 {
  */
     void Tracking::GrabImuData(const IMU::Point &ImuMeasure) {
         unique_lock<mutex> lock(mMutexImuQueue);
-        mlQueueImuData.push_back(ImuMeasure);
+        mlQueueImuData.emplace_back(ImuMeasure);
     }
 
 /**
@@ -267,11 +267,11 @@ namespace ORB_SLAM3 {
                     if (m->mTs < mCurFrame.mpPrevFrame->mdTimestamp - mImuInterval) {
                         mlQueueImuData.pop_front();
                     } else if (m->mTs < mCurFrame.mdTimestamp - mImuInterval) {
-                        mvImuFromLastFrame.push_back(*m);
+                        mvImuFromLastFrame.emplace_back(*m);
                         mlQueueImuData.pop_front();
                     } else {
                         // 得到两帧间的imu数据放入mvImuFromLastFrame中,得到后面预积分的处理数据
-                        mvImuFromLastFrame.push_back(*m);
+                        mvImuFromLastFrame.emplace_back(*m);
                         break;
                     }
                 } else {
@@ -279,7 +279,7 @@ namespace ORB_SLAM3 {
                 }
             }
             if (bSleep)
-                usleep(500);
+                usleep(5000);
         }
 
         // Step 2.对两帧之间进行中值积分处理
@@ -702,17 +702,17 @@ namespace ORB_SLAM3 {
             if (mCurFrame.HasPose()) {
                 // 计算相对姿态Tcr = Tcw * Twr, Twr = Trw^-1
                 Sophus::SE3f Tcr_ = mCurFrame.GetPose() * mCurFrame.mpReferenceKF->GetPoseInverse();
-                mlRelativeFramePoses.push_back(Tcr_);
-                mlpRefKFs.push_back(mCurFrame.mpReferenceKF);
-                mlTimestamp.push_back(mCurFrame.mdTimestamp);
-                mlbLost.push_back(mState == LOST);
+                mlRelativeFramePoses.emplace_back(Tcr_);
+                mlpRefKFs.emplace_back(mCurFrame.mpReferenceKF);
+                mlTimestamp.emplace_back(mCurFrame.mdTimestamp);
+                mlbLost.emplace_back(mState == LOST);
             } else {
                 // This can happen if tracking is lost
                 // 如果跟踪失败，则相对位姿使用上一次值
-                mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());
-                mlpRefKFs.push_back(mlpRefKFs.back());
-                mlTimestamp.push_back(mlTimestamp.back());
-                mlbLost.push_back(mState == LOST);
+                mlRelativeFramePoses.emplace_back(mlRelativeFramePoses.back());
+                mlpRefKFs.emplace_back(mlpRefKFs.back());
+                mlTimestamp.emplace_back(mlTimestamp.back());
+                mlbLost.emplace_back(mState == LOST);
             }
         }
     }
@@ -793,14 +793,14 @@ namespace ORB_SLAM3 {
         mnLastKeyFrameId = mCurFrame.mnId;
         mpLastKeyFrame = pKFini;
 
-        mvpLocalKeyFrames.push_back(pKFini);
+        mvpLocalKeyFrames.emplace_back(pKFini);
         mvpLocalMapPoints = mpAtlas->GetAllMapPoints();
         mpReferenceKF = pKFini;
         mCurFrame.mpReferenceKF = pKFini;
 
         // 把当前（最新的）局部MapPoints作为ReferenceMapPoints
         mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
-        mpAtlas->GetCurrentMap()->mvpInitKeyFrames.push_back(pKFini);
+        mpAtlas->GetCurrentMap()->mvpInitKeyFrames.emplace_back(pKFini);
         mpMapDrawer->SetCurrentCameraPose(mCurFrame.GetPose());
         // 追踪成功
         mState = OK;
@@ -1286,7 +1286,7 @@ namespace ORB_SLAM3 {
             float z = mCurFrame.mvfMPDepth[i];
             if (z > 0) {
                 // 第一个元素是深度,第二个元素是对应的特征点的id
-                vDepthIdx.push_back(make_pair(z, i));
+                vDepthIdx.emplace_back(make_pair(z, i));
             }
         }
 
@@ -1483,7 +1483,7 @@ namespace ORB_SLAM3 {
                     continue;
                 }
                 count_pts++;
-                mvpLocalMapPoints.push_back(pMP);
+                mvpLocalMapPoints.emplace_back(pMP);
                 pMP->mnTrackReferenceForFrame = mCurFrame.mnId;
             }
         }
@@ -1570,7 +1570,7 @@ namespace ORB_SLAM3 {
             }
 
             // 添加到局部关键帧的列表里
-            mvpLocalKeyFrames.push_back(pKF);
+            mvpLocalKeyFrames.emplace_back(pKF);
             // 用该关键帧的成员变量mnTrackReferenceForFrame 记录当前帧的id
             // 表示它已经是当前帧的局部关键帧了，可以防止重复添加局部关键帧
             pKF->mnTrackReferenceForFrame = mCurFrame.mnId;
@@ -1598,7 +1598,7 @@ namespace ORB_SLAM3 {
                 if (!pNeighKF->isBad()) {
                     // mnTrackReferenceForFrame防止重复添加局部关键帧
                     if (pNeighKF->mnTrackReferenceForFrame != mCurFrame.mnId) {
-                        mvpLocalKeyFrames.push_back(pNeighKF);
+                        mvpLocalKeyFrames.emplace_back(pNeighKF);
                         pNeighKF->mnTrackReferenceForFrame = mCurFrame.mnId;
                     }
                 }
@@ -1610,7 +1610,7 @@ namespace ORB_SLAM3 {
                 KeyFrame *pChildKF = *sit;
                 if (!pChildKF->isBad()) {
                     if (pChildKF->mnTrackReferenceForFrame != mCurFrame.mnId) {
-                        mvpLocalKeyFrames.push_back(pChildKF);
+                        mvpLocalKeyFrames.emplace_back(pChildKF);
                         pChildKF->mnTrackReferenceForFrame = mCurFrame.mnId;
                     }
                 }
@@ -1621,7 +1621,7 @@ namespace ORB_SLAM3 {
             if (pParent) {
                 // mnTrackReferenceForFrame防止重复添加局部关键帧
                 if (pParent->mnTrackReferenceForFrame != mCurFrame.mnId) {
-                    mvpLocalKeyFrames.push_back(pParent);
+                    mvpLocalKeyFrames.emplace_back(pParent);
                     pParent->mnTrackReferenceForFrame = mCurFrame.mnId;
                 }
             }
@@ -1636,7 +1636,7 @@ namespace ORB_SLAM3 {
                 if (!tempKeyFrame)
                     break;
                 if (tempKeyFrame->mnTrackReferenceForFrame != mCurFrame.mnId) {
-                    mvpLocalKeyFrames.push_back(tempKeyFrame);
+                    mvpLocalKeyFrames.emplace_back(tempKeyFrame);
                     tempKeyFrame->mnTrackReferenceForFrame = mCurFrame.mnId;
                     tempKeyFrame = tempKeyFrame->mPrevKF;
                 }
@@ -1875,7 +1875,7 @@ namespace ORB_SLAM3 {
         if (mpViewer) {
             mpViewer->RequestReset();
             while (!mpViewer->CheckReseted())
-                usleep(500);
+                usleep(5000);
         }
 
         // CheckRequestReset Local Mapping
@@ -1932,7 +1932,7 @@ namespace ORB_SLAM3 {
         if (mpViewer) {
             mpViewer->RequestReset();
             while (!mpViewer->CheckReseted())
-                usleep(500);
+                usleep(5000);
         }
 
         Map *pMap = mpAtlas->GetCurrentMap();
@@ -1978,9 +1978,9 @@ namespace ORB_SLAM3 {
         cout << "mnInitialFrameId = " << mnInitialFrameId << endl;
         for (list<bool>::iterator ilbL = mlbLost.begin(); ilbL != mlbLost.end(); ilbL++) {
             if (index < mnInitialFrameId)
-                lbLost.push_back(*ilbL);
+                lbLost.emplace_back(*ilbL);
             else {
-                lbLost.push_back(true);
+                lbLost.emplace_back(true);
                 num_lost += 1;
             }
 
@@ -2056,7 +2056,7 @@ namespace ORB_SLAM3 {
 
         while (!mCurFrame.imuIsPreintegrated()) {
             // 当前帧需要预积分完毕，这段函数实在localmapping里调用的
-            usleep(500);
+            usleep(5000);
         }
 
         // TODO 如果上一帧正好是上一帧的上一关键帧（mLastFrame.mpLastKeyFrame与mLastFrame不可能是一个，可以验证一下）

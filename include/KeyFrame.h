@@ -193,6 +193,7 @@ public:
 
     // Pose functions
     void SetPose(const Sophus::SE3f &Tcw);
+    void SetRtkTrans(Eigen::Matrix<float, 3, 1> trw);
     void SetVelocity(const Eigen::Vector3f &Vw_);
 
     Sophus::SE3f GetPose();
@@ -401,7 +402,7 @@ protected:
     Eigen::Matrix3f mRcw;
     Sophus::SE3<float> mTwc;
     Eigen::Matrix3f mRwc;
-
+    Eigen::Matrix<float, 3, 1> mtrw;
     // IMU position
     Eigen::Vector3f mOwb;
     // Velocity (Only used for inertial SLAM)

@@ -99,29 +99,29 @@ MLPnPsolver::MLPnPsolver(const Frame &F,                                // 输�
                 const cv::KeyPoint &kp = F.mvKPsUn[i];
 
                 // 保存3D点的投影点
-                mvP2D.push_back(kp.pt);
+                mvP2D.emplace_back(kp.pt);
 
                 // 保存卡方检验中的sigma值
-                mvSigma2.push_back(F.mvfLevelSigma2[kp.octave]);
+                mvSigma2.emplace_back(F.mvfLevelSigma2[kp.octave]);
 
                 // Bearing vector should be normalized
                 //  特征点投影，并计算单位向量
                 cv::Point3f cv_br = mpCamera->UnprojectCv(kp.pt);
                 cv_br /= cv_br.z;
                 bearingVector_t br(cv_br.x, cv_br.y, cv_br.z);
-                mvBearingVecs.push_back(br);
+                mvBearingVecs.emplace_back(br);
 
                 // 3D coordinates
                 //  获取当前特征点的3D坐标
                 Eigen::Matrix<float, 3, 1> posEig = pMP->GetWorldPos();
                 point_t pos(posEig(0), posEig(1), posEig(2));
-                mvP3Dw.push_back(pos);
+                mvP3Dw.emplace_back(pos);
 
                 // 记录当前特征点的索引值，挑选后的
-                mvKeyPointIndices.push_back(i);
+                mvKeyPointIndices.emplace_back(i);
 
                 // 记录所有特征点的索引值
-                mvAllIndices.push_back(idx);
+                mvAllIndices.emplace_back(idx);
 
                 idx++;
             }
@@ -409,7 +409,7 @@ bool MLPnPsolver::Refine()
     {
         if (mvbBestInliers[i])
         {
-            vIndices.push_back(i);
+            vIndices.emplace_back(i);
         }
     }
 
@@ -429,9 +429,9 @@ bool MLPnPsolver::Refine()
     {
         int idx = vIndices[i];
 
-        bearingVecs.push_back(mvBearingVecs[idx]);
-        p3DS.push_back(mvP3Dw[idx]);
-        indexes.push_back(i);
+        bearingVecs.emplace_back(mvBearingVecs[idx]);
+        p3DS.emplace_back(mvP3Dw[idx]);
+        indexes.emplace_back(i);
     }
     // 后面操作和iterate类似，就不赘述了
 

@@ -33,7 +33,7 @@ std::vector<cv::Mat> Converter::toDescriptorVector(const cv::Mat &Descriptors)
     // 对于每一个特征点的描述子
     for (int j=0;j<Descriptors.rows;j++)
         //从描述子这个矩阵中抽取出来存到向量中
-        vDesc.push_back(Descriptors.row(j));
+        vDesc.emplace_back(Descriptors.row(j));
     // 返回转换结果
     return vDesc;
 }

@@ -149,7 +149,7 @@ void serializeVectorKeyPoints(Archive& ar, const std::vector<cv::KeyPoint>& vKP,
         ar & KPi.octave;
 
         if (Archive::is_loading::value)
-            vKPaux.push_back(KPi);
+            vKPaux.emplace_back(KPi);
     }
 
 

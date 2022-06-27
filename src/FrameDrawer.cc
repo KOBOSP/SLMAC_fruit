@@ -32,7 +32,7 @@ namespace ORB_SLAM3 {
         mImgRight = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
         mnColorNum = nCN;
         for (int i = 0; i < nCN; i++) {
-            vRandColorSet.push_back(cv::Scalar(rand() % 255, rand() % 255, rand() % 255));
+            vRandColorSet.emplace_back(cv::Scalar(rand() % 255, rand() % 255, rand() % 255));
         }
     }
 

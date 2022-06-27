@@ -205,7 +205,7 @@ namespace ORB_SLAM3 {
             }
             if (CheckRequestReset()) {
                 while (CheckReseted()) {
-                    usleep(500);
+                    usleep(5000);
                 }
             }
             if (CheckFinishReqest())

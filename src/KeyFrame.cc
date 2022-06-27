@@ -94,6 +94,7 @@ namespace ORB_SLAM3 {
 
         mImuBias = F.mImuBias;
         SetPose(F.GetPose());
+        SetRtkTrans(F.GetRtkTrans());
         mnOriginMapId = pMap->GetId();
     }
 
@@ -110,16 +111,18 @@ namespace ORB_SLAM3 {
 // 设置当前关键帧的位姿
     void KeyFrame::SetPose(const Sophus::SE3f &Tcw) {
         unique_lock<mutex> lock(mMutexPose);
-
         mTcw = Tcw;
         mRcw = mTcw.rotationMatrix();
         mTwc = mTcw.inverse();
         mRwc = mTwc.rotationMatrix();
-
         if (mImuCalib.mbIsSet) // TODO Use a flag instead of the OpenCV matrix
         {
             mOwb = mRwc * mImuCalib.mTcb.translation() + mTwc.translation();
         }
+    }
+    void KeyFrame::SetRtkTrans(Eigen::Matrix<float, 3, 1> trw) {
+        unique_lock<mutex> lock(mMutexPose);
+        mtrw = trw;
     }
 
     void KeyFrame::SetVelocity(const Eigen::Vector3f &Vw) {
@@ -215,7 +218,7 @@ namespace ORB_SLAM3 {
         // 取出所有连接的关键帧，mConnectedKeyFrameWeights的类型为std::map<KeyFrame*,int>，而vPairs变量将共视的3D点数放在前面，利于排序
         for (map<KeyFrame *, int>::iterator mit = mConnectedKeyFrameWeights.begin(), mend = mConnectedKeyFrameWeights.end();
              mit != mend; mit++)
-            vPairs.push_back(make_pair(mit->second, mit->first));
+            vPairs.emplace_back(make_pair(mit->second, mit->first));
 
         // 按照权重进行排序（默认是从小到大）
         sort(vPairs.begin(), vPairs.end());
@@ -452,7 +455,7 @@ namespace ORB_SLAM3 {
             }
             if (mit->second >= mnStrongCovisTh) {
                 // 对应权重需要大于阈值，对这些关键帧建立连接
-                vPairs.push_back(make_pair(mit->second, mit->first));
+                vPairs.emplace_back(make_pair(mit->second, mit->first));
                 // 对方关键帧也要添加这个信息
                 // 更新KFcounter中该关键帧的mConnectedKeyFrameWeights
                 // 更新其它KeyFrame的mConnectedKeyFrameWeights，更新其它关键帧与当前帧的连接权重
@@ -465,7 +468,7 @@ namespace ORB_SLAM3 {
             // 如果每个关键帧与它共视的关键帧的个数都少于th，
             // 那就只更新与其它关键帧共视程度最高的关键帧的mConnectedKeyFrameWeights
             // 这是对之前th这个阈值可能过高的一个补丁
-            vPairs.push_back(make_pair(nmax, pKFmax));
+            vPairs.emplace_back(make_pair(nmax, pKFmax));
             pKFmax->AddConnection(this, nmax);
         }
 
@@ -783,7 +786,7 @@ namespace ORB_SLAM3 {
                     const float disty = kpUn.pt.y - y;
 
                     if (fabs(distx) < r && fabs(disty) < r)
-                        vIndices.push_back(vCell[j]);
+                        vIndices.emplace_back(vCell[j]);
                 }
             }
         }
@@ -847,7 +850,7 @@ namespace ORB_SLAM3 {
                 MapPoint *pMP = mvpMapPoints[i];
                 Eigen::Vector3f x3Dw = pMP->GetWorldPos();
                 float z = Rcw2.dot(x3Dw) + zcw;  // (R*x3Dw+mTs)的第三行，即z
-                vDepths.push_back(z);
+                vDepths.emplace_back(z);
             }
         }
 
@@ -895,9 +898,9 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < mnKPsLeftNum; ++i) {
 
             if (mvpMapPoints[i] && spMP.find(mvpMapPoints[i]) != spMP.end()) // Checks if the element is not null
-                mvBackupMapPointsId.push_back(mvpMapPoints[i]->mnId);
+                mvBackupMapPointsId.emplace_back(mvpMapPoints[i]->mnId);
             else // If the element is null his value is -1 because all the id are positives
-                mvBackupMapPointsId.push_back(-1);
+                mvBackupMapPointsId.emplace_back(-1);
         }
         // Save the id of each connected KF with it weight
         mBackupConnectedKeyFrameIdWeights.clear();
@@ -917,7 +920,7 @@ namespace ORB_SLAM3 {
         mvBackupChildrensId.reserve(mspChildrens.size());
         for (KeyFrame *pKFi : mspChildrens) {
             if (spKF.find(pKFi) != spKF.end())
-                mvBackupChildrensId.push_back(pKFi->mnId);
+                mvBackupChildrensId.emplace_back(pKFi->mnId);
         }
 
         // Save the id of the loop edge KF
@@ -925,7 +928,7 @@ namespace ORB_SLAM3 {
         mvBackupLoopEdgesId.reserve(mspLoopEdges.size());
         for (KeyFrame *pKFi : mspLoopEdges) {
             if (spKF.find(pKFi) != spKF.end())
-                mvBackupLoopEdgesId.push_back(pKFi->mnId);
+                mvBackupLoopEdgesId.emplace_back(pKFi->mnId);
         }
 
         // Save the id of the merge edge KF
@@ -933,7 +936,7 @@ namespace ORB_SLAM3 {
         mvBackupMergeEdgesId.reserve(mspMergeEdges.size());
         for (KeyFrame *pKFi : mspMergeEdges) {
             if (spKF.find(pKFi) != spKF.end())
-                mvBackupMergeEdgesId.push_back(pKFi->mnId);
+                mvBackupMergeEdgesId.emplace_back(pKFi->mnId);
         }
 
         // Camera data

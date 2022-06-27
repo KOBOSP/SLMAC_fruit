@@ -47,7 +47,7 @@ namespace ORB_SLAM3 {
  * @param sSeqName 序列名,在跟踪线程和局部建图线程用得到
  */
     System::System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor,
-                   const bool bUseViewer, const int nFrameIdInit, const string &sSeqName) :
+                   const bool bUseViewer, const string &sSeqName) :
             mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbResetThread(false), mbResetActiveMap(false),
             mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDowned(false) {
         cout << "Input Sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
@@ -118,7 +118,7 @@ namespace ORB_SLAM3 {
         Verbose::SetTh(Verbose::VERBOSITY_QUIET);
     }
 
-    Sophus::SE3f System::CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp,
+    Sophus::SE3f System::CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, Eigen::Matrix<float, 3, 1> trw, const double &dTimestamp,
                                        const vector<IMU::Point> &vImuMeas) {
         // Check mode change
         {
@@ -127,7 +127,7 @@ namespace ORB_SLAM3 {
                 mpLocalMapper->RequestPause();
                 // Wait until Local Mapping has effectively stopped
                 while (!mpLocalMapper->CheckPaused()) {
-                    usleep(500);
+                    usleep(5000);
                 }
                 mpTracker->InformOnlyTracking(true);
                 mbActivateLocalizationMode = false;
@@ -186,7 +186,7 @@ namespace ORB_SLAM3 {
             mpTracker->GrabImuData(vImuMeas[nImu]);
         }
         // std::cout << "start GrabImageStereo" << std::endl;
-        Sophus::SE3f Tcw = mpTracker->GrabImageStereo(ImgLeftToTrack, ImgRightToTrack, dTimestamp);
+        Sophus::SE3f Tcw = mpTracker->GrabImageStereo(ImgLeftToTrack, ImgRightToTrack, trw, dTimestamp);
         // std::cout << "out grabber" << std::endl;
         {
             unique_lock<mutex> lock2(mMutexState);
@@ -249,13 +249,13 @@ namespace ORB_SLAM3 {
             if(mpLoopCloser->CheckRunningGBA()){
                 cout << "mpLoopCloser is running GBA" << endl;
             }
-            usleep(1000);
+            usleep(5000);
         }
 
         if (mpViewer) {
             mpViewer->RequestFinish();
             while (!mpViewer->CheckFinished()){
-                usleep(1000);
+                usleep(5000);
             }
         }
 

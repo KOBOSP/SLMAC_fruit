@@ -639,13 +639,13 @@ namespace ORB_SLAM3 {
             //NOTICE BUG REVIEW 这里也是直接进行比较的，但是特征点的坐标是在“半径扩充图像”坐标系下的，而节点区域的坐标则是在“边缘扩充图像”坐标系下的
             if (kp.pt.x < n1.UR.x) {
                 if (kp.pt.y < n1.BR.y)
-                    n1.vKeys.push_back(kp);
+                    n1.vKeys.emplace_back(kp);
                 else
-                    n3.vKeys.push_back(kp);
+                    n3.vKeys.emplace_back(kp);
             } else if (kp.pt.y < n1.BR.y)
-                n2.vKeys.push_back(kp);
+                n2.vKeys.emplace_back(kp);
             else
-                n4.vKeys.push_back(kp);
+                n4.vKeys.emplace_back(kp);
         }//遍历当前提取器节点的vkeys中存储的特征点
     }
 
@@ -708,9 +708,9 @@ namespace ORB_SLAM3 {
             ni.vKeys.reserve(vToDistributeKeys.size());
 
             //将刚才生成的提取节点添加到列表中
-            //虽然这里的ni是局部变量，但是由于这里的push_back()是拷贝参数的内容到一个新的对象中然后再添加到列表中
+            //虽然这里的ni是局部变量，但是由于这里的emplace_back()是拷贝参数的内容到一个新的对象中然后再添加到列表中
             //所以当本函数退出之后这里的内存不会成为“野指针”
-            lNodes.push_back(ni);
+            lNodes.emplace_back(ni);
             //存储这个初始的提取器节点句柄
             vpIniNodes[i] = &lNodes.back();
         }
@@ -721,7 +721,7 @@ namespace ORB_SLAM3 {
             //获取这个特征点对象
             const cv::KeyPoint &kp = vToDistributeKeys[i];
             //按特征点的横轴位置，分配给属于那个图像区域的提取器节点（最初的提取器节点）
-            vpIniNodes[kp.pt.x / hX]->vKeys.push_back(kp);
+            vpIniNodes[kp.pt.x / hX]->vKeys.emplace_back(kp);
         }
         // Step 4 遍历此提取器节点列表，标记那些不可再分裂的节点，删除那些没有分配到特征点的节点
         list<ExtractorNode>::iterator lNit = lNodes.begin();
@@ -802,7 +802,7 @@ namespace ORB_SLAM3 {
             }
 
             //将这个节点区域中的响应值最大的特征点加入最终结果容器
-            vResultKeys.push_back(*pKPMaxResP);
+            vResultKeys.emplace_back(*pKPMaxResP);
         }
         //返回最终结果容器，其中保存有分裂出来的区域中，我们最感兴趣、响应值最大的特征点
         return vResultKeys;
@@ -895,7 +895,7 @@ namespace ORB_SLAM3 {
                             (*vit).pt.x += j * wCell;
                             (*vit).pt.y += i * hCell;
                             //然后将其加入到”等待被分配“的特征点容器中
-                            vToDistributeKeys.push_back(*vit);
+                            vToDistributeKeys.emplace_back(*vit);
                         }//遍历图像cell中的所有的提取出来的FAST角点，并且恢复其在整个金字塔当前层图像下的坐标
                     }//当图像cell中检测到FAST角点的时候执行下面的语句
                 }//开始遍历图像cell的列

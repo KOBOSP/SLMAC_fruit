@@ -47,7 +47,7 @@ namespace ORB_SLAM3 {
 
     class KeyFrame;
 
-    class ConstraintPoseImu;
+    class PriorRVPAndBiasGA;
 
     class GeometricCamera;
 
@@ -61,7 +61,7 @@ namespace ORB_SLAM3 {
         Frame(const Frame &frame);
 
         // Constructor for stereo cameras.
-        Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp, ORBextractor *ExtractorLeft,
+        Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, Eigen::Matrix<float, 3, 1> trw, const double &dTimestamp, ORBextractor *ExtractorLeft,
               ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &cvK, const float &fBaselineFocal,
               const float &fThDepth, GeometricCamera *pCamera, Frame *pPrevF = static_cast<Frame *>(NULL),
               const IMU::Calib &ImuCalib = IMU::Calib());
@@ -73,7 +73,7 @@ namespace ORB_SLAM3 {
 
         // Set the camera pose. (Imu pose is not modified!)
         void SetPose(const Sophus::SE3<float> &Tcw);
-
+        void SetRtkTrans(Eigen::Matrix<float, 3, 1> &trw);
         // Set IMU velocity
         void SetVelocity(Eigen::Vector3f Vw);
 
@@ -116,7 +116,7 @@ namespace ORB_SLAM3 {
         // Backprojects a keypoint (if stereo/depth info available) into 3D world coordinates.
         bool UnprojectStereo(const int &i, Eigen::Vector3f &x3D);
 
-        ConstraintPoseImu *mpcpi;
+        PriorRVPAndBiasGA *mpcpi;
 
         bool imuIsPreintegrated();
 
@@ -132,6 +132,9 @@ namespace ORB_SLAM3 {
             //TODO: can the Frame pose be accsessed from several threads? should this be protected somehow?
             return mTcw;
         }
+        inline Eigen::Matrix<float, 3, 1> GetRtkTrans() const {
+            return mtrw;
+        }
 
         inline bool HasVelocity() const {
             return mbHasVelocity;
@@ -144,6 +147,7 @@ namespace ORB_SLAM3 {
         Eigen::Matrix<float, 3, 1> mOw;
         Eigen::Matrix<float, 3, 3> mRcw;
         Eigen::Matrix<float, 3, 1> mtcw;
+        Eigen::Matrix<float, 3, 1> mtrw;
         bool mbHasPose;
 
         //Rcw_ not necessary as Sophus has a method for extracting the rotation matrix: Tcw_.rotationMatrix()

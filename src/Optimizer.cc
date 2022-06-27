@@ -156,9 +156,9 @@ namespace ORB_SLAM3 {
 
                     optimizer.addEdge(e);
 
-                    vpEdgesMono.push_back(e);
-                    vpEdgeKFMono.push_back(pKF);
-                    vpMapPointEdgeMono.push_back(pMP);
+                    vpEdgesMono.emplace_back(e);
+                    vpEdgeKFMono.emplace_back(pKF);
+                    vpMapPointEdgeMono.emplace_back(pMP);
                 } else if (leftIndex != -1 && pKF->mvfXInRight[leftIndex] >= 0) //Stereo observation
                 {
                     const cv::KeyPoint &kpUn = pKF->mvKPsUn[leftIndex];
@@ -189,13 +189,11 @@ namespace ORB_SLAM3 {
                     e->bf = pKF->mfBaselineFocal;
 
                     optimizer.addEdge(e);
-
-                    vpEdgesStereo.push_back(e);
-                    vpEdgeKFStereo.push_back(pKF);
-                    vpMapPointEdgeStereo.push_back(pMP);
+                    vpEdgesStereo.emplace_back(e);
+                    vpEdgeKFStereo.emplace_back(pKF);
+                    vpMapPointEdgeStereo.emplace_back(pMP);
                 }
             }
-
 
             if (nEdges == 0) {
                 optimizer.removeVertex(vPoint);
@@ -252,7 +250,7 @@ namespace ORB_SLAM3 {
 
                         } else {
                             numMonoOptPoints++;
-                            vpMonoMPsOpt.push_back(pMP);
+                            vpMonoMPsOpt.emplace_back(pMP);
                         }
 
                     }
@@ -273,7 +271,7 @@ namespace ORB_SLAM3 {
                             numStereoBadPoints++;
                         } else {
                             numStereoOptPoints++;
-                            vpStereoMPsOpt.push_back(pMP);
+                            vpStereoMPsOpt.emplace_back(pMP);
                         }
                     }
                 }
@@ -312,11 +310,8 @@ namespace ORB_SLAM3 {
         // Setup optimizer
         g2o::SparseOptimizer optimizer;
         g2o::BlockSolverX::LinearSolverType *linearSolver;
-
         linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
-
         g2o::BlockSolverX *solver_ptr = new g2o::BlockSolverX(linearSolver);
-
         g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
         solver->setUserLambdaInit(1e-5);
         optimizer.setAlgorithm(solver);
@@ -333,7 +328,7 @@ namespace ORB_SLAM3 {
             KeyFrame *pKFi = vpKFs[i];
             if (pKFi->mnId > maxKFid)
                 continue;
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             pIncKF = pKFi;
             bool bFixed = false;
@@ -351,7 +346,7 @@ namespace ORB_SLAM3 {
                 VV->setFixed(bFixed);
                 optimizer.addVertex(VV);
                 if (!bInit) {
-                    VertexGyroBias *VG = new VertexGyroBias(pKFi);
+                    VertexGyrBias *VG = new VertexGyrBias(pKFi);
                     VG->setId(maxKFid + 3 * (pKFi->mnId) + 2);
                     VG->setFixed(bFixed);
                     optimizer.addVertex(VG);
@@ -364,7 +359,7 @@ namespace ORB_SLAM3 {
         }
 
         if (bInit) {
-            VertexGyroBias *VG = new VertexGyroBias(pIncKF);
+            VertexGyrBias *VG = new VertexGyrBias(pIncKF);
             VG->setId(4 * maxKFid + 2);
             VG->setFixed(false);
             optimizer.addVertex(VG);
@@ -382,12 +377,10 @@ namespace ORB_SLAM3 {
         // IMU links
         for (size_t i = 0; i < vpKFs.size(); i++) {
             KeyFrame *pKFi = vpKFs[i];
-
             if (!pKFi->mPrevKF) {
                 Verbose::PrintMess("NOT INERTIAL LINK TO PREVIOUS FRAME!", Verbose::VERBOSITY_NORMAL);
                 continue;
             }
-
             if (pKFi->mPrevKF && pKFi->mnId <= maxKFid) {
                 if (pKFi->isBad() || pKFi->mPrevKF->mnId > maxKFid)
                     continue;
@@ -426,7 +419,7 @@ namespace ORB_SLAM3 {
                         }
                     }
 
-                    EdgeInertial *ei = new EdgeInertial(pKFi->mpImuPreintegrated);
+                    EdgeImuRVPOnly *ei = new EdgeImuRVPOnly(pKFi->mpImuPreintegrated);
                     ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP1));
                     ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV1));
                     ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG1));
@@ -441,7 +434,7 @@ namespace ORB_SLAM3 {
                     optimizer.addEdge(ei);
 
                     if (!bInit) {
-                        EdgeGyrRW *egr = new EdgeGyrRW();
+                        EdgeGyrBias *egr = new EdgeGyrBias();
                         egr->setVertex(0, VG1);
                         egr->setVertex(1, VG2);
                         Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
@@ -449,11 +442,10 @@ namespace ORB_SLAM3 {
                         egr->computeError();
                         optimizer.addEdge(egr);
 
-                        EdgeAccRW *ear = new EdgeAccRW();
+                        EdgeAccBias *ear = new EdgeAccBias();
                         ear->setVertex(0, VA1);
                         ear->setVertex(1, VA2);
-                        Eigen::Matrix3d InfoA = pKFi->mpImuPreintegrated->C.block<3, 3>(12,
-                                                                                        12).cast<double>().inverse();
+                        Eigen::Matrix3d InfoA = pKFi->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
                         ear->setInformation(InfoA);
                         ear->computeError();
                         optimizer.addEdge(ear);
@@ -472,13 +464,13 @@ namespace ORB_SLAM3 {
             Eigen::Vector3f bprior;
             bprior.setZero();
 
-            EdgePriorAcc *epa = new EdgePriorAcc(bprior);
+            EdgePriorAccBias *epa = new EdgePriorAccBias(bprior);
             epa->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VA));
             double infoPriorA = priorA; //
             epa->setInformation(infoPriorA * Eigen::Matrix3d::Identity());
             optimizer.addEdge(epa);
 
-            EdgePriorGyro *epg = new EdgePriorGyro(bprior);
+            EdgePriorGyrBias *epg = new EdgePriorGyrBias(bprior);
             epg->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG));
             double infoPriorG = priorG; //
             epg->setInformation(infoPriorG * Eigen::Matrix3d::Identity());
@@ -518,7 +510,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 2, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y;
 
-                        EdgeMono *e = new EdgeMono(0);
+                        EdgeMonoAndMPWithImu *e = new EdgeMonoAndMPWithImu(0);
 
                         g2o::OptimizableGraph::Vertex *VP = dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(
                                 pKFi->mnId));
@@ -545,7 +537,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 3, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
-                        EdgeStereo *e = new EdgeStereo(0);
+                        EdgeStereoAndMPWithImu *e = new EdgeStereoAndMPWithImu(0);
 
                         g2o::OptimizableGraph::Vertex *VP = dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(
                                 pKFi->mnId));
@@ -590,7 +582,7 @@ namespace ORB_SLAM3 {
             KeyFrame *pKFi = vpKFs[i];
             if (pKFi->mnId > maxKFid)
                 continue;
-            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
+            VertexPose6DoF *VP = static_cast<VertexPose6DoF *>(optimizer.vertex(pKFi->mnId));
             if (nLoopKF == 0) {
                 Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
                 pKFi->SetPose(Tcw);
@@ -606,13 +598,13 @@ namespace ORB_SLAM3 {
                     pKFi->mVwbGBA = VV->estimate().cast<float>();
                 }
 
-                VertexGyroBias *VG;
+                VertexGyrBias *VG;
                 VertexAccBias *VA;
                 if (!bInit) {
-                    VG = static_cast<VertexGyroBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2));
+                    VG = static_cast<VertexGyrBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2));
                     VA = static_cast<VertexAccBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 3));
                 } else {
-                    VG = static_cast<VertexGyroBias *>(optimizer.vertex(4 * maxKFid + 2));
+                    VG = static_cast<VertexGyrBias *>(optimizer.vertex(4 * maxKFid + 2));
                     VA = static_cast<VertexAccBias *>(optimizer.vertex(4 * maxKFid + 3));
                 }
 
@@ -705,8 +697,8 @@ namespace ORB_SLAM3 {
                     e->bf = pFrame->mfBaselineFocal;
                     e->Xw = pMP->GetWorldPos().cast<double>();
                     optimizer.addEdge(e);
-                    vpEdgesStereo.push_back(e);
-                    vnIndexEdgeStereo.push_back(i);
+                    vpEdgesStereo.emplace_back(e);
+                    vnIndexEdgeStereo.emplace_back(i);
                 }
             }
         }
@@ -774,7 +766,7 @@ namespace ORB_SLAM3 {
         int nInitialCorrespondences = 0;
 
         // Set Frame vertex
-        VertexPose *VP = new VertexPose(pFrame);
+        VertexPose6DoF *VP = new VertexPose6DoF(pFrame);
         VP->setId(0);
         VP->setFixed(false);
         optimizer.addVertex(VP);
@@ -782,7 +774,7 @@ namespace ORB_SLAM3 {
         VV->setId(1);
         VV->setFixed(false);
         optimizer.addVertex(VV);
-        VertexGyroBias *VG = new VertexGyroBias(pFrame);
+        VertexGyrBias *VG = new VertexGyrBias(pFrame);
         VG->setId(2);
         VG->setFixed(false);
         optimizer.addVertex(VG);
@@ -795,8 +787,8 @@ namespace ORB_SLAM3 {
         const int N = pFrame->mnKPsLeftNum;
         const bool bRight = false;
 
-        vector<EdgeMonoOnlyPose *> vpEdgesMono;
-        vector<EdgeStereoOnlyPose *> vpEdgesStereo;
+        vector<EdgeMonoOnlyWithImu *> vpEdgesMono;
+        vector<EdgeStereoOnlyWithImu *> vpEdgesStereo;
         vector<size_t> vnIndexEdgeMono;
         vector<size_t> vnIndexEdgeStereo;
         vpEdgesMono.reserve(N);
@@ -825,7 +817,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 2, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y;
 
-                        EdgeMonoOnlyPose *e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
+                        EdgeMonoOnlyWithImu *e = new EdgeMonoOnlyWithImu(pMP->GetWorldPos(), 0);
 
                         e->setVertex(0, VP);
                         e->setMeasurement(obs);
@@ -842,8 +834,8 @@ namespace ORB_SLAM3 {
 
                         optimizer.addEdge(e);
 
-                        vpEdgesMono.push_back(e);
-                        vnIndexEdgeMono.push_back(i);
+                        vpEdgesMono.emplace_back(e);
+                        vnIndexEdgeMono.emplace_back(i);
                     }
                         // Stereo observation
                     else {
@@ -855,7 +847,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 3, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
-                        EdgeStereoOnlyPose *e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
+                        EdgeStereoOnlyWithImu *e = new EdgeStereoOnlyWithImu(pMP->GetWorldPos());
 
                         e->setVertex(0, VP);
                         e->setMeasurement(obs);
@@ -872,8 +864,8 @@ namespace ORB_SLAM3 {
 
                         optimizer.addEdge(e);
 
-                        vpEdgesStereo.push_back(e);
-                        vnIndexEdgeStereo.push_back(i);
+                        vpEdgesStereo.emplace_back(e);
+                        vnIndexEdgeStereo.emplace_back(i);
                     }
                 }
             }
@@ -881,7 +873,7 @@ namespace ORB_SLAM3 {
         nInitialCorrespondences = nInitialMonoCorrespondences + nInitialStereoCorrespondences;
 
         KeyFrame *pKF = pFrame->mpPrevKeyFrame;
-        VertexPose *VPk = new VertexPose(pKF);
+        VertexPose6DoF *VPk = new VertexPose6DoF(pKF);
         VPk->setId(4);
         VPk->setFixed(true);
         optimizer.addVertex(VPk);
@@ -889,7 +881,7 @@ namespace ORB_SLAM3 {
         VVk->setId(5);
         VVk->setFixed(true);
         optimizer.addVertex(VVk);
-        VertexGyroBias *VGk = new VertexGyroBias(pKF);
+        VertexGyrBias *VGk = new VertexGyrBias(pKF);
         VGk->setId(6);
         VGk->setFixed(true);
         optimizer.addVertex(VGk);
@@ -898,7 +890,7 @@ namespace ORB_SLAM3 {
         VAk->setFixed(true);
         optimizer.addVertex(VAk);
 
-        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuFromPrevKF);
+        EdgeImuRVPOnly *ei = new EdgeImuRVPOnly(pFrame->mpImuFromPrevKF);
 
         ei->setVertex(0, VPk);
         ei->setVertex(1, VVk);
@@ -908,14 +900,14 @@ namespace ORB_SLAM3 {
         ei->setVertex(5, VV);
         optimizer.addEdge(ei);
 
-        EdgeGyrRW *egr = new EdgeGyrRW();
+        EdgeGyrBias *egr = new EdgeGyrBias();
         egr->setVertex(0, VGk);
         egr->setVertex(1, VG);
         Eigen::Matrix3d InfoG = pFrame->mpImuFromPrevKF->C.block<3, 3>(9, 9).cast<double>().inverse();
         egr->setInformation(InfoG);
         optimizer.addEdge(egr);
 
-        EdgeAccRW *ear = new EdgeAccRW();
+        EdgeAccBias *ear = new EdgeAccBias();
         ear->setVertex(0, VAk);
         ear->setVertex(1, VA);
         Eigen::Matrix3d InfoA = pFrame->mpImuFromPrevKF->C.block<3, 3>(12, 12).cast<double>().inverse();
@@ -949,7 +941,7 @@ namespace ORB_SLAM3 {
 
             // For monocular observations
             for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-                EdgeMonoOnlyPose *e = vpEdgesMono[i];
+                EdgeMonoOnlyWithImu *e = vpEdgesMono[i];
 
                 const size_t idx = vnIndexEdgeMono[i];
 
@@ -976,7 +968,7 @@ namespace ORB_SLAM3 {
 
             // For stereo observations
             for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-                EdgeStereoOnlyPose *e = vpEdgesStereo[i];
+                EdgeStereoOnlyWithImu *e = vpEdgesStereo[i];
 
                 const size_t idx = vnIndexEdgeStereo[i];
 
@@ -1014,8 +1006,8 @@ namespace ORB_SLAM3 {
             nBad = 0;
             const float chi2MonoOut = 18.f;
             const float chi2StereoOut = 24.f;
-            EdgeMonoOnlyPose *e1;
-            EdgeStereoOnlyPose *e2;
+            EdgeMonoOnlyWithImu *e1;
+            EdgeStereoOnlyWithImu *e2;
             for (size_t i = 0, iend = vnIndexEdgeMono.size(); i < iend; i++) {
                 const size_t idx = vnIndexEdgeMono[i];
                 e1 = vpEdgesMono[i];
@@ -1053,7 +1045,7 @@ namespace ORB_SLAM3 {
 
         int tot_in = 0, tot_out = 0;
         for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            EdgeMonoOnlyPose *e = vpEdgesMono[i];
+            EdgeMonoOnlyWithImu *e = vpEdgesMono[i];
 
             const size_t idx = vnIndexEdgeMono[i];
 
@@ -1065,7 +1057,7 @@ namespace ORB_SLAM3 {
         }
 
         for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-            EdgeStereoOnlyPose *e = vpEdgesStereo[i];
+            EdgeStereoOnlyWithImu *e = vpEdgesStereo[i];
 
             const size_t idx = vnIndexEdgeStereo[i];
 
@@ -1076,7 +1068,7 @@ namespace ORB_SLAM3 {
                 tot_out++;
         }
 
-        pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
+        pFrame->mpcpi = new PriorRVPAndBiasGA(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
                                               VA->estimate(), H);
         return nInitialCorrespondences - nBad;
     }
@@ -1098,7 +1090,7 @@ namespace ORB_SLAM3 {
         int nInitialCorrespondences = 0;
 
         // Set Current Frame vertex
-        VertexPose *VP = new VertexPose(pFrame);
+        VertexPose6DoF *VP = new VertexPose6DoF(pFrame);
         VP->setId(0);
         VP->setFixed(false);
         optimizer.addVertex(VP);
@@ -1106,7 +1098,7 @@ namespace ORB_SLAM3 {
         VV->setId(1);
         VV->setFixed(false);
         optimizer.addVertex(VV);
-        VertexGyroBias *VG = new VertexGyroBias(pFrame);
+        VertexGyrBias *VG = new VertexGyrBias(pFrame);
         VG->setId(2);
         VG->setFixed(false);
         optimizer.addVertex(VG);
@@ -1120,8 +1112,8 @@ namespace ORB_SLAM3 {
         const int Nleft = -1;
         const bool bRight = false;
 
-        vector<EdgeMonoOnlyPose *> vpEdgesMono;
-        vector<EdgeStereoOnlyPose *> vpEdgesStereo;
+        vector<EdgeMonoOnlyWithImu *> vpEdgesMono;
+        vector<EdgeStereoOnlyWithImu *> vpEdgesStereo;
         vector<size_t> vnIndexEdgeMono;
         vector<size_t> vnIndexEdgeStereo;
         vpEdgesMono.reserve(N);
@@ -1149,7 +1141,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 2, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y;
 
-                        EdgeMonoOnlyPose *e = new EdgeMonoOnlyPose(pMP->GetWorldPos(), 0);
+                        EdgeMonoOnlyWithImu *e = new EdgeMonoOnlyWithImu(pMP->GetWorldPos(), 0);
 
                         e->setVertex(0, VP);
                         e->setMeasurement(obs);
@@ -1166,8 +1158,8 @@ namespace ORB_SLAM3 {
 
                         optimizer.addEdge(e);
 
-                        vpEdgesMono.push_back(e);
-                        vnIndexEdgeMono.push_back(i);
+                        vpEdgesMono.emplace_back(e);
+                        vnIndexEdgeMono.emplace_back(i);
                     } else { // Stereo observation
                         nInitialStereoCorrespondences++;
                         pFrame->mvbOutlier[i] = false;
@@ -1177,7 +1169,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 3, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
-                        EdgeStereoOnlyPose *e = new EdgeStereoOnlyPose(pMP->GetWorldPos());
+                        EdgeStereoOnlyWithImu *e = new EdgeStereoOnlyWithImu(pMP->GetWorldPos());
 
                         e->setVertex(0, VP);
                         e->setMeasurement(obs);
@@ -1194,8 +1186,8 @@ namespace ORB_SLAM3 {
 
                         optimizer.addEdge(e);
 
-                        vpEdgesStereo.push_back(e);
-                        vnIndexEdgeStereo.push_back(i);
+                        vpEdgesStereo.emplace_back(e);
+                        vnIndexEdgeStereo.emplace_back(i);
                     }
                 }
             }
@@ -1206,7 +1198,7 @@ namespace ORB_SLAM3 {
         // Set Previous Frame Vertex
         Frame *pFp = pFrame->mpPrevFrame;
 
-        VertexPose *VPk = new VertexPose(pFp);
+        VertexPose6DoF *VPk = new VertexPose6DoF(pFp);
         VPk->setId(4);
         VPk->setFixed(false);
         optimizer.addVertex(VPk);
@@ -1214,7 +1206,7 @@ namespace ORB_SLAM3 {
         VVk->setId(5);
         VVk->setFixed(false);
         optimizer.addVertex(VVk);
-        VertexGyroBias *VGk = new VertexGyroBias(pFp);
+        VertexGyrBias *VGk = new VertexGyrBias(pFp);
         VGk->setId(6);
         VGk->setFixed(false);
         optimizer.addVertex(VGk);
@@ -1223,7 +1215,7 @@ namespace ORB_SLAM3 {
         VAk->setFixed(false);
         optimizer.addVertex(VAk);
 
-        EdgeInertial *ei = new EdgeInertial(pFrame->mpImuFromPrevFrame);
+        EdgeImuRVPOnly *ei = new EdgeImuRVPOnly(pFrame->mpImuFromPrevFrame);
 
         ei->setVertex(0, VPk);
         ei->setVertex(1, VVk);
@@ -1233,14 +1225,14 @@ namespace ORB_SLAM3 {
         ei->setVertex(5, VV);
         optimizer.addEdge(ei);
 
-        EdgeGyrRW *egr = new EdgeGyrRW();
+        EdgeGyrBias *egr = new EdgeGyrBias();
         egr->setVertex(0, VGk);
         egr->setVertex(1, VG);
         Eigen::Matrix3d InfoG = pFrame->mpImuFromPrevKF->C.block<3, 3>(9, 9).cast<double>().inverse();
         egr->setInformation(InfoG);
         optimizer.addEdge(egr);
 
-        EdgeAccRW *ear = new EdgeAccRW();
+        EdgeAccBias *ear = new EdgeAccBias();
         ear->setVertex(0, VAk);
         ear->setVertex(1, VA);
         Eigen::Matrix3d InfoA = pFrame->mpImuFromPrevKF->C.block<3, 3>(12, 12).cast<double>().inverse();
@@ -1251,7 +1243,7 @@ namespace ORB_SLAM3 {
             Verbose::PrintMess("pFp->mpcpi does not exist!!!\nPrevious Frame " + to_string(pFp->mnId),
                                Verbose::VERBOSITY_NORMAL);
 
-        EdgePriorPoseImu *ep = new EdgePriorPoseImu(pFp->mpcpi);
+        EdgePriorRVPAndBiasGA *ep = new EdgePriorRVPAndBiasGA(pFp->mpcpi);
 
         ep->setVertex(0, VPk);
         ep->setVertex(1, VVk);
@@ -1287,7 +1279,7 @@ namespace ORB_SLAM3 {
             float chi2close = 1.5 * chi2Mono[it];
 
             for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-                EdgeMonoOnlyPose *e = vpEdgesMono[i];
+                EdgeMonoOnlyWithImu *e = vpEdgesMono[i];
 
                 const size_t idx = vnIndexEdgeMono[i];
                 bool bClose = pFrame->mvpMPs[idx]->mTrackDepth < 10.f;
@@ -1314,7 +1306,7 @@ namespace ORB_SLAM3 {
             }
 
             for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-                EdgeStereoOnlyPose *e = vpEdgesStereo[i];
+                EdgeStereoOnlyWithImu *e = vpEdgesStereo[i];
 
                 const size_t idx = vnIndexEdgeStereo[i];
 
@@ -1351,8 +1343,8 @@ namespace ORB_SLAM3 {
             nBad = 0;
             const float chi2MonoOut = 18.f;
             const float chi2StereoOut = 24.f;
-            EdgeMonoOnlyPose *e1;
-            EdgeStereoOnlyPose *e2;
+            EdgeMonoOnlyWithImu *e1;
+            EdgeStereoOnlyWithImu *e2;
             for (size_t i = 0, iend = vnIndexEdgeMono.size(); i < iend; i++) {
                 const size_t idx = vnIndexEdgeMono[i];
                 e1 = vpEdgesMono[i];
@@ -1406,7 +1398,7 @@ namespace ORB_SLAM3 {
 
         int tot_in = 0, tot_out = 0;
         for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            EdgeMonoOnlyPose *e = vpEdgesMono[i];
+            EdgeMonoOnlyWithImu *e = vpEdgesMono[i];
 
             const size_t idx = vnIndexEdgeMono[i];
 
@@ -1418,7 +1410,7 @@ namespace ORB_SLAM3 {
         }
 
         for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-            EdgeStereoOnlyPose *e = vpEdgesStereo[i];
+            EdgeStereoOnlyWithImu *e = vpEdgesStereo[i];
 
             const size_t idx = vnIndexEdgeStereo[i];
 
@@ -1431,7 +1423,7 @@ namespace ORB_SLAM3 {
 
         H = Marginalize(H, 0, 14);
 
-        pFrame->mpcpi = new ConstraintPoseImu(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
+        pFrame->mpcpi = new PriorRVPAndBiasGA(VP->estimate().Rwb, VP->estimate().twb, VV->estimate(), VG->estimate(),
                                               VA->estimate(), H.block<15, 15>(15, 15));
         delete pFp->mpcpi;
         pFp->mpcpi = NULL;
@@ -1444,7 +1436,7 @@ namespace ORB_SLAM3 {
         // Local KeyFrames: First Breath Search from Current Keyframe
         list<KeyFrame *> lLocalKeyFrames;
 
-        lLocalKeyFrames.push_back(pKF);
+        lLocalKeyFrames.emplace_back(pKF);
         pKF->mnBAOptFlagInLM = pKF->mnId;
         Map *pCurrentMap = pKF->GetMap();
 
@@ -1453,7 +1445,7 @@ namespace ORB_SLAM3 {
             KeyFrame *pKFi = vNeighKFs[i];
             pKFi->mnBAOptFlagInLM = pKF->mnId;
             if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap)
-                lLocalKeyFrames.push_back(pKFi);
+                lLocalKeyFrames.emplace_back(pKFi);
         }
 
         // Local MapPoints seen in Local KeyFrames
@@ -1472,7 +1464,7 @@ namespace ORB_SLAM3 {
                 if (pMP)
                     if (!pMP->isBad() && pMP->GetMap() == pCurrentMap) {
                         if (pMP->mnBAFlagInLocalMapping != pKF->mnId) {
-                            lLocalMapPoints.push_back(pMP);
+                            lLocalMapPoints.emplace_back(pMP);
                             pMP->mnBAFlagInLocalMapping = pKF->mnId;
                         }
                     }
@@ -1490,7 +1482,7 @@ namespace ORB_SLAM3 {
                 if (pKFi->mnBAOptFlagInLM != pKF->mnId && pKFi->mnBAFixFlagInLM != pKF->mnId) {
                     pKFi->mnBAFixFlagInLM = pKF->mnId;
                     if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap)
-                        lFixedKFs.push_back(pKFi);
+                        lFixedKFs.emplace_back(pKFi);
                 }
             }
         }
@@ -1622,9 +1614,9 @@ namespace ORB_SLAM3 {
                         e->pCamera = pKFi->mpCamera;
 
                         optimizer.addEdge(e);
-                        vpEdgesMono.push_back(e);
-                        vpEdgeKFMono.push_back(pKFi);
-                        vpMapPointEdgeMono.push_back(pMP);
+                        vpEdgesMono.emplace_back(e);
+                        vpEdgeKFMono.emplace_back(pKFi);
+                        vpMapPointEdgeMono.emplace_back(pMP);
 
                         nEdges++;
                     } else if (leftIndex != -1 && pKFi->mvfXInRight[get<0>(mit->second)] >= 0)// Stereo observation
@@ -1654,9 +1646,9 @@ namespace ORB_SLAM3 {
                         e->bf = pKFi->mfBaselineFocal;
 
                         optimizer.addEdge(e);
-                        vpEdgesStereo.push_back(e);
-                        vpEdgeKFStereo.push_back(pKFi);
-                        vpMapPointEdgeStereo.push_back(pMP);
+                        vpEdgesStereo.emplace_back(e);
+                        vpEdgeKFStereo.emplace_back(pKFi);
+                        vpMapPointEdgeStereo.emplace_back(pMP);
 
                         nEdges++;
                     }
@@ -1685,7 +1677,7 @@ namespace ORB_SLAM3 {
 
             if (e->chi2() > 5.991 || !e->isDepthPositive()) {
                 KeyFrame *pKFi = vpEdgeKFMono[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
+                vToErase.emplace_back(make_pair(pKFi, pMP));
             }
         }
 
@@ -1698,7 +1690,7 @@ namespace ORB_SLAM3 {
 
             if (e->chi2() > 7.815 || !e->isDepthPositive()) {
                 KeyFrame *pKFi = vpEdgeKFStereo[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
+                vToErase.emplace_back(make_pair(pKFi, pMP));
             }
         }
 
@@ -1756,11 +1748,11 @@ namespace ORB_SLAM3 {
         list<KeyFrame *> lpOptVisKFs;
 
         vpOptImuKFs.reserve(nMaxOptImuKFs);
-        vpOptImuKFs.push_back(pCurKF);
+        vpOptImuKFs.emplace_back(pCurKF);
         pCurKF->mnBAOptFlagInLM = pCurKF->mnId;
         for (int i = 1; i < nMaxOptImuKFs; i++) {
             if (vpOptImuKFs.back()->mPrevKF) {
-                vpOptImuKFs.push_back(vpOptImuKFs.back()->mPrevKF);
+                vpOptImuKFs.emplace_back(vpOptImuKFs.back()->mPrevKF);
                 vpOptImuKFs.back()->mnBAOptFlagInLM = pCurKF->mnId;
             } else {
                 break;
@@ -1781,7 +1773,7 @@ namespace ORB_SLAM3 {
                     continue;
                 }
                 if (pMP->mnBAFlagInLocalMapping != pCurKF->mnId) {
-                    lLocalMapPoints.push_back(pMP);
+                    lLocalMapPoints.emplace_back(pMP);
                     pMP->mnBAFlagInLocalMapping = pCurKF->mnId;
                 }
             }
@@ -1790,12 +1782,12 @@ namespace ORB_SLAM3 {
         // Fixed Keyframe: First frame previous KF to optimization window)
         list<KeyFrame *> lFixedKFs;
         if (vpOptImuKFs.back()->mPrevKF) {
-            lFixedKFs.push_back(vpOptImuKFs.back()->mPrevKF);
+            lFixedKFs.emplace_back(vpOptImuKFs.back()->mPrevKF);
             vpOptImuKFs.back()->mPrevKF->mnBAFixFlagInLM = pCurKF->mnId;
         } else {
             vpOptImuKFs.back()->mnBAOptFlagInLM = 0;
             vpOptImuKFs.back()->mnBAFixFlagInLM = pCurKF->mnId;
-            lFixedKFs.push_back(vpOptImuKFs.back());
+            lFixedKFs.emplace_back(vpOptImuKFs.back());
             vpOptImuKFs.pop_back();
         }
 
@@ -1809,7 +1801,7 @@ namespace ORB_SLAM3 {
                 continue;
             pKFi->mnBAOptFlagInLM = pCurKF->mnId;
             if (!pKFi->isBad() && pKFi->GetMap() == pCurrentMap) {
-                lpOptVisKFs.push_back(pKFi);
+                lpOptVisKFs.emplace_back(pKFi);
                 vector<MapPoint *> vpMPs = pKFi->GetMapPointsInKF();
                 for (vector<MapPoint *>::iterator vit = vpMPs.begin(), vend = vpMPs.end(); vit != vend; vit++) {
                     MapPoint *pMP = *vit;
@@ -1820,7 +1812,7 @@ namespace ORB_SLAM3 {
                         continue;
                     }
                     if (pMP->mnBAFlagInLocalMapping != pCurKF->mnId) {
-                        lLocalMapPoints.push_back(pMP);
+                        lLocalMapPoints.emplace_back(pMP);
                         pMP->mnBAFlagInLocalMapping = pCurKF->mnId;
                     }
                 }
@@ -1837,7 +1829,7 @@ namespace ORB_SLAM3 {
                 if (pKFi->mnBAOptFlagInLM != pCurKF->mnId && pKFi->mnBAFixFlagInLM != pCurKF->mnId) {
                     pKFi->mnBAFixFlagInLM = pCurKF->mnId;
                     if (!pKFi->isBad()) {
-                        lFixedKFs.push_back(pKFi);
+                        lFixedKFs.emplace_back(pKFi);
                         break;
                     }
                 }
@@ -1871,7 +1863,7 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < nOptImuKFsNum; i++) {
             KeyFrame *pKFi = vpOptImuKFs[i];
 
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(false);
             optimizer.addVertex(VP);
@@ -1881,7 +1873,7 @@ namespace ORB_SLAM3 {
                 VV->setId(nCurKFId + 3 * (pKFi->mnId) + 1);
                 VV->setFixed(false);
                 optimizer.addVertex(VV);
-                VertexGyroBias *VG = new VertexGyroBias(pKFi);
+                VertexGyrBias *VG = new VertexGyrBias(pKFi);
                 VG->setId(nCurKFId + 3 * (pKFi->mnId) + 2);
                 VG->setFixed(false);
                 optimizer.addVertex(VG);
@@ -1897,7 +1889,7 @@ namespace ORB_SLAM3 {
         // Set Local visual KeyFrame vertices
         for (list<KeyFrame *>::iterator it = lpOptVisKFs.begin(), itEnd = lpOptVisKFs.end(); it != itEnd; it++) {
             KeyFrame *pKFi = *it;
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(false);
             optimizer.addVertex(VP);
@@ -1909,7 +1901,7 @@ namespace ORB_SLAM3 {
         for (list<KeyFrame *>::iterator lit = lFixedKFs.begin(), lend = lFixedKFs.end();
              lit != lend; lit++) {
             KeyFrame *pKFi = *lit;
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(true);
             optimizer.addVertex(VP);
@@ -1922,7 +1914,7 @@ namespace ORB_SLAM3 {
                 VV->setId(nCurKFId + 3 * (pKFi->mnId) + 1);
                 VV->setFixed(true);
                 optimizer.addVertex(VV);
-                VertexGyroBias *VG = new VertexGyroBias(pKFi);
+                VertexGyrBias *VG = new VertexGyrBias(pKFi);
                 VG->setId(nCurKFId + 3 * (pKFi->mnId) + 2);
                 VG->setFixed(true);
                 optimizer.addVertex(VG);
@@ -1934,9 +1926,9 @@ namespace ORB_SLAM3 {
         }
 
         // Create intertial constraints
-        vector<EdgeInertial *> vei(nOptImuKFsNum, (EdgeInertial *) NULL);
-        vector<EdgeGyrRW *> vegr(nOptImuKFsNum, (EdgeGyrRW *) NULL);
-        vector<EdgeAccRW *> vear(nOptImuKFsNum, (EdgeAccRW *) NULL);
+        vector<EdgeImuRVPOnly *> vei(nOptImuKFsNum, (EdgeImuRVPOnly *) NULL);
+        vector<EdgeGyrBias *> vegr(nOptImuKFsNum, (EdgeGyrBias *) NULL);
+        vector<EdgeAccBias *> vear(nOptImuKFsNum, (EdgeAccBias *) NULL);
 
         for (int i = 0; i < nOptImuKFsNum; i++) {
             KeyFrame *pKFi = vpOptImuKFs[i];
@@ -1961,7 +1953,7 @@ namespace ORB_SLAM3 {
                     continue;
                 }
 
-                vei[i] = new EdgeInertial(pKFi->mpImuPreintegrated);
+                vei[i] = new EdgeImuRVPOnly(pKFi->mpImuPreintegrated);
                 vei[i]->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP1));
                 vei[i]->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV1));
                 vei[i]->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG1));
@@ -1982,14 +1974,14 @@ namespace ORB_SLAM3 {
                 }
                 optimizer.addEdge(vei[i]);
 
-                vegr[i] = new EdgeGyrRW();
+                vegr[i] = new EdgeGyrBias();
                 vegr[i]->setVertex(0, VG1);
                 vegr[i]->setVertex(1, VG2);
                 Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
                 vegr[i]->setInformation(InfoG);
                 optimizer.addEdge(vegr[i]);
 
-                vear[i] = new EdgeAccRW();
+                vear[i] = new EdgeAccBias();
                 vear[i]->setVertex(0, VA1);
                 vear[i]->setVertex(1, VA2);
                 Eigen::Matrix3d InfoA = pKFi->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
@@ -2004,7 +1996,7 @@ namespace ORB_SLAM3 {
         const int nExpectedSize = (nOptImuKFsNum + lFixedKFs.size()) * lLocalMapPoints.size();
 
         // Mono
-        vector<EdgeMono *> vpEdgesMono;
+        vector<EdgeMonoAndMPWithImu *> vpEdgesMono;
         vpEdgesMono.reserve(nExpectedSize);
 
         vector<KeyFrame *> vpEdgeKFMono;
@@ -2014,7 +2006,7 @@ namespace ORB_SLAM3 {
         vpMapPointEdgeMono.reserve(nExpectedSize);
 
         // Stereo
-        vector<EdgeStereo *> vpEdgesStereo;
+        vector<EdgeStereoAndMPWithImu *> vpEdgesStereo;
         vpEdgesStereo.reserve(nExpectedSize);
 
         vector<KeyFrame *> vpEdgeKFStereo;
@@ -2073,7 +2065,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 2, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y;
 
-                        EdgeMono *e = new EdgeMono(0);
+                        EdgeMonoAndMPWithImu *e = new EdgeMonoAndMPWithImu(0);
 
                         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
                         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
@@ -2090,9 +2082,9 @@ namespace ORB_SLAM3 {
                         rk->setDelta(thHuberMono);
 
                         optimizer.addEdge(e);
-                        vpEdgesMono.push_back(e);
-                        vpEdgeKFMono.push_back(pKFi);
-                        vpMapPointEdgeMono.push_back(pMP);
+                        vpEdgesMono.emplace_back(e);
+                        vpEdgeKFMono.emplace_back(pKFi);
+                        vpMapPointEdgeMono.emplace_back(pMP);
                     }
                         // Stereo-observation
                     else if (leftIndex != -1)// Stereo observation
@@ -2104,7 +2096,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 3, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
-                        EdgeStereo *e = new EdgeStereo(0);
+                        EdgeStereoAndMPWithImu *e = new EdgeStereoAndMPWithImu(0);
 
                         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
                         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
@@ -2120,9 +2112,9 @@ namespace ORB_SLAM3 {
                         rk->setDelta(thHuberStereo);
 
                         optimizer.addEdge(e);
-                        vpEdgesStereo.push_back(e);
-                        vpEdgeKFStereo.push_back(pKFi);
-                        vpMapPointEdgeStereo.push_back(pMP);
+                        vpEdgesStereo.emplace_back(e);
+                        vpEdgeKFStereo.emplace_back(pKFi);
+                        vpMapPointEdgeStereo.emplace_back(pMP);
                     }
 
                 }
@@ -2149,7 +2141,7 @@ namespace ORB_SLAM3 {
         // Check inlier observations
         // Mono
         for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            EdgeMono *e = vpEdgesMono[i];
+            EdgeMonoAndMPWithImu *e = vpEdgesMono[i];
             MapPoint *pMP = vpMapPointEdgeMono[i];
             bool bClose = pMP->mTrackDepth < 10.f;
 
@@ -2159,14 +2151,14 @@ namespace ORB_SLAM3 {
             if ((e->chi2() > chi2Mono2 && !bClose) || (e->chi2() > 1.5f * chi2Mono2 && bClose) ||
                 !e->isDepthPositive()) {
                 KeyFrame *pKFi = vpEdgeKFMono[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
+                vToErase.emplace_back(make_pair(pKFi, pMP));
             }
         }
 
 
         // Stereo
         for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-            EdgeStereo *e = vpEdgesStereo[i];
+            EdgeStereoAndMPWithImu *e = vpEdgesStereo[i];
             MapPoint *pMP = vpMapPointEdgeStereo[i];
 
             if (pMP->isBad())
@@ -2174,7 +2166,7 @@ namespace ORB_SLAM3 {
 
             if (e->chi2() > chi2Stereo2) {
                 KeyFrame *pKFi = vpEdgeKFStereo[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
+                vToErase.emplace_back(make_pair(pKFi, pMP));
             }
         }
 
@@ -2208,7 +2200,7 @@ namespace ORB_SLAM3 {
         nOptImuKFsNum = vpOptImuKFs.size();
         for (int i = 0; i < nOptImuKFsNum; i++) {
             KeyFrame *pKFi = vpOptImuKFs[i];
-            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
+            VertexPose6DoF *VP = static_cast<VertexPose6DoF *>(optimizer.vertex(pKFi->mnId));
             Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
             pKFi->SetPose(Tcw);
             pKFi->mnBAOptFlagInLM = 0;
@@ -2216,7 +2208,7 @@ namespace ORB_SLAM3 {
             if (pKFi->bImu) {
                 VertexVelocity *VV = static_cast<VertexVelocity *>(optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 1));
                 pKFi->SetVelocity(VV->estimate().cast<float>());
-                VertexGyroBias *VG = static_cast<VertexGyroBias *>(optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 2));
+                VertexGyrBias *VG = static_cast<VertexGyrBias *>(optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 2));
                 VertexAccBias *VA = static_cast<VertexAccBias *>(optimizer.vertex(nCurKFId + 3 * (pKFi->mnId) + 3));
                 Vector6d b;
                 b << VG->estimate(), VA->estimate();
@@ -2227,7 +2219,7 @@ namespace ORB_SLAM3 {
         // Local visual KeyFrame
         for (list<KeyFrame *>::iterator it = lpOptVisKFs.begin(), itEnd = lpOptVisKFs.end(); it != itEnd; it++) {
             KeyFrame *pKFi = *it;
-            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
+            VertexPose6DoF *VP = static_cast<VertexPose6DoF *>(optimizer.vertex(pKFi->mnId));
             Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
             pKFi->SetPose(Tcw);
             pKFi->mnBAOptFlagInLM = 0;
@@ -2926,7 +2918,7 @@ namespace ORB_SLAM3 {
                     vPoint2->setFixed(true);
                     optimizer.addVertex(vPoint2);
 
-                    vIdsOnlyInKF2.push_back(id2);
+                    vIdsOnlyInKF2.emplace_back(id2);
                 }
                 continue;
             }
@@ -2995,11 +2987,11 @@ namespace ORB_SLAM3 {
             rk2->setDelta(deltaHuber);
             optimizer.addEdge(e21);
 
-            vpEdges12.push_back(e12);
-            vpEdges21.push_back(e21);
-            vnIndexEdge.push_back(i);
+            vpEdges12.emplace_back(e12);
+            vpEdges21.emplace_back(e21);
+            vnIndexEdge.emplace_back(i);
 
-            vbIsInKF2.push_back(inKF2);
+            vbIsInKF2.emplace_back(inKF2);
         }
 
         // Optimize!
@@ -3178,7 +3170,7 @@ namespace ORB_SLAM3 {
             KeyFrame *pKFi = vpKFs[i];
             if (pKFi->mnId > maxKFid)
                 continue;
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(true);
             optimizer.addVertex(VP);
@@ -3194,7 +3186,7 @@ namespace ORB_SLAM3 {
         }
 
         // Biases
-        VertexGyroBias *VG = new VertexGyroBias(vpKFs.front());
+        VertexGyrBias *VG = new VertexGyrBias(vpKFs.front());
         VG->setId(maxKFid * 2 + 2);
         if (bFixedVel)
             VG->setFixed(true);
@@ -3213,19 +3205,19 @@ namespace ORB_SLAM3 {
         Eigen::Vector3f bprior;
         bprior.setZero();
 
-        EdgePriorAcc *epa = new EdgePriorAcc(bprior);
+        EdgePriorAccBias *epa = new EdgePriorAccBias(bprior);
         epa->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VA));
         double infoPriorA = priorA;
         epa->setInformation(infoPriorA * Eigen::Matrix3d::Identity());
         optimizer.addEdge(epa);
-        EdgePriorGyro *epg = new EdgePriorGyro(bprior);
+        EdgePriorGyrBias *epg = new EdgePriorGyrBias(bprior);
         epg->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG));
         double infoPriorG = priorG;
         epg->setInformation(infoPriorG * Eigen::Matrix3d::Identity());
         optimizer.addEdge(epg);
 
         // Gravity and scale
-        VertexGDir *VGDir = new VertexGDir(Rwg);
+        VertexGraDir *VGDir = new VertexGraDir(Rwg);
         VGDir->setId(maxKFid * 2 + 4);
         VGDir->setFixed(false);
         optimizer.addVertex(VGDir);
@@ -3236,7 +3228,7 @@ namespace ORB_SLAM3 {
 
         // Graph edges
         // IMU links with gravity and scale
-        vector<EdgeInertialGS *> vpei;
+        vector<EdgeImuRVPWithGS *> vpei;
         vpei.reserve(vpKFs.size());
         vector<pair<KeyFrame *, KeyFrame *> > vppUsedKF;
         vppUsedKF.reserve(vpKFs.size());
@@ -3266,7 +3258,7 @@ namespace ORB_SLAM3 {
 
                     continue;
                 }
-                EdgeInertialGS *ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
+                EdgeImuRVPWithGS *ei = new EdgeImuRVPWithGS(pKFi->mpImuPreintegrated);
                 ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP1));
                 ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV1));
                 ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG));
@@ -3276,9 +3268,9 @@ namespace ORB_SLAM3 {
                 ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VGDir));
                 ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VS));
 
-                vpei.push_back(ei);
+                vpei.emplace_back(ei);
 
-                vppUsedKF.push_back(make_pair(pKFi->mPrevKF, pKFi));
+                vppUsedKF.emplace_back(make_pair(pKFi->mPrevKF, pKFi));
                 optimizer.addEdge(ei);
 
             }
@@ -3295,7 +3287,7 @@ namespace ORB_SLAM3 {
 
         // Recover optimized data
         // Biases
-        VG = static_cast<VertexGyroBias *>(optimizer.vertex(maxKFid * 2 + 2));
+        VG = static_cast<VertexGyrBias *>(optimizer.vertex(maxKFid * 2 + 2));
         VA = static_cast<VertexAccBias *>(optimizer.vertex(maxKFid * 2 + 3));
         Vector6d vb;
         vb << VG->estimate(), VA->estimate();
@@ -3352,7 +3344,7 @@ namespace ORB_SLAM3 {
             KeyFrame *pKFi = vpKFs[i];
             if (pKFi->mnId > maxKFid)
                 continue;
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(true);
             optimizer.addVertex(VP);
@@ -3365,7 +3357,7 @@ namespace ORB_SLAM3 {
         }
 
         // Biases
-        VertexGyroBias *VG = new VertexGyroBias(vpKFs.front());
+        VertexGyrBias *VG = new VertexGyrBias(vpKFs.front());
         VG->setId(maxKFid * 2 + 2);
         VG->setFixed(false);
         optimizer.addVertex(VG);
@@ -3379,19 +3371,19 @@ namespace ORB_SLAM3 {
         Eigen::Vector3f bprior;
         bprior.setZero();
 
-        EdgePriorAcc *epa = new EdgePriorAcc(bprior);
+        EdgePriorAccBias *epa = new EdgePriorAccBias(bprior);
         epa->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VA));
         double infoPriorA = priorA;
         epa->setInformation(infoPriorA * Eigen::Matrix3d::Identity());
         optimizer.addEdge(epa);
-        EdgePriorGyro *epg = new EdgePriorGyro(bprior);
+        EdgePriorGyrBias *epg = new EdgePriorGyrBias(bprior);
         epg->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG));
         double infoPriorG = priorG;
         epg->setInformation(infoPriorG * Eigen::Matrix3d::Identity());
         optimizer.addEdge(epg);
 
         // Gravity and scale
-        VertexGDir *VGDir = new VertexGDir(Eigen::Matrix3d::Identity());
+        VertexGraDir *VGDir = new VertexGraDir(Eigen::Matrix3d::Identity());
         VGDir->setId(maxKFid * 2 + 4);
         VGDir->setFixed(true);
         optimizer.addVertex(VGDir);
@@ -3402,7 +3394,7 @@ namespace ORB_SLAM3 {
 
         // Graph edges
         // IMU links with gravity and scale
-        vector<EdgeInertialGS *> vpei;
+        vector<EdgeImuRVPWithGS *> vpei;
         vpei.reserve(vpKFs.size());
         vector<pair<KeyFrame *, KeyFrame *> > vppUsedKF;
         vppUsedKF.reserve(vpKFs.size());
@@ -3429,7 +3421,7 @@ namespace ORB_SLAM3 {
 
                     continue;
                 }
-                EdgeInertialGS *ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
+                EdgeImuRVPWithGS *ei = new EdgeImuRVPWithGS(pKFi->mpImuPreintegrated);
                 ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP1));
                 ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV1));
                 ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG));
@@ -3439,9 +3431,9 @@ namespace ORB_SLAM3 {
                 ei->setVertex(6, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VGDir));
                 ei->setVertex(7, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VS));
 
-                vpei.push_back(ei);
+                vpei.emplace_back(ei);
 
-                vppUsedKF.push_back(make_pair(pKFi->mPrevKF, pKFi));
+                vppUsedKF.emplace_back(make_pair(pKFi->mPrevKF, pKFi));
                 optimizer.addEdge(ei);
 
             }
@@ -3455,7 +3447,7 @@ namespace ORB_SLAM3 {
 
         // Recover optimized data
         // Biases
-        VG = static_cast<VertexGyroBias *>(optimizer.vertex(maxKFid * 2 + 2));
+        VG = static_cast<VertexGyrBias *>(optimizer.vertex(maxKFid * 2 + 2));
         VA = static_cast<VertexAccBias *>(optimizer.vertex(maxKFid * 2 + 3));
         Vector6d vb;
         vb << VG->estimate(), VA->estimate();
@@ -3505,7 +3497,7 @@ namespace ORB_SLAM3 {
             KeyFrame *pKFi = vpKFs[i];
             if (pKFi->mnId > maxKFid)
                 continue;
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(true);
             optimizer.addVertex(VP);
@@ -3516,7 +3508,7 @@ namespace ORB_SLAM3 {
             optimizer.addVertex(VV);
 
             // Vertex of fixed biases
-            VertexGyroBias *VG = new VertexGyroBias(vpKFs.front());
+            VertexGyrBias *VG = new VertexGyrBias(vpKFs.front());
             VG->setId(2 * (maxKFid + 1) + (pKFi->mnId));
             VG->setFixed(true);
             optimizer.addVertex(VG);
@@ -3527,7 +3519,7 @@ namespace ORB_SLAM3 {
         }
 
         // Gravity and scale
-        VertexGDir *VGDir = new VertexGDir(Rwg);
+        VertexGraDir *VGDir = new VertexGraDir(Rwg);
         VGDir->setId(4 * (maxKFid + 1));
         VGDir->setFixed(false);
         optimizer.addVertex(VGDir);
@@ -3562,7 +3554,7 @@ namespace ORB_SLAM3 {
                     continue;
                 }
                 count_edges++;
-                EdgeInertialGS *ei = new EdgeInertialGS(pKFi->mpImuPreintegrated);
+                EdgeImuRVPWithGS *ei = new EdgeImuRVPWithGS(pKFi->mpImuPreintegrated);
                 ei->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP1));
                 ei->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV1));
                 ei->setVertex(2, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VG));
@@ -3642,7 +3634,7 @@ namespace ORB_SLAM3 {
                     if (!pMPi->isBad() && pMPi->GetMap() == pCurrentMap)
 
                         if (pMPi->mnBALocalForMerge != pMainKF->mnId) {
-                            vpMPs.push_back(pMPi);
+                            vpMPs.emplace_back(pMPi);
                             pMPi->mnBALocalForMerge = pMainKF->mnId;
                             numInsertedPoints++;
                         }
@@ -3673,7 +3665,7 @@ namespace ORB_SLAM3 {
                 if (pMPi) {
                     if (!pMPi->isBad() && pMPi->GetMap() == pCurrentMap) {
                         if (pMPi->mnBALocalForMerge != pMainKF->mnId) {
-                            vpMPs.push_back(pMPi);
+                            vpMPs.emplace_back(pMPi);
                             pMPi->mnBALocalForMerge = pMainKF->mnId;
                             numInsertedPoints++;
                         }
@@ -3760,9 +3752,9 @@ namespace ORB_SLAM3 {
 
                     optimizer.addEdge(e);
 
-                    vpEdgesMono.push_back(e);
-                    vpEdgeKFMono.push_back(pKF);
-                    vpMapPointEdgeMono.push_back(pMPi);
+                    vpEdgesMono.emplace_back(e);
+                    vpEdgeKFMono.emplace_back(pKF);
+                    vpMapPointEdgeMono.emplace_back(pMPi);
 
                     mpObsKFs[pKF]++;
                 } else // RGBD or Stereo
@@ -3793,9 +3785,9 @@ namespace ORB_SLAM3 {
 
                     optimizer.addEdge(e);
 
-                    vpEdgesStereo.push_back(e);
-                    vpEdgeKFStereo.push_back(pKF);
-                    vpMapPointEdgeStereo.push_back(pMPi);
+                    vpEdgesStereo.emplace_back(e);
+                    vpEdgeKFStereo.emplace_back(pKF);
+                    vpMapPointEdgeStereo.emplace_back(pMPi);
 
                     mpObsKFs[pKF]++;
                 }
@@ -3871,7 +3863,7 @@ namespace ORB_SLAM3 {
 
             if (e->chi2() > 5.991 || !e->isDepthPositive()) {
                 KeyFrame *pKFi = vpEdgeKFMono[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
+                vToErase.emplace_back(make_pair(pKFi, pMP));
                 mWrongObsKF[pKFi->mnId]++;
                 badMonoMP++;
 
@@ -3889,7 +3881,7 @@ namespace ORB_SLAM3 {
 
             if (e->chi2() > 7.815 || !e->isDepthPositive()) {
                 KeyFrame *pKFi = vpEdgeKFStereo[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
+                vToErase.emplace_back(make_pair(pKFi, pMP));
                 mWrongObsKF[pKFi->mnId]++;
                 badStereoMP++;
 
@@ -3964,11 +3956,11 @@ namespace ORB_SLAM3 {
 
                 if (e->chi2() > 5.991 || !e->isDepthPositive()) {
                     numMonoBadPoints++;
-                    vpMonoMPsBad.push_back(pMP);
+                    vpMonoMPsBad.emplace_back(pMP);
 
                 } else {
                     numMonoOptPoints++;
-                    vpMonoMPsOpt.push_back(pMP);
+                    vpMonoMPsOpt.emplace_back(pMP);
                 }
 
             }
@@ -3987,10 +3979,10 @@ namespace ORB_SLAM3 {
 
                 if (e->chi2() > 7.815 || !e->isDepthPositive()) {
                     numStereoBadPoints++;
-                    vpStereoMPsBad.push_back(pMP);
+                    vpStereoMPsBad.emplace_back(pMP);
                 } else {
                     numStereoOptPoints++;
-                    vpStereoMPsOpt.push_back(pMP);
+                    vpStereoMPsOpt.emplace_back(pMP);
                 }
             }
 
@@ -4024,11 +4016,11 @@ namespace ORB_SLAM3 {
         vpOptimizableCovKFs.reserve(maxCovKF);
 
         // Add sliding window for current KF
-        vpOptimizableKFs.push_back(pCurrKF);
+        vpOptimizableKFs.emplace_back(pCurrKF);
         pCurrKF->mnBAOptFlagInLM = pCurrKF->mnId;
         for (int i = 1; i < Nd; i++) {
             if (vpOptimizableKFs.back()->mPrevKF) {
-                vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
+                vpOptimizableKFs.emplace_back(vpOptimizableKFs.back()->mPrevKF);
                 vpOptimizableKFs.back()->mnBAOptFlagInLM = pCurrKF->mnId;
             } else
                 break;
@@ -4036,21 +4028,21 @@ namespace ORB_SLAM3 {
 
         list<KeyFrame *> lFixedKeyFrames;
         if (vpOptimizableKFs.back()->mPrevKF) {
-            vpOptimizableCovKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
+            vpOptimizableCovKFs.emplace_back(vpOptimizableKFs.back()->mPrevKF);
             vpOptimizableKFs.back()->mPrevKF->mnBAOptFlagInLM = pCurrKF->mnId;
         } else {
-            vpOptimizableCovKFs.push_back(vpOptimizableKFs.back());
+            vpOptimizableCovKFs.emplace_back(vpOptimizableKFs.back());
             vpOptimizableKFs.pop_back();
         }
 
         // Add temporal neighbours to merge KF (previous and next KFs)
-        vpOptimizableKFs.push_back(pMergeKF);
+        vpOptimizableKFs.emplace_back(pMergeKF);
         pMergeKF->mnBAOptFlagInLM = pCurrKF->mnId;
 
         // Previous KFs
         for (int i = 1; i < (Nd / 2); i++) {
             if (vpOptimizableKFs.back()->mPrevKF) {
-                vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mPrevKF);
+                vpOptimizableKFs.emplace_back(vpOptimizableKFs.back()->mPrevKF);
                 vpOptimizableKFs.back()->mnBAOptFlagInLM = pCurrKF->mnId;
             } else
                 break;
@@ -4058,24 +4050,24 @@ namespace ORB_SLAM3 {
 
         // We fix just once the old map
         if (vpOptimizableKFs.back()->mPrevKF) {
-            lFixedKeyFrames.push_back(vpOptimizableKFs.back()->mPrevKF);
+            lFixedKeyFrames.emplace_back(vpOptimizableKFs.back()->mPrevKF);
             vpOptimizableKFs.back()->mPrevKF->mnBAFixFlagInLM = pCurrKF->mnId;
         } else {
             vpOptimizableKFs.back()->mnBAOptFlagInLM = 0;
             vpOptimizableKFs.back()->mnBAFixFlagInLM = pCurrKF->mnId;
-            lFixedKeyFrames.push_back(vpOptimizableKFs.back());
+            lFixedKeyFrames.emplace_back(vpOptimizableKFs.back());
             vpOptimizableKFs.pop_back();
         }
 
         // Next KFs
         if (pMergeKF->mNextKF) {
-            vpOptimizableKFs.push_back(pMergeKF->mNextKF);
+            vpOptimizableKFs.emplace_back(pMergeKF->mNextKF);
             vpOptimizableKFs.back()->mnBAOptFlagInLM = pCurrKF->mnId;
         }
 
         while (vpOptimizableKFs.size() < (2 * Nd)) {
             if (vpOptimizableKFs.back()->mNextKF) {
-                vpOptimizableKFs.push_back(vpOptimizableKFs.back()->mNextKF);
+                vpOptimizableKFs.emplace_back(vpOptimizableKFs.back()->mNextKF);
                 vpOptimizableKFs.back()->mnBAOptFlagInLM = pCurrKF->mnId;
             } else
                 break;
@@ -4095,7 +4087,7 @@ namespace ORB_SLAM3 {
                     if (!pMP->isBad())
                         if (pMP->mnBAFlagInLocalMapping != pCurrKF->mnId) {
                             mLocalObs[pMP] = 1;
-                            lLocalMapPoints.push_back(pMP);
+                            lLocalMapPoints.emplace_back(pMP);
                             pMP->mnBAFlagInLocalMapping = pCurrKF->mnId;
                         } else {
                             mLocalObs[pMP]++;
@@ -4106,7 +4098,7 @@ namespace ORB_SLAM3 {
         std::vector<std::pair<MapPoint *, int>> pairs;
         pairs.reserve(mLocalObs.size());
         for (auto itr = mLocalObs.begin(); itr != mLocalObs.end(); ++itr)
-            pairs.push_back(*itr);
+            pairs.emplace_back(*itr);
         sort(pairs.begin(), pairs.end(), sortByVal);
 
         // Fixed Keyframes. Keyframes that see Local MapPoints but that are not Local Keyframes
@@ -4124,7 +4116,7 @@ namespace ORB_SLAM3 {
                 {
                     pKFi->mnBAOptFlagInLM = pCurrKF->mnId;
                     if (!pKFi->isBad()) {
-                        vpOptimizableCovKFs.push_back(pKFi);
+                        vpOptimizableCovKFs.emplace_back(pKFi);
                         break;
                     }
                 }
@@ -4149,7 +4141,7 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < N; i++) {
             KeyFrame *pKFi = vpOptimizableKFs[i];
 
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(false);
             optimizer.addVertex(VP);
@@ -4159,7 +4151,7 @@ namespace ORB_SLAM3 {
                 VV->setId(maxKFid + 3 * (pKFi->mnId) + 1);
                 VV->setFixed(false);
                 optimizer.addVertex(VV);
-                VertexGyroBias *VG = new VertexGyroBias(pKFi);
+                VertexGyrBias *VG = new VertexGyrBias(pKFi);
                 VG->setId(maxKFid + 3 * (pKFi->mnId) + 2);
                 VG->setFixed(false);
                 optimizer.addVertex(VG);
@@ -4175,7 +4167,7 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < Ncov; i++) {
             KeyFrame *pKFi = vpOptimizableCovKFs[i];
 
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(false);
             optimizer.addVertex(VP);
@@ -4185,7 +4177,7 @@ namespace ORB_SLAM3 {
                 VV->setId(maxKFid + 3 * (pKFi->mnId) + 1);
                 VV->setFixed(false);
                 optimizer.addVertex(VV);
-                VertexGyroBias *VG = new VertexGyroBias(pKFi);
+                VertexGyrBias *VG = new VertexGyrBias(pKFi);
                 VG->setId(maxKFid + 3 * (pKFi->mnId) + 2);
                 VG->setFixed(false);
                 optimizer.addVertex(VG);
@@ -4200,7 +4192,7 @@ namespace ORB_SLAM3 {
         for (list<KeyFrame *>::iterator lit = lFixedKeyFrames.begin(), lend = lFixedKeyFrames.end();
              lit != lend; lit++) {
             KeyFrame *pKFi = *lit;
-            VertexPose *VP = new VertexPose(pKFi);
+            VertexPose6DoF *VP = new VertexPose6DoF(pKFi);
             VP->setId(pKFi->mnId);
             VP->setFixed(true);
             optimizer.addVertex(VP);
@@ -4210,7 +4202,7 @@ namespace ORB_SLAM3 {
                 VV->setId(maxKFid + 3 * (pKFi->mnId) + 1);
                 VV->setFixed(true);
                 optimizer.addVertex(VV);
-                VertexGyroBias *VG = new VertexGyroBias(pKFi);
+                VertexGyrBias *VG = new VertexGyrBias(pKFi);
                 VG->setId(maxKFid + 3 * (pKFi->mnId) + 2);
                 VG->setFixed(true);
                 optimizer.addVertex(VG);
@@ -4222,9 +4214,9 @@ namespace ORB_SLAM3 {
         }
 
         // Create intertial constraints
-        vector<EdgeInertial *> vei(N, (EdgeInertial *) NULL);
-        vector<EdgeGyrRW *> vegr(N, (EdgeGyrRW *) NULL);
-        vector<EdgeAccRW *> vear(N, (EdgeAccRW *) NULL);
+        vector<EdgeImuRVPOnly *> vei(N, (EdgeImuRVPOnly *) NULL);
+        vector<EdgeGyrBias *> vegr(N, (EdgeGyrBias *) NULL);
+        vector<EdgeAccBias *> vear(N, (EdgeAccBias *) NULL);
         for (int i = 0; i < N; i++) {
             //cout << "inserting inertial edge " << i << endl;
             KeyFrame *pKFi = vpOptimizableKFs[i];
@@ -4250,7 +4242,7 @@ namespace ORB_SLAM3 {
                     continue;
                 }
 
-                vei[i] = new EdgeInertial(pKFi->mpImuPreintegrated);
+                vei[i] = new EdgeImuRVPOnly(pKFi->mpImuPreintegrated);
 
                 vei[i]->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VP1));
                 vei[i]->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(VV1));
@@ -4265,14 +4257,14 @@ namespace ORB_SLAM3 {
                 rki->setDelta(sqrt(16.92));
                 optimizer.addEdge(vei[i]);
 
-                vegr[i] = new EdgeGyrRW();
+                vegr[i] = new EdgeGyrBias();
                 vegr[i]->setVertex(0, VG1);
                 vegr[i]->setVertex(1, VG2);
                 Eigen::Matrix3d InfoG = pKFi->mpImuPreintegrated->C.block<3, 3>(9, 9).cast<double>().inverse();
                 vegr[i]->setInformation(InfoG);
                 optimizer.addEdge(vegr[i]);
 
-                vear[i] = new EdgeAccRW();
+                vear[i] = new EdgeAccBias();
                 vear[i]->setVertex(0, VA1);
                 vear[i]->setVertex(1, VA2);
                 Eigen::Matrix3d InfoA = pKFi->mpImuPreintegrated->C.block<3, 3>(12, 12).cast<double>().inverse();
@@ -4289,7 +4281,7 @@ namespace ORB_SLAM3 {
         const int nExpectedSize = (N + Ncov + lFixedKeyFrames.size()) * lLocalMapPoints.size();
 
         // Mono
-        vector<EdgeMono *> vpEdgesMono;
+        vector<EdgeMonoAndMPWithImu *> vpEdgesMono;
         vpEdgesMono.reserve(nExpectedSize);
 
         vector<KeyFrame *> vpEdgeKFMono;
@@ -4299,7 +4291,7 @@ namespace ORB_SLAM3 {
         vpMapPointEdgeMono.reserve(nExpectedSize);
 
         // Stereo
-        vector<EdgeStereo *> vpEdgesStereo;
+        vector<EdgeStereoAndMPWithImu *> vpEdgesStereo;
         vpEdgesStereo.reserve(nExpectedSize);
 
         vector<KeyFrame *> vpEdgeKFStereo;
@@ -4358,7 +4350,7 @@ namespace ORB_SLAM3 {
                         Eigen::Matrix<double, 2, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y;
 
-                        EdgeMono *e = new EdgeMono();
+                        EdgeMonoAndMPWithImu *e = new EdgeMonoAndMPWithImu();
                         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
                         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
                         e->setMeasurement(obs);
@@ -4369,16 +4361,16 @@ namespace ORB_SLAM3 {
                         e->setRobustKernel(rk);
                         rk->setDelta(thHuberMono);
                         optimizer.addEdge(e);
-                        vpEdgesMono.push_back(e);
-                        vpEdgeKFMono.push_back(pKFi);
-                        vpMapPointEdgeMono.push_back(pMP);
+                        vpEdgesMono.emplace_back(e);
+                        vpEdgeKFMono.emplace_back(pKFi);
+                        vpMapPointEdgeMono.emplace_back(pMP);
                     } else // stereo observation
                     {
                         const float kp_ur = pKFi->mvfXInRight[get<0>(mit->second)];
                         Eigen::Matrix<double, 3, 1> obs;
                         obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
-                        EdgeStereo *e = new EdgeStereo();
+                        EdgeStereoAndMPWithImu *e = new EdgeStereoAndMPWithImu();
 
                         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(id)));
                         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFi->mnId)));
@@ -4391,9 +4383,9 @@ namespace ORB_SLAM3 {
                         rk->setDelta(thHuberStereo);
 
                         optimizer.addEdge(e);
-                        vpEdgesStereo.push_back(e);
-                        vpEdgeKFStereo.push_back(pKFi);
-                        vpMapPointEdgeStereo.push_back(pMP);
+                        vpEdgesStereo.emplace_back(e);
+                        vpEdgeKFStereo.emplace_back(pKFi);
+                        vpMapPointEdgeStereo.emplace_back(pMP);
                     }
                 }
             }
@@ -4415,7 +4407,7 @@ namespace ORB_SLAM3 {
         // Check inlier observations
         // Mono
         for (size_t i = 0, iend = vpEdgesMono.size(); i < iend; i++) {
-            EdgeMono *e = vpEdgesMono[i];
+            EdgeMonoAndMPWithImu *e = vpEdgesMono[i];
             MapPoint *pMP = vpMapPointEdgeMono[i];
 
             if (pMP->isBad())
@@ -4423,13 +4415,13 @@ namespace ORB_SLAM3 {
 
             if (e->chi2() > chi2Mono2) {
                 KeyFrame *pKFi = vpEdgeKFMono[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
+                vToErase.emplace_back(make_pair(pKFi, pMP));
             }
         }
 
         // Stereo
         for (size_t i = 0, iend = vpEdgesStereo.size(); i < iend; i++) {
-            EdgeStereo *e = vpEdgesStereo[i];
+            EdgeStereoAndMPWithImu *e = vpEdgesStereo[i];
             MapPoint *pMP = vpMapPointEdgeStereo[i];
 
             if (pMP->isBad())
@@ -4437,7 +4429,7 @@ namespace ORB_SLAM3 {
 
             if (e->chi2() > chi2Stereo2) {
                 KeyFrame *pKFi = vpEdgeKFStereo[i];
-                vToErase.push_back(make_pair(pKFi, pMP));
+                vToErase.emplace_back(make_pair(pKFi, pMP));
             }
         }
 
@@ -4458,7 +4450,7 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < N; i++) {
             KeyFrame *pKFi = vpOptimizableKFs[i];
 
-            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
+            VertexPose6DoF *VP = static_cast<VertexPose6DoF *>(optimizer.vertex(pKFi->mnId));
             Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
             pKFi->SetPose(Tcw);
 
@@ -4469,7 +4461,7 @@ namespace ORB_SLAM3 {
             if (pKFi->bImu) {
                 VertexVelocity *VV = static_cast<VertexVelocity *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1));
                 pKFi->SetVelocity(VV->estimate().cast<float>());
-                VertexGyroBias *VG = static_cast<VertexGyroBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2));
+                VertexGyrBias *VG = static_cast<VertexGyrBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2));
                 VertexAccBias *VA = static_cast<VertexAccBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 3));
                 Vector6d b;
                 b << VG->estimate(), VA->estimate();
@@ -4480,7 +4472,7 @@ namespace ORB_SLAM3 {
         for (int i = 0; i < Ncov; i++) {
             KeyFrame *pKFi = vpOptimizableCovKFs[i];
 
-            VertexPose *VP = static_cast<VertexPose *>(optimizer.vertex(pKFi->mnId));
+            VertexPose6DoF *VP = static_cast<VertexPose6DoF *>(optimizer.vertex(pKFi->mnId));
             Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
             pKFi->SetPose(Tcw);
 
@@ -4491,7 +4483,7 @@ namespace ORB_SLAM3 {
             if (pKFi->bImu) {
                 VertexVelocity *VV = static_cast<VertexVelocity *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 1));
                 pKFi->SetVelocity(VV->estimate().cast<float>());
-                VertexGyroBias *VG = static_cast<VertexGyroBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2));
+                VertexGyrBias *VG = static_cast<VertexGyrBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 2));
                 VertexAccBias *VA = static_cast<VertexAccBias *>(optimizer.vertex(maxKFid + 3 * (pKFi->mnId) + 3));
                 Vector6d b;
                 b << VG->estimate(), VA->estimate();
@@ -4584,7 +4576,7 @@ namespace ORB_SLAM3 {
         matLambda(0, 0) = 1e3;
 
         // Set Loop edges
-        Edge4DoF *e_loop;
+        EdgeRTOnly *e_loop;
         for (map<KeyFrame *, set<KeyFrame *> >::const_iterator mit = LoopConnections.begin(), mend = LoopConnections.end();
              mit != mend; mit++) {
             KeyFrame *pKF = mit->first;
@@ -4605,7 +4597,7 @@ namespace ORB_SLAM3 {
                 Tij.block<3, 1>(0, 3) = Sij.translation();
                 Tij(3, 3) = 1.;
 
-                Edge4DoF *e = new Edge4DoF(Tij);
+                EdgeRTOnly *e = new EdgeRTOnly(Tij);
                 e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(nIDj)));
                 e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(nIDi)));
 
@@ -4653,7 +4645,7 @@ namespace ORB_SLAM3 {
                 Tij.block<3, 1>(0, 3) = Sij.translation();
                 Tij(3, 3) = 1.;
 
-                Edge4DoF *e = new Edge4DoF(Tij);
+                EdgeRTOnly *e = new EdgeRTOnly(Tij);
                 e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(nIDi)));
                 e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(nIDj)));
                 e->information() = matLambda;
@@ -4680,7 +4672,7 @@ namespace ORB_SLAM3 {
                 Tij.block<3, 1>(0, 3) = Sij.translation();
                 Tij(3, 3) = 1.;
 
-                Edge4DoF *e = new Edge4DoF(Tij);
+                EdgeRTOnly *e = new EdgeRTOnly(Tij);
                 e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(nIDi)));
                 e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(nIDj)));
                 e->information() = matLambda;
@@ -4708,7 +4700,7 @@ namespace ORB_SLAM3 {
                     Til.block<3, 1>(0, 3) = Sil.translation();
                     Til(3, 3) = 1.;
 
-                    Edge4DoF *e = new Edge4DoF(Til);
+                    EdgeRTOnly *e = new EdgeRTOnly(Til);
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(nIDi)));
                     e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pLKF->mnId)));
                     e->information() = matLambda;
@@ -4740,7 +4732,7 @@ namespace ORB_SLAM3 {
                         Tin.block<3, 3>(0, 0) = Sin.rotation().toRotationMatrix();
                         Tin.block<3, 1>(0, 3) = Sin.translation();
                         Tin(3, 3) = 1.;
-                        Edge4DoF *e = new Edge4DoF(Tin);
+                        EdgeRTOnly *e = new EdgeRTOnly(Tin);
                         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(nIDi)));
                         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex *>(optimizer.vertex(pKFn->mnId)));
                         e->information() = matLambda;

@@ -88,14 +88,14 @@ namespace ORB_SLAM3 {
                 if (!pMP->isBad()) {
                     const cv::KeyPoint &kp = F.mvKeysUn[i];//得到2维特征点, 将KeyPoint类型变为Point2f
 
-                    mvP2D.push_back(kp.pt);   //存放2维特征点
-                    mvSigma2.push_back(F.mvLevelSigma2[kp.octave]);   //记录特征点是在哪一层提取出来的
+                    mvP2D.emplace_back(kp.pt);   //存放2维特征点
+                    mvSigma2.emplace_back(F.mvLevelSigma2[kp.octave]);   //记录特征点是在哪一层提取出来的
 
                     cv::Mat Pos = pMP->GetWorldPos();   //世界坐标系下的3D点
-                    mvP3Dw.push_back(cv::Point3f(Pos.at<float>(0), Pos.at<float>(1), Pos.at<float>(2)));
+                    mvP3Dw.emplace_back(cv::Point3f(Pos.at<float>(0), Pos.at<float>(1), Pos.at<float>(2)));
 
-                    mvKeyPointIndices.push_back(i); //记录被使用特征点在原始特征点容器中的索引, mvKeyPointIndices是跳跃的
-                    mvAllIndices.push_back(idx);    //记录被使用特征点的索引, mvAllIndices是连续的
+                    mvKeyPointIndices.emplace_back(i); //记录被使用特征点在原始特征点容器中的索引, mvKeyPointIndices是跳跃的
+                    mvAllIndices.emplace_back(idx);    //记录被使用特征点的索引, mvAllIndices是连续的
 
                     idx++;
                 }
@@ -323,7 +323,7 @@ namespace ORB_SLAM3 {
 
         for (size_t i = 0; i < mvbBestInliers.size(); i++) {
             if (mvbBestInliers[i]) {
-                vIndices.push_back(i);
+                vIndices.emplace_back(i);
             }
         }
 

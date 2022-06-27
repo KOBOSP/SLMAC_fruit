@@ -55,7 +55,8 @@ namespace ORB_SLAM3 {
             : mpcpi(frame.mpcpi), mpORBvocabulary(frame.mpORBvocabulary), mpORBextractorLeft(frame.mpORBextractorLeft),
               mpORBextractorRight(frame.mpORBextractorRight),
               mdTimestamp(frame.mdTimestamp), mcvK(frame.mcvK.clone()), mEigenK(Converter::toMatrix3f(frame.mcvK)),
-              mfBaselineFocal(frame.mfBaselineFocal), mfBaseline(frame.mfBaseline), mfThCloseFar(frame.mfThCloseFar), mnKPsLeftNum(frame.mnKPsLeftNum), mvKPsLeft(frame.mvKPsLeft),
+              mfBaselineFocal(frame.mfBaselineFocal), mfBaseline(frame.mfBaseline), mfThCloseFar(frame.mfThCloseFar),
+              mnKPsLeftNum(frame.mnKPsLeftNum), mvKPsLeft(frame.mvKPsLeft),
               mvKPsRight(frame.mvKPsRight), mvKPsUn(frame.mvKPsUn), mvfXInRight(frame.mvfXInRight),
               mvfMPDepth(frame.mvfMPDepth), mBowVec(frame.mBowVec), mFeatVec(frame.mFeatVec),
               mDescriptorsLeft(frame.mDescriptorsLeft.clone()), mDescriptorsRight(frame.mDescriptorsRight.clone()),
@@ -87,11 +88,12 @@ namespace ORB_SLAM3 {
     }
 
 // 立体匹配模式下的双目
-    Frame::Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp, ORBextractor *ExtractorLeft,
+    Frame::Frame(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, Eigen::Matrix<float, 3, 1> trw, const double &dTimestamp, ORBextractor *ExtractorLeft,
                  ORBextractor *ExtractorRight, ORBVocabulary *Voc, cv::Mat &cvK, const float &fBaselineFocal,
                  const float &fThDepth, GeometricCamera *pCamera, Frame *pPrevF, const IMU::Calib &ImuCalib)
             : mpcpi(NULL), mpORBvocabulary(Voc), mpORBextractorLeft(ExtractorLeft), mpORBextractorRight(ExtractorRight),
-              mdTimestamp(dTimestamp), mcvK(cvK.clone()), mEigenK(Converter::toMatrix3f(cvK)), mfBaselineFocal(fBaselineFocal),
+              mdTimestamp(dTimestamp), mcvK(cvK.clone()), mEigenK(Converter::toMatrix3f(cvK)),
+              mfBaselineFocal(fBaselineFocal),
               mfThCloseFar(fThDepth),
               mImuCalib(ImuCalib), mpImuFromPrevKF(NULL), mpPrevFrame(pPrevF), mpImuFromPrevFrame(NULL),
               mpReferenceKF(static_cast<KeyFrame *>(NULL)), mbImuPreintegrated(false),
@@ -169,7 +171,7 @@ namespace ORB_SLAM3 {
 
         // 双目相机基线长度
         mfBaseline = mfBaselineFocal / fx;
-
+        SetRtkTrans(trw);
         if (pPrevF) {
             if (pPrevF->HasVelocity())
                 SetVelocity(pPrevF->GetVelocity());
@@ -197,7 +199,7 @@ namespace ORB_SLAM3 {
         int nReserve = 0.5f * mnKPsLeftNum / (nCells);
 
         // 开始对mGrid这个二维数组中的每一个vector元素遍历并预分配空间
-        for (unsigned int i = 0; i < FRAME_GRID_COLS; i++){
+        for (unsigned int i = 0; i < FRAME_GRID_COLS; i++) {
             for (unsigned int j = 0; j < FRAME_GRID_ROWS; j++) {
                 mGridLeft[i][j].reserve(nReserve);
             }
@@ -210,7 +212,7 @@ namespace ORB_SLAM3 {
             // 计算某个特征点所在网格的网格坐标，如果找到特征点所在的网格坐标，记录在nGridPosX,nGridPosY里，返回true，没找到返回false
             if (PosInGrid(kp, nGridPosX, nGridPosY)) {
                 // 如果找到特征点所在网格坐标，将这个特征点的索引添加到对应网格的数组mGrid中
-                mGridLeft[nGridPosX][nGridPosY].push_back(i);
+                mGridLeft[nGridPosX][nGridPosY].emplace_back(i);
             }
         }
     }
@@ -225,11 +227,10 @@ namespace ORB_SLAM3 {
     void Frame::ExtractORB(int flag, const cv::Mat &im, const int x0, const int x1) {
         vector<int> vLapping = {x0, x1};
         // 判断是左图还是右图
-        if (flag == 0){
+        if (flag == 0) {
             // 左图的话就套使用左图指定的特征点提取器，并将提取结果保存到对应的变量中
             mnImgLeftKPs = (*mpORBextractorLeft)(im, cv::Mat(), mvKPsLeft, mDescriptorsLeft, vLapping);
-        }
-        else{
+        } else {
             // 右图的话就需要使用右图指定的特征点提取器，并将提取结果保存到对应的变量中
             mnImgRightKPs = (*mpORBextractorRight)(im, cv::Mat(), mvKPsRight, mDescriptorsRight, vLapping);
         }
@@ -247,6 +248,10 @@ namespace ORB_SLAM3 {
         mTcw = Tcw;
         UpdatePoseMatrices();
         mbHasPose = true;
+    }
+
+    void Frame::SetRtkTrans(Eigen::Matrix<float, 3, 1> &trw) {
+        mtrw = trw;
     }
 
 /** 
@@ -540,7 +545,7 @@ namespace ORB_SLAM3 {
 
                     // 如果x方向和y方向的距离都在指定的半径之内，存储其index为候选特征点
                     if (fabs(distx) < factorX && fabs(disty) < factorY)
-                        vIndices.push_back(vCell[j]);
+                        vIndices.emplace_back(vCell[j]);
                 }
             }
         }
@@ -664,7 +669,7 @@ namespace ORB_SLAM3 {
 
             // 将特征点ir保证在可能的行号中
             for (int yi = minr; yi <= maxr; yi++)
-                vvnRightKPsInEachLeftRows[yi].push_back(iR);
+                vvnRightKPsInEachLeftRows[yi].emplace_back(iR);
         }
 
         // Step 2 -> 3. 粗匹配 + 精匹配
@@ -755,7 +760,7 @@ namespace ORB_SLAM3 {
                 const int w = 5;
                 // 提取左图中，以特征点(XLScaled,YLScaled)为中心, 半径为w的图像快patch
                 cv::Mat PatchL = mpORBextractorLeft->mvImagePyramid[kpL.octave].rowRange(YLScaled - w,
-                                                                                     YLScaled + w + 1).colRange(
+                                                                                         YLScaled + w + 1).colRange(
                         XLScaled - w, XLScaled + w + 1);
 
                 // 初始化最佳相似度
@@ -782,7 +787,8 @@ namespace ORB_SLAM3 {
                 for (int IncXR = -L; IncXR <= +L; IncXR++) {
                     // 提取左图中，以特征点(XLScaled,YLScaled)为中心, 半径为w的图像快patch
                     cv::Mat PatchRTmp = mpORBextractorRight->mvImagePyramid[kpL.octave].rowRange(YLScaled - w,
-                                                                                          YLScaled + w + 1).colRange(
+                                                                                                 YLScaled + w +
+                                                                                                 1).colRange(
                             XR0Scaled + IncXR - w, XR0Scaled + IncXR + w + 1);
 
                     // sad 计算
@@ -839,7 +845,7 @@ namespace ORB_SLAM3 {
                     // Step 5. 最优视差值/深度选择.
                     mvfMPDepth[iL] = mfBaselineFocal / fVisualDisparity;
                     mvfXInRight[iL] = fBestXR;
-                    vDistIdx.push_back(pair<int, int>(nBestDist, iL));
+                    vDistIdx.emplace_back(pair<int, int>(nBestDist, iL));
                 }
             }
         }
@@ -852,10 +858,9 @@ namespace ORB_SLAM3 {
         const float thDist = 1.5f * 1.4f * median;
         mnMStereo = vDistIdx.size();
         for (int i = vDistIdx.size() - 1; i >= 0; i--) {
-            if (vDistIdx[i].first < thDist){
+            if (vDistIdx[i].first < thDist) {
                 break;
-            }
-            else {
+            } else {
                 // 误匹配点置为-1，和初始化时保持一直，作为error code
                 mvfXInRight[vDistIdx[i].second] = -1;
                 mvfMPDepth[vDistIdx[i].second] = -1;

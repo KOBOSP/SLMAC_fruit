@@ -199,8 +199,7 @@ namespace ORB_SLAM3 {
                                     InitializeIMU(1.f, 1e5, true);
                                     cout << "End VIBA 1" << endl;
                                 }
-                            }
-                            else if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()) {// Step 9.2 根据条件判断是否进行VIBA2（IMU第三阶段初始化）
+                            } else if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()) {// Step 9.2 根据条件判断是否进行VIBA2（IMU第三阶段初始化）
                                 if (mTinit > 15.0f) {
                                     cout << "Start VIBA 2" << endl;
                                     mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
@@ -216,7 +215,7 @@ namespace ORB_SLAM3 {
             } else if (CheckRequestPause() && !mbBadImu) {
                 while (CheckPaused() && !CheckFinishRequest()) {
                     // 如果还没有结束利索,那么等等它
-                    usleep(3000);
+                    usleep(5000);
                 }
             }
             // 查看是否有复位线程的请求
@@ -227,7 +226,7 @@ namespace ORB_SLAM3 {
             if (CheckFinishRequest() && !CheckNotPauseOrFinish()) {
                 break;
             }
-            usleep(500);
+            usleep(5000);
         }
         // 设置线程已经终止
         SetFinished();
@@ -240,7 +239,7 @@ namespace ORB_SLAM3 {
     void LocalMapping::InsertKeyFrame(KeyFrame *pKF) {
         unique_lock<mutex> lock(mMutexNewKFs);
         // 将关键帧插入到列表中
-        mlNewKeyFrames.push_back(pKF);
+        mlNewKeyFrames.emplace_back(pKF);
         mbAbortBA = true;
     }
 
@@ -291,7 +290,7 @@ namespace ORB_SLAM3 {
                         // 如果当前帧中已经包含了这个地图点,但是这个地图点中却没有包含这个关键帧的信息
                         // 这些地图点可能来自双目或RGBD跟踪过程中新生成的地图点，或者是CreateNewMapPoints 中通过三角化产生
                         // 将上述地图点放入mlpRecentAddedMapPoints，等待后续MapPointCulling函数的检验
-                        mlpRecentAddedMapPoints.push_back(pMP);
+                        mlpRecentAddedMapPoints.emplace_back(pMP);
                     }
                 }
             }
@@ -375,7 +374,7 @@ namespace ORB_SLAM3 {
             while ((vpNeighKFs.size() <= nn) && (pKF->mPrevKF) && (count++ < nn)) {
                 vector<KeyFrame *>::iterator it = std::find(vpNeighKFs.begin(), vpNeighKFs.end(), pKF->mPrevKF);
                 if (it == vpNeighKFs.end())
-                    vpNeighKFs.push_back(pKF->mPrevKF);
+                    vpNeighKFs.emplace_back(pKF->mPrevKF);
                 pKF = pKF->mPrevKF;
             }
         }
@@ -669,7 +668,7 @@ namespace ORB_SLAM3 {
                 mpAtlas->AddMapPoint(pMP);
                 // Step 7：将新产生的点放入检测队列
                 // 这些MapPoints都会经过MapPointCulling函数的检验
-                mlpRecentAddedMapPoints.push_back(pMP);
+                mlpRecentAddedMapPoints.emplace_back(pMP);
             }
         }
     }
@@ -697,7 +696,7 @@ namespace ORB_SLAM3 {
             if (pKFi->isBad() || pKFi->mnFuseFlagInLocalMapping == mpCurrentKeyFrame->mnId)
                 continue;
             // 加入一级相邻关键帧
-            vpProjectKFs.push_back(pKFi);
+            vpProjectKFs.emplace_back(pKFi);
             // 标记已经加入
             pKFi->mnFuseFlagInLocalMapping = mpCurrentKeyFrame->mnId;
         }
@@ -715,7 +714,7 @@ namespace ORB_SLAM3 {
                     pKFi2->mnId == mpCurrentKeyFrame->mnId)
                     continue;
                 // 存入二级相邻关键帧
-                vpProjectKFs.push_back(pKFi2);
+                vpProjectKFs.emplace_back(pKFi2);
                 pKFi2->mnFuseFlagInLocalMapping = mpCurrentKeyFrame->mnId;
             }
             if (mbAbortBA)
@@ -731,7 +730,7 @@ namespace ORB_SLAM3 {
                     pKFi = pKFi->mPrevKF;
                     continue;
                 }
-                vpProjectKFs.push_back(pKFi);
+                vpProjectKFs.emplace_back(pKFi);
                 pKFi->mnFuseFlagInLocalMapping = mpCurrentKeyFrame->mnId;
                 pKFi = pKFi->mPrevKF;
             }
@@ -784,7 +783,7 @@ namespace ORB_SLAM3 {
 
                 // 加入集合，并标记已经加入
                 pMP->mnFuseFlagInLocalMapping = mpCurrentKeyFrame->mnId;
-                vpProjectMPs.push_back(pMP);
+                vpProjectMPs.emplace_back(pMP);
             }
         }
 
@@ -1043,7 +1042,7 @@ namespace ORB_SLAM3 {
                 }
             }
             // 遍历共视关键帧个数超过一定，就不弄了
-            if ((nProcessedKFNum > mnSingleMaxCullKFsNum && mbAbortBA) || nProcessedKFNum > 3*mnSingleMaxCullKFsNum) {
+            if ((nProcessedKFNum > mnSingleMaxCullKFsNum && mbAbortBA) || nProcessedKFNum > 3 * mnSingleMaxCullKFsNum) {
                 break;
             }
         }
@@ -1065,7 +1064,7 @@ namespace ORB_SLAM3 {
                 if (!mbResetRequested)
                     break;
             }
-            usleep(500);
+            usleep(5000);
         }
         cout << "LM: Map Reset, Done" << endl;
     }
@@ -1086,7 +1085,7 @@ namespace ORB_SLAM3 {
                 if (!mbResetRequestedActiveMap)
                     break;
             }
-            usleep(500);
+            usleep(5000);
         }
         cout << "LM: ActiveMap Reset Done" << endl;
     }
@@ -1154,9 +1153,9 @@ namespace ORB_SLAM3 {
  * @brief imu初始化
  * @param priorG 陀螺仪偏置的信息矩阵系数，主动设置时一般bInit为true，也就是只优化最后一帧的偏置，这个数会作为计算信息矩阵时使用
  * @param priorA 加速度计偏置的信息矩阵系数
- * @param bFIBA 是否做BA优化，目前都为true
+ * @param bNeedGBA 是否做BA优化，目前都为true
  */
-    void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA) {
+    void LocalMapping::InitializeIMU(float priorG, float priorA, bool bNeedGBA) {
         // 1. 将所有关键帧放入列表及向量里，且查看是否满足初始化条件
         if (mbResetRequested)
             return;
@@ -1183,7 +1182,7 @@ namespace ORB_SLAM3 {
             return;
 
         mFirstTs = vpNearKFs.front()->mdTimestamp;
-        if (mpCurrentKeyFrame->mdTimestamp - mFirstTs < fMinTime){
+        if (mpCurrentKeyFrame->mdTimestamp - mFirstTs < fMinTime) {
             return;
         }
 
@@ -1193,8 +1192,8 @@ namespace ORB_SLAM3 {
         // 先处理新关键帧，防止堆积且保证数据量充足
         while (HaveNewKeyFrames()) {
             ProcessNewKeyFrame();
-            vpNearKFs.push_back(mpCurrentKeyFrame);
-            lpNearKFs.push_back(mpCurrentKeyFrame);
+            vpNearKFs.emplace_back(mpCurrentKeyFrame);
+            lpNearKFs.emplace_back(mpCurrentKeyFrame);
         }
 
         // 2. 正式IMU初始化
@@ -1301,17 +1300,18 @@ namespace ORB_SLAM3 {
             mpCurrentKeyFrame->bImu = true;
         }
 
-        // 代码里都为true
-        if (bFIBA) {
+        if (bNeedGBA) {
             // 5. 承接上一步纯imu优化，按照之前的结果更新了尺度信息及适应重力方向，所以要结合地图进行一次视觉加imu的全局优化，这次带了MP等信息
             // 1.0版本里面不直接赋值了，而是将所有优化后的信息保存到变量里面
-            if (priorA != 0.f)
+            if (priorA != 0.f) {
                 Optimizer::GlobalBundleAdjustemetWithImu(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId,
                                                          NULL, true,
                                                          priorG, priorA);
-            else
+            } else {
                 Optimizer::GlobalBundleAdjustemetWithImu(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId,
                                                          NULL, false);
+            }
+
         }
         Verbose::PrintMess("Global Bundle Adjustment finished\nUpdating map ...", Verbose::VERBOSITY_NORMAL);
 
@@ -1322,8 +1322,8 @@ namespace ORB_SLAM3 {
         // 6. 处理一下新来的关键帧，这些关键帧没有参与优化
         while (HaveNewKeyFrames()) {
             ProcessNewKeyFrame();
-            vpNearKFs.push_back(mpCurrentKeyFrame);
-            lpNearKFs.push_back(mpCurrentKeyFrame);
+            vpNearKFs.emplace_back(mpCurrentKeyFrame);
+            lpNearKFs.emplace_back(mpCurrentKeyFrame);
         }
 
         // Correct keyframes starting at map first keyframe
@@ -1366,7 +1366,7 @@ namespace ORB_SLAM3 {
                     pChild->mnBAGlobalForKF = GBAid;
                 }
                 // 加入到list中，再去寻找pChild的子关键帧
-                lpKFtoCheck.push_back(pChild);
+                lpKFtoCheck.emplace_back(pChild);
             }
 
             // 7.5 此时pKF的利用价值就没了，但是里面的数值还都是优化前的，优化后的全部放于类似mTcwGBA这样的变量中
@@ -1456,8 +1456,8 @@ namespace ORB_SLAM3 {
         // 加入新添加的帧
         while (HaveNewKeyFrames()) {
             ProcessNewKeyFrame();
-            vpKF.push_back(mpCurrentKeyFrame);
-            lpKF.push_back(mpCurrentKeyFrame);
+            vpKF.emplace_back(mpCurrentKeyFrame);
+            lpKF.emplace_back(mpCurrentKeyFrame);
         }
 
         const int N = vpKF.size();

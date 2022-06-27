@@ -248,7 +248,7 @@ namespace ORB_SLAM3 {
                                 if (bin == HISTO_LENGTH)
                                     bin = 0;
                                 assert(bin >= 0 && bin < HISTO_LENGTH);
-                                rotHist[bin].push_back(BestIdxInF);
+                                rotHist[bin].emplace_back(BestIdxInF);
                             }
                             nmatches++;
                         }
@@ -615,7 +615,7 @@ namespace ORB_SLAM3 {
                         if (bin == HISTO_LENGTH)
                             bin = 0;
                         assert(bin >= 0 && bin < HISTO_LENGTH);
-                        rotHist[bin].push_back(i1);
+                        rotHist[bin].emplace_back(i1);
                     }
                 }
             }
@@ -754,7 +754,7 @@ namespace ORB_SLAM3 {
                                 if (bin == HISTO_LENGTH)
                                     bin = 0;
                                 assert(bin >= 0 && bin < HISTO_LENGTH);
-                                rotHist[bin].push_back(idx1);
+                                rotHist[bin].emplace_back(idx1);
                             }
                             nmatches++;
                         }
@@ -948,7 +948,7 @@ namespace ORB_SLAM3 {
                             if (bin == HISTO_LENGTH)
                                 bin = 0;
                             assert(bin >= 0 && bin < HISTO_LENGTH);
-                            rotHist[bin].push_back(idx1);
+                            rotHist[bin].emplace_back(idx1);
                         }
                     }
                 }
@@ -989,7 +989,7 @@ namespace ORB_SLAM3 {
         for (size_t i = 0, iend = vMatches12.size(); i < iend; i++) {
             if (vMatches12[i] < 0)
                 continue;
-            vMatchedPairs.push_back(make_pair(i, vMatches12[i]));
+            vMatchedPairs.emplace_back(make_pair(i, vMatches12[i]));
         }
 
         return nmatches;
@@ -1690,7 +1690,7 @@ namespace ORB_SLAM3 {
                             if (bin == HISTO_LENGTH)
                                 bin = 0;
                             assert(bin >= 0 && bin < HISTO_LENGTH);
-                            rotHist[bin].push_back(bestIdx2);
+                            rotHist[bin].emplace_back(bestIdx2);
                         }
                     }
                 }
@@ -1820,7 +1820,7 @@ namespace ORB_SLAM3 {
                             if (bin == HISTO_LENGTH)
                                 bin = 0;
                             assert(bin >= 0 && bin < HISTO_LENGTH);
-                            rotHist[bin].push_back(bestIdx2);
+                            rotHist[bin].emplace_back(bestIdx2);
                         }
                     }
 

@@ -103,13 +103,13 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
     System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor,
-           const bool bUseViewer = true, const int nFrameIdInit = 0, const string &sSeqName = std::string());
+           const bool bUseViewer = true, const string &sSeqName = std::string());
 
     // Proccess the given stereo frame. Images must be synchronized and rectified.
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
-    Sophus::SE3f CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, const double &dTimestamp,
-                               const vector<IMU::Point>& vImuMeas = vector<IMU::Point>());
+    Sophus::SE3f CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, Eigen::Matrix<float, 3, 1> trw,
+                               const double &dTimestamp, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>());
 
 
     // This stops local mapping thread (map building) and performs only camera tracking.

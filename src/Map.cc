@@ -382,7 +382,7 @@ namespace ORB_SLAM3 {
         mvBackupKeyFrameOriginsId.clear();
         mvBackupKeyFrameOriginsId.reserve(mvpInitKeyFrames.size());
         for (int i = 0, numEl = mvpInitKeyFrames.size(); i < numEl; ++i) {
-            mvBackupKeyFrameOriginsId.push_back(mvpInitKeyFrames[i]->mnId);
+            mvBackupKeyFrameOriginsId.emplace_back(mvpInitKeyFrames[i]->mnId);
         }
 
         // Backup of MapPoints
@@ -392,7 +392,7 @@ namespace ORB_SLAM3 {
             if (!pMPi || pMPi->isBad())
                 continue;
 
-            mvpBackupMapPoints.push_back(pMPi);
+            mvpBackupMapPoints.emplace_back(pMPi);
             pMPi->PreSave(mspKeyFrames, mspMapPoints);
         }
 
@@ -403,7 +403,7 @@ namespace ORB_SLAM3 {
             if (!pKFi || pKFi->isBad())
                 continue;
 
-            mvpBackupKeyFrames.push_back(pKFi);
+            mvpBackupKeyFrames.emplace_back(pKFi);
             pKFi->PreSave(mspKeyFrames, mspMapPoints, spCams);
         }
 
@@ -482,7 +482,7 @@ namespace ORB_SLAM3 {
         mvpInitKeyFrames.clear();
         mvpInitKeyFrames.reserve(mvBackupKeyFrameOriginsId.size());
         for (int i = 0; i < mvBackupKeyFrameOriginsId.size(); ++i) {
-            mvpInitKeyFrames.push_back(mpKeyFrameId[mvBackupKeyFrameOriginsId[i]]);
+            mvpInitKeyFrames.emplace_back(mpKeyFrameId[mvBackupKeyFrameOriginsId[i]]);
         }
 
         mvpBackupMapPoints.clear();

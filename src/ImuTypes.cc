@@ -225,7 +225,7 @@ namespace ORB_SLAM3 {
         void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &Acc, const Eigen::Vector3f &Gyr,
                                                     const float &TDelta) {
             // 保存imu数据，利用中值积分的结果构造一个预积分类保存在mvMeasurements中
-            mvMeasurements.push_back(integrable(Acc, Gyr, TDelta));
+            mvMeasurements.emplace_back(integrable(Acc, Gyr, TDelta));
 
             // Position is updated firstly, as it depends on previously computed velocity and rotation.
             // Velocity is updated secondly, as it depends on previously computed rotation.

@@ -91,20 +91,20 @@ namespace ORB_SLAM3 {
                 const float sigmaSquare1 = pKF1->mvfLevelSigma2[kp1.octave];
                 const float sigmaSquare2 = pKFm->mvfLevelSigma2[kp2.octave];
 
-                mvnMaxError1.push_back(9.210 * sigmaSquare1);
-                mvnMaxError2.push_back(9.210 * sigmaSquare2);
+                mvnMaxError1.emplace_back(9.210 * sigmaSquare1);
+                mvnMaxError2.emplace_back(9.210 * sigmaSquare2);
 
-                mvpMapPoints1.push_back(pMP1);
-                mvpMapPoints2.push_back(pMP2);
-                mvnIndices1.push_back(i1);
+                mvpMapPoints1.emplace_back(pMP1);
+                mvpMapPoints2.emplace_back(pMP2);
+                mvnIndices1.emplace_back(i1);
 
                 Eigen::Vector3f X3D1w = pMP1->GetWorldPos();
-                mvX3Dc1.push_back(Rcw1 * X3D1w + tcw1);
+                mvX3Dc1.emplace_back(Rcw1 * X3D1w + tcw1);
 
                 Eigen::Vector3f X3D2w = pMP2->GetWorldPos();
-                mvX3Dc2.push_back(Rcw2 * X3D2w + tcw2);
+                mvX3Dc2.emplace_back(Rcw2 * X3D2w + tcw2);
 
-                mvAllIndices.push_back(idx);
+                mvAllIndices.emplace_back(idx);
                 idx++;
             }
         }
@@ -437,7 +437,7 @@ namespace ORB_SLAM3 {
         for (size_t i = 0, iend = vP3Dw.size(); i < iend; i++) {
             Eigen::Vector3f P3Dc = Rcw * vP3Dw[i] + tcw;
             Eigen::Vector2f pt2D = pCamera->ProjectMPToKP(P3Dc);
-            vP2D.push_back(pt2D);
+            vP2D.emplace_back(pt2D);
         }
     }
 
@@ -448,7 +448,7 @@ namespace ORB_SLAM3 {
 
         for (size_t i = 0, iend = vP3Dc.size(); i < iend; i++) {
             Eigen::Vector2f pt2D = pCamera->ProjectMPToKP(vP3Dc[i]);
-            vP2D.push_back(pt2D);
+            vP2D.emplace_back(pt2D);
         }
     }
 

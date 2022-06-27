@@ -141,7 +141,7 @@ namespace ORB_SLAM3 {
         if (bAlreadyInMap) {
             return mvpCameras[index_cam];
         } else {
-            mvpCameras.push_back(pCam);
+            mvpCameras.emplace_back(pCam);
             return pCam;
         }
     }
@@ -234,7 +234,7 @@ namespace ORB_SLAM3 {
         if (!mpCurrentMap)
             CreateNewMap();
         while (mpCurrentMap->IsBad())
-            usleep(500);
+            usleep(5000);
 
         return mpCurrentMap;
     }
