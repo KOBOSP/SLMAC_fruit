@@ -25,20 +25,19 @@ namespace ORB_SLAM3 {
     long unsigned int Map::nNextId = 0;
 
     Map::Map()
-            : mnMaxKFid(0), mnBigChangeIdx(0), mbImuInitialized(false), mnMapChangeIdx(0),
-              mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
-              mbFail(false), mIsInUse(false), mHasTumbnail(false), mbBad(false), mnLastMapChangeIdx(0),
-              mbIsInertial(false), mbIMU_BA1(false), mbIMU_BA2(false) {
+            : mnMaxKFid(0), mnBigChangeIdx(0), mbImuInitialized(false), mbRtkInitialized(false), mfRtkToLocalDist(1e10),
+              mnMapChangeIdx(0), mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
+              mbFail(false), mIsInUse(false), mbBad(false), mnLastMapChangeIdx(0),
+              mbIMU_BA1(false), mbIMU_BA2(false) {
         mnId = nNextId++;
         mThumbnail = static_cast<GLubyte *>(NULL);
     }
 
     Map::Map(int initKFid)
-            : mnInitKFid(initKFid), mnMaxKFid(initKFid), /*mnLastLoopKFid(initKFid),*/ mnBigChangeIdx(0),
-              mIsInUse(false),
-              mHasTumbnail(false), mbBad(false), mbImuInitialized(false),
+            : mnInitKFId(initKFid), mnMaxKFid(initKFid), mnBigChangeIdx(0), mIsInUse(false),
+              mbBad(false), mbImuInitialized(false), mbRtkInitialized(false), mfRtkToLocalDist(1e10),
               mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
-              mnMapChangeIdx(0), mbFail(false), mnLastMapChangeIdx(0), mbIsInertial(false), mbIMU_BA1(false),
+              mnMapChangeIdx(0), mbFail(false), mnLastMapChangeIdx(0), mbIMU_BA1(false),
               mbIMU_BA2(false) {
         mnId = nNextId++;
         mThumbnail = static_cast<GLubyte *>(NULL);
@@ -63,8 +62,8 @@ namespace ORB_SLAM3 {
     void Map::AddKeyFrame(KeyFrame *pKF) {
         unique_lock<mutex> lock(mMutexMap);
         if (mspKeyFrames.empty()) {
-            cout << "First KF:" << pKF->mnId << "; Map init KF:" << mnInitKFid << endl;
-            mnInitKFid = pKF->mnId;
+            cout << "First KF:" << pKF->mnId << "; Map init KF:" << mnInitKFId << endl;
+            mnInitKFId = pKF->mnId;
             mpKFinitial = pKF;
             mpKFlowerID = pKF;
         }
@@ -77,9 +76,30 @@ namespace ORB_SLAM3 {
         }
     }
 
+
     void Map::AddMapPoint(MapPoint *pMP) {
         unique_lock<mutex> lock(mMutexMap);
         mspMapPoints.insert(pMP);
+    }
+
+    void Map::SetImuIniertialBA1() {
+        unique_lock<mutex> lock(mMutexMap);
+        mbIMU_BA1 = true;
+    }
+
+    void Map::SetImuIniertialBA2() {
+        unique_lock<mutex> lock(mMutexMap);
+        mbIMU_BA2 = true;
+    }
+
+    bool Map::GetImuIniertialBA1() {
+        unique_lock<mutex> lock(mMutexMap);
+        return mbIMU_BA1;
+    }
+
+    bool Map::GetImuIniertialBA2() {
+        unique_lock<mutex> lock(mMutexMap);
+        return mbIMU_BA2;
     }
 
     void Map::SetImuInitialized() {
@@ -87,9 +107,36 @@ namespace ORB_SLAM3 {
         mbImuInitialized = true;
     }
 
-    bool Map::isImuInitialized() {
+    bool Map::GetImuInitialized() {
         unique_lock<mutex> lock(mMutexMap);
         return mbImuInitialized;
+    }
+
+    void Map::SetRtkInitialized() {
+        unique_lock<mutex> lock(mMutexRtkUpdate);
+        mbRtkInitialized = true;
+
+    }
+
+    bool Map::GetRtkInitialized() {
+        unique_lock<mutex> lock(mMutexRtkUpdate);
+        return mbRtkInitialized;
+    }
+
+    void Map::GetSim3RtkToLocal(Eigen::Matrix<float, 4, 4> &Sim3lr, Eigen::Matrix3f &Rlr, Eigen::Vector3f &tlr, float &slr) {
+        unique_lock<mutex> lock(mMutexRtkUpdate);
+        Rlr = mRlr;
+        tlr = mtlr;
+        slr = mslr;
+        Sim3lr = mSim3lr;
+    }
+
+    void Map::SetSim3RtkToLocal(Eigen::Matrix<float, 4, 4> Sim3lr, Eigen::Matrix3f Rlr, Eigen::Vector3f tlr, float slr) {
+        unique_lock<mutex> lock(mMutexRtkUpdate);
+        mRlr = Rlr;
+        mtlr = tlr;
+        mslr = slr;
+        mSim3lr = Sim3lr;
     }
 
     void Map::EraseMapPoint(MapPoint *pMP) {
@@ -173,6 +220,7 @@ namespace ORB_SLAM3 {
         unique_lock<mutex> lock(mMutexMap);
         return mvpReferenceMapPoints;
     }
+
     vector<KeyFrame *> Map::GetReferenceKeyFrames() {
         unique_lock<mutex> lock(mMutexMap);
         return mvpReferenceKeyFrames;
@@ -182,17 +230,17 @@ namespace ORB_SLAM3 {
         return mnId;
     }
 
-    long unsigned int Map::GetInitKFid() {
+    long unsigned int Map::GetInitKFId() {
         unique_lock<mutex> lock(mMutexMap);
-        return mnInitKFid;
+        return mnInitKFId;
     }
 
-    void Map::SetInitKFid(long unsigned int initKFif) {
+    void Map::SetInitKFId(long unsigned int InitKFId) {
         unique_lock<mutex> lock(mMutexMap);
-        mnInitKFid = initKFif;
+        mnInitKFId = InitKFId;
     }
 
-    long unsigned int Map::GetMaxKFid() {
+    long unsigned int Map::GetMaxKFId() {
         unique_lock<mutex> lock(mMutexMap);
         return mnMaxKFid;
     }
@@ -221,12 +269,14 @@ namespace ORB_SLAM3 {
 
         mspMapPoints.clear();
         mspKeyFrames.clear();
-        mnMaxKFid = mnInitKFid;
+        mnMaxKFid = mnInitKFId;
         mbImuInitialized = false;
+        mbRtkInitialized = false;
         mvpReferenceMapPoints.clear();
         mvpInitKeyFrames.clear();
         mbIMU_BA1 = false;
         mbIMU_BA2 = false;
+        mfRtkToLocalDist = 1e10;
     }
 
     bool Map::IsInUse() {
@@ -292,36 +342,6 @@ namespace ORB_SLAM3 {
         mnMapChangeIdx++;
     }
 
-    void Map::SetInertialSensor() {
-        unique_lock<mutex> lock(mMutexMap);
-        mbIsInertial = true;
-    }
-
-    bool Map::IsInertial() {
-        unique_lock<mutex> lock(mMutexMap);
-        // 将mbIsInertial设置为true,将其设置为imu属性,以后的跟踪和预积分将和这个标志有关
-        return mbIsInertial;
-    }
-
-    void Map::SetIniertialBA1() {
-        unique_lock<mutex> lock(mMutexMap);
-        mbIMU_BA1 = true;
-    }
-
-    void Map::SetIniertialBA2() {
-        unique_lock<mutex> lock(mMutexMap);
-        mbIMU_BA2 = true;
-    }
-
-    bool Map::GetIniertialBA1() {
-        unique_lock<mutex> lock(mMutexMap);
-        return mbIMU_BA1;
-    }
-
-    bool Map::GetIniertialBA2() {
-        unique_lock<mutex> lock(mMutexMap);
-        return mbIMU_BA2;
-    }
 
     void Map::ChangeId(long unsigned int nId) {
         mnId = nId;

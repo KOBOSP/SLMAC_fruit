@@ -96,7 +96,7 @@ namespace ORB_SLAM3 {
             Sophus::SE3<float> Tcw = pKF->GetPose();
             vSE3->setEstimate(g2o::SE3Quat(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>()));
             vSE3->setId(pKF->mnId);
-            vSE3->setFixed(pKF->mnId == pMap->GetInitKFid());
+            vSE3->setFixed(pKF->mnId == pMap->GetInitKFId());
             optimizer.addVertex(vSE3);
             if (pKF->mnId > maxKFid)
                 maxKFid = pKF->mnId;
@@ -303,7 +303,7 @@ namespace ORB_SLAM3 {
     void Optimizer::GlobalBundleAdjustemetWithImu(Map *pMap, int its, const bool bFixLocal, const long unsigned int nLoopKF,
                                                   bool *pbStopFlag, bool bInit, float priorG, float priorA, Eigen::VectorXd *vSingVal,
                                                   bool *bHess) {
-        long unsigned int maxKFid = pMap->GetMaxKFid();
+        long unsigned int maxKFid = pMap->GetMaxKFId();
         const vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
         const vector<MapPoint *> vpMPs = pMap->GetAllMapPoints();
 
@@ -1455,7 +1455,7 @@ namespace ORB_SLAM3 {
         for (list<KeyFrame *>::iterator lit = lLocalKeyFrames.begin(), lend = lLocalKeyFrames.end();
              lit != lend; lit++) {
             KeyFrame *pKFi = *lit;
-            if (pKFi->mnId == pMap->GetInitKFid()) {
+            if (pKFi->mnId == pMap->GetInitKFId()) {
                 nFixedKFsNum = 1;
             }
             vector<MapPoint *> vpMPs = pKFi->GetMapPointsInKF();
@@ -1501,8 +1501,7 @@ namespace ORB_SLAM3 {
         linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>();
         g2o::BlockSolver_6_3 *solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
         g2o::OptimizationAlgorithmLevenberg *solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
-        if (pMap->IsInertial())
-            solver->setUserLambdaInit(100.0);
+        solver->setUserLambdaInit(100.0);
 
         optimizer.setAlgorithm(solver);
         optimizer.setVerbose(false);
@@ -1524,7 +1523,7 @@ namespace ORB_SLAM3 {
             Sophus::SE3<float> Tcw = pKFi->GetPose();
             vSE3->setEstimate(g2o::SE3Quat(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>()));
             vSE3->setId(pKFi->mnId);
-            vSE3->setFixed(pKFi->mnId == pMap->GetInitKFid());
+            vSE3->setFixed(pKFi->mnId == pMap->GetInitKFId());
             optimizer.addVertex(vSE3);
             if (pKFi->mnId > maxKFid)
                 maxKFid = pKFi->mnId;
@@ -2256,7 +2255,7 @@ namespace ORB_SLAM3 {
         const vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
         const vector<MapPoint *> vpMPs = pMap->GetAllMapPoints();
 
-        const unsigned int nMaxKFid = pMap->GetMaxKFid();
+        const unsigned int nMaxKFid = pMap->GetMaxKFId();
 
         vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3> > vScw(nMaxKFid + 1);
         vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3> > vCorrectedSwc(nMaxKFid + 1);
@@ -2289,7 +2288,7 @@ namespace ORB_SLAM3 {
                 VSim3->setEstimate(Siw);
             }
 
-            if (pKF->mnId == pMap->GetInitKFid())
+            if (pKF->mnId == pMap->GetInitKFId())
                 VSim3->setFixed(true);
 
             VSim3->setId(nIDi);
@@ -2530,7 +2529,7 @@ namespace ORB_SLAM3 {
         optimizer.setAlgorithm(solver);
 
         Map *pMap = pCurKF->GetMap();
-        const unsigned int nMaxKFid = pMap->GetMaxKFid();
+        const unsigned int nMaxKFid = pMap->GetMaxKFId();
 
         vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3> > vScw(nMaxKFid + 1);
         vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3> > vCorrectedSwc(nMaxKFid + 1);
@@ -3147,7 +3146,7 @@ namespace ORB_SLAM3 {
                                          bool bGauss, float priorG, float priorA) {
         Verbose::PrintMess("inertial optimization", Verbose::VERBOSITY_NORMAL);
         int its = 200;
-        long unsigned int maxKFid = pMap->GetMaxKFid();
+        long unsigned int maxKFid = pMap->GetMaxKFId();
         const vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
 
         // Setup optimizer
@@ -3323,7 +3322,7 @@ namespace ORB_SLAM3 {
 
     void Optimizer::InertialOptimization(Map *pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG, float priorA) {
         int its = 200; // Check number of iterations
-        long unsigned int maxKFid = pMap->GetMaxKFid();
+        long unsigned int maxKFid = pMap->GetMaxKFId();
         const vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
 
         // Setup optimizer
@@ -3478,7 +3477,7 @@ namespace ORB_SLAM3 {
 
     void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale) {
         int its = 10;
-        long unsigned int maxKFid = pMap->GetMaxKFid();
+        long unsigned int maxKFid = pMap->GetMaxKFId();
         const vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
 
         // Setup optimizer
@@ -4500,7 +4499,6 @@ namespace ORB_SLAM3 {
             pMP->SetWorldPos(vPoint->estimate().cast<float>());
             pMP->UpdateNormalAndDepth();
         }
-
         pMap->IncreaseChangeIdx();
     }
 
@@ -4524,7 +4522,7 @@ namespace ORB_SLAM3 {
         const vector<KeyFrame *> vpKFs = pMap->GetAllKeyFrames();
         const vector<MapPoint *> vpMPs = pMap->GetAllMapPoints();
 
-        const unsigned int nMaxKFid = pMap->GetMaxKFid();
+        const unsigned int nMaxKFid = pMap->GetMaxKFId();
 
         vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3> > vScw(nMaxKFid + 1);
         vector<g2o::Sim3, Eigen::aligned_allocator<g2o::Sim3> > vCorrectedSwc(nMaxKFid + 1);

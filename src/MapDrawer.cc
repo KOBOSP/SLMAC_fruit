@@ -71,7 +71,7 @@ namespace ORB_SLAM3 {
     }
 
     void MapDrawer::DrawKeyFramesGraphs(const bool bDrawKF, const bool bDrawCovisGraph, const bool bDrawInertialGraph,
-                                        const bool bDrawOptFixKF, const bool bHisoryMapKF) {
+                                        const bool bDrawRtkGraph, const bool bDrawOptFixKF, const bool bHisoryMapKF) {
         const float &fFW = mKeyFrameSize;
         const float fFH = fFW * 0.75;
         const float fFZ = fFW * 0.6;
@@ -192,11 +192,10 @@ namespace ORB_SLAM3 {
                     glVertex3f(Owl(0), Owl(1), Owl(2));
                 }
             }
-
             glEnd();
         }
 
-        if (bDrawInertialGraph && pActiveMap->isImuInitialized()) {
+        if (bDrawInertialGraph && pActiveMap->GetImuInitialized()) {
             glLineWidth(mGraphLineWidth);
             glColor4f(1.0f, 0.0f, 0.0f, 0.6f);
             glBegin(GL_LINES);
@@ -212,7 +211,31 @@ namespace ORB_SLAM3 {
                     glVertex3f(Owp(0), Owp(1), Owp(2));
                 }
             }
+            glEnd();
+        }
 
+        if (bDrawRtkGraph && pActiveMap->GetRtkInitialized()) {
+            glLineWidth(mGraphLineWidth);
+            glColor4f(0.0f, 1.0f, 1.0f, 0.8f);
+            glBegin(GL_LINES);
+
+            Eigen::Matrix<float, 4, 4> Sim3lrNow;
+            Eigen::Matrix3f Rlr;
+            Eigen::Vector3f tlr;
+            float slr;
+            pActiveMap->GetSim3RtkToLocal(Sim3lrNow, Rlr, tlr, slr);
+            for (size_t i = 0; i < vpKFs.size(); i++) {
+                KeyFrame *pKFi = vpKFs[i];
+                Eigen::Vector3f Ow = slr * Rlr * pKFi->GetRtkTrans() + tlr;
+//                Eigen::Vector3d Ow = pKFi->GetRtkTrans().cast<double>();
+                KeyFrame *pNext = pKFi->mNextKF;
+                if (pNext) {
+                    Eigen::Vector3f Owp = slr * Rlr * pNext->GetRtkTrans() + tlr;
+//                    Eigen::Vector3d Owp = pNext->GetRtkTrans().cast<double>();
+                    glVertex3f(Ow(0), Ow(1), Ow(2));
+                    glVertex3f(Owp(0), Owp(1), Owp(2));
+                }
+            }
             glEnd();
         }
 

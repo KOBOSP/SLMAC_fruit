@@ -46,7 +46,7 @@ namespace ORB_SLAM3 {
         template<class Archive>
         void serialize(Archive &ar, const unsigned int version) {
             ar & mnId;
-            ar & mnInitKFid;
+            ar & mnInitKFId;
             ar & mnMaxKFid;
             ar & mnBigChangeIdx;
 
@@ -62,7 +62,6 @@ namespace ORB_SLAM3 {
             ar & mnBackupKFlowerID;
 
             ar & mbImuInitialized;
-            ar & mbIsInertial;
             ar & mbIMU_BA1;
             ar & mbIMU_BA2;
         }
@@ -84,33 +83,36 @@ namespace ORB_SLAM3 {
 
         void EraseKeyFrame(KeyFrame *pKF);
 
-        void SetReferenceMapPoints(const std::vector<MapPoint *> &vpMPs);
-
-        void SetReferenceKeyFrames(const std::vector<KeyFrame *> &vpKFs);
-
-        void InformNewBigChange();
-
-        int GetLastBigChangeIdx();
-
         std::vector<KeyFrame *> GetAllKeyFrames();
 
         std::vector<MapPoint *> GetAllMapPoints();
-
-        std::vector<MapPoint *> GetReferenceMapPoints();
-
-        std::vector<KeyFrame *> GetReferenceKeyFrames();
 
         long unsigned int GetMapPointsNumInMap();
 
         long unsigned GetKeyFramesNumInMap();
 
+        std::vector<MapPoint *> GetReferenceMapPoints();
+
+        std::vector<KeyFrame *> GetReferenceKeyFrames();
+
+        void SetReferenceMapPoints(const std::vector<MapPoint *> &vpMPs);
+
+        void SetReferenceKeyFrames(const std::vector<KeyFrame *> &vpKFs);
+
+
         long unsigned int GetId();
 
-        long unsigned int GetInitKFid();
+        long unsigned int GetInitKFId();
 
-        void SetInitKFid(long unsigned int initKFif);
+        void SetInitKFId(long unsigned int initKFif);
 
-        long unsigned int GetMaxKFid();
+        long unsigned int GetMaxKFId();
+
+        void ChangeId(long unsigned int nId);
+
+        unsigned int GetLowerKFID();
+
+        int GetLastBigChangeIdx();
 
         KeyFrame *GetOriginKF();
 
@@ -138,29 +140,29 @@ namespace ORB_SLAM3 {
 
         void SetImuInitialized();
 
-        bool isImuInitialized();
+        bool GetImuInitialized();
+
+        void SetRtkInitialized();
+
+        bool GetRtkInitialized();
+
+        void SetSim3RtkToLocal(Eigen::Matrix<float, 4, 4> Sim3lr, Eigen::Matrix3f Rlr, Eigen::Vector3f tlr, float slr);
+        void GetSim3RtkToLocal(Eigen::Matrix<float, 4, 4> &Sim3lr, Eigen::Matrix3f &Rlr, Eigen::Vector3f &tlr, float &slr);
+
+        void SetImuIniertialBA1();
+
+        void SetImuIniertialBA2();
+
+        bool GetImuIniertialBA1();
+
+        bool GetImuIniertialBA2();
 
         void ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel = false);
-
-        void SetInertialSensor();
-
-        bool IsInertial();
-
-        void SetIniertialBA1();
-
-        void SetIniertialBA2();
-
-        bool GetIniertialBA1();
-
-        bool GetIniertialBA2();
 
         void PrintEssentialGraph();
 
         bool CheckEssentialGraph();
 
-        void ChangeId(long unsigned int nId);
-
-        unsigned int GetLowerKFID();
 
         void PreSave(std::set<GeometricCamera *> &spCams);
 
@@ -171,6 +173,9 @@ namespace ORB_SLAM3 {
         void printReprojectionError(list<KeyFrame *> &lpLocalWindowKFs, KeyFrame *mpCurrentKF, string &name,
                                     string &name_folder);
 
+        void InformNewBigChange();
+
+
         vector<KeyFrame *> mvpInitKeyFrames;
         vector<unsigned long int> mvBackupKeyFrameOriginsId;
         KeyFrame *mpFirstRegionKF;
@@ -178,7 +183,7 @@ namespace ORB_SLAM3 {
 
         // This avoid that two points are created simultaneously in separate threads (id conflict)
         std::mutex mMutexPointCreation;
-
+        std::mutex mMutexRtkUpdate;
         bool mbFail;
 
         // Size of the thumbnail (always in power of 2)
@@ -194,8 +199,8 @@ namespace ORB_SLAM3 {
 
     protected:
 
-        long unsigned int mnId;
 
+        long unsigned int mnId;
         std::set<MapPoint *> mspMapPoints;
         std::set<KeyFrame *> mspKeyFrames;
 
@@ -212,29 +217,29 @@ namespace ORB_SLAM3 {
         std::vector<MapPoint *> mvpReferenceMapPoints;
         std::vector<KeyFrame *> mvpReferenceKeyFrames;
 
+        bool mbIMU_BA1;
+        bool mbIMU_BA2;
         bool mbImuInitialized;
+        bool mbRtkInitialized;
+        Eigen::Matrix3f mRlr;
+        Eigen::Vector3f mtlr;
+        float mslr, mfRtkToLocalDist;
+        Eigen::Matrix<float, 4, 4> mSim3lr;
 
         int mnMapChangeIdx;
         int mnLastMapChangeIdx;
 
-        long unsigned int mnInitKFid;
+        long unsigned int mnInitKFId;
         long unsigned int mnMaxKFid;
-        //long unsigned int mnLastLoopKFid;
 
         // Index related to a big change in the map (loop closure, global BA)
         int mnBigChangeIdx;
-
 
         // View of the map in aerial sight (for the AtlasViewer)
         GLubyte *mThumbnail;
 
         bool mIsInUse;
-        bool mHasTumbnail;
         bool mbBad = false;
-
-        bool mbIsInertial;
-        bool mbIMU_BA1;
-        bool mbIMU_BA2;
 
         // Mutex
         std::mutex mMutexMap;

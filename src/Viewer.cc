@@ -26,7 +26,8 @@ namespace ORB_SLAM3 {
 
     Viewer::Viewer(System *pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Tracking *pTracking,
                    const string &sSettingPath, Settings *settings) :
-            mbFrameBoth(true), mpSystem(pSystem), mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpTracker(pTracking),
+            mbFrameBoth(true), mpSystem(pSystem), mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer),
+            mpTracker(pTracking),
             mbRequestFinish(false), mbFinished(true), mbReseted(true), mbRequestReset(false) {
         mfImgFreq = 1e3 / settings->mfImgFps;
         mfImageFrameScale = settings->mfImageFrameScale;
@@ -55,6 +56,7 @@ namespace ORB_SLAM3 {
         pangolin::Var<bool> menuTopView("menu.Top View", false, false);
         pangolin::Var<bool> menuShowMapPoints("menu.Show MapPoints", true, true);
         pangolin::Var<bool> menuShowKeyFrames("menu.Show KeyFrames", true, true);
+        pangolin::Var<bool> menuShowRtkGraph("menu.Rtk Graph", true, true);
         pangolin::Var<bool> menuShowCovisGraph("menu.Covis Graph", false, true);
         pangolin::Var<bool> menuShowImuGraph("menu.Inertial Graph", true, true);
         pangolin::Var<bool> menuStereoFrame("menu.Stereo Frame", false, true);
@@ -67,13 +69,14 @@ namespace ORB_SLAM3 {
         pangolin::Var<bool> menuFinish("menu.Finish", false, false);
         // Define Camera Render Object (for view / scene browsing)
         pangolin::OpenGlRenderState MapView(
-                pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, mfViewpointF, mfViewpointF, mfMapWidth/2, mfMapHeight/2, 0.1, 1000),
+                pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, mfViewpointF, mfViewpointF, mfMapWidth / 2,
+                                           mfMapHeight / 2, 0.1, 1000),
                 pangolin::ModelViewLookAt(mfViewpointX, mfViewpointY, mfViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0)
         );
 
         // Add named OpenGL viewport to window and provide 3D Handler
         pangolin::View &MapHandler = pangolin::CreateDisplay()
-                .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1.0*mfMapWidth/mfMapHeight)
+                .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1.0 * mfMapWidth / mfMapHeight)
                 .SetHandler(new pangolin::Handler3D(MapView));
 
         pangolin::OpenGlMatrix Twc;
@@ -104,11 +107,17 @@ namespace ORB_SLAM3 {
                     MapView.Follow(Ow);
             } else if (menuFollowCamera && !bFollow) {
                 if (bCameraView) {
-                    MapView.SetProjectionMatrix(pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, mfViewpointF, mfViewpointF, mfMapWidth/2, mfMapHeight/2, 0.1, 1000));
-                    MapView.SetModelViewMatrix(pangolin::ModelViewLookAt(mfViewpointX, mfViewpointY, mfViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0));
+                    MapView.SetProjectionMatrix(
+                            pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, mfViewpointF, mfViewpointF,
+                                                       mfMapWidth / 2, mfMapHeight / 2, 0.1, 1000));
+                    MapView.SetModelViewMatrix(
+                            pangolin::ModelViewLookAt(mfViewpointX, mfViewpointY, mfViewpointZ, 0, 0, 0, 0.0, -1.0,
+                                                      0.0));
                     MapView.Follow(Twc);
                 } else {
-                    MapView.SetProjectionMatrix(pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, 3000, 3000, mfMapWidth / 2, mfMapHeight / 2, 0.1, 1000));
+                    MapView.SetProjectionMatrix(
+                            pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, 3000, 3000, mfMapWidth / 2,
+                                                       mfMapHeight / 2, 0.1, 1000));
                     MapView.SetModelViewMatrix(pangolin::ModelViewLookAt(0, 0.01, 10, 0, 0, 0, 0.0, 0.0, 1.0));
                     MapView.Follow(Ow);
                 }
@@ -120,21 +129,26 @@ namespace ORB_SLAM3 {
             if (menuCamView) {
                 menuCamView = false;
                 bCameraView = true;
-                MapView.SetProjectionMatrix(pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, 3000, 3000, mfMapWidth/2, mfMapHeight/2, 0.1, 1000));
-                MapView.SetModelViewMatrix(pangolin::ModelViewLookAt(mfViewpointX, mfViewpointY, mfViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0));
+                MapView.SetProjectionMatrix(
+                        pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, 3000, 3000, mfMapWidth / 2, mfMapHeight / 2,
+                                                   0.1, 1000));
+                MapView.SetModelViewMatrix(
+                        pangolin::ModelViewLookAt(mfViewpointX, mfViewpointY, mfViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0));
                 MapView.Follow(Twc);
             }
-            if (menuTopView && mpMapDrawer->mpAtlas->isImuInitialized()) {
+            if (menuTopView && mpMapDrawer->mpAtlas->GetImuInitialized()) {
                 menuTopView = false;
                 bCameraView = false;
-                MapView.SetProjectionMatrix(pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, 3000, 3000, mfMapWidth / 2, mfMapHeight / 2, 0.1, 1000));
+                MapView.SetProjectionMatrix(
+                        pangolin::ProjectionMatrix(mfMapWidth, mfMapHeight, 3000, 3000, mfMapWidth / 2, mfMapHeight / 2,
+                                                   0.1, 1000));
                 MapView.SetModelViewMatrix(pangolin::ModelViewLookAt(0, 0.01, 50, 0, 0, 0, 0.0, 0.0, 1.0));
                 MapView.Follow(Ow);
             }
 
             if (menuStereoFrame) {
                 mbFrameBoth = true;
-            }else{
+            } else {
                 mbFrameBoth = false;
             }
 
@@ -162,9 +176,8 @@ namespace ORB_SLAM3 {
             MapHandler.Activate(MapView);
             glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
             mpMapDrawer->DrawCurrentCamera(Twc);
-            if (menuShowKeyFrames || menuShowCovisGraph || menuShowImuGraph || menuShowOptFixKF || menuHisoryMapKF)
-                mpMapDrawer->DrawKeyFramesGraphs(menuShowKeyFrames, menuShowCovisGraph, menuShowImuGraph,
-                                                 menuShowOptFixKF, menuHisoryMapKF);
+            mpMapDrawer->DrawKeyFramesGraphs(menuShowKeyFrames, menuShowCovisGraph, menuShowImuGraph,
+                                             menuShowRtkGraph, menuShowOptFixKF, menuHisoryMapKF);
             if (menuShowMapPoints)
                 mpMapDrawer->DrawMapPoints();
             pangolin::FinishFrame();
@@ -180,6 +193,7 @@ namespace ORB_SLAM3 {
             cv::waitKey(mfImgFreq);
 
             if (menuReset) {
+                menuShowRtkGraph = true;
                 menuShowCovisGraph = true;
                 menuShowImuGraph = true;
                 menuShowKeyFrames = true;
@@ -253,6 +267,7 @@ namespace ORB_SLAM3 {
         }
         return false;
     }
+
     bool Viewer::CheckReseted() {
         unique_lock<mutex> lock(mMutexReset);
         return mbReseted;

@@ -7,9 +7,18 @@ IF (NOT CMAKE_BUILD_TYPE)
 ENDIF ()
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
-
+#
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall   -O3")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall   -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -W -fsanitize=address -fno-omit-frame-pointer")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W -fsanitize=address -fno-omit-frame-pointer")
+#-fsanitize=address
+#-fno-omit-frame-pointer     #打印函数调用路径
+#-fsanitize-recover=address  #AddressSanitizer遇到错误时能够继续
+#-w的意思是关闭编译时的警告，也就是编译后不显示任何warning，因为有时在编译之后编译器会显示一些例如数据转换之类的警告，这些警告是我们平时可以忽略的。
+#-W选项类似-Wall，会显示警告，但是只显示编译器认为会出现错误的警告。
+#-Wall选项意思是编译后显示所有警告
+
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
 
@@ -28,6 +37,7 @@ elseif (COMPILER_SUPPORTS_CXX0X)
 else ()
     message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif ()
+
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 

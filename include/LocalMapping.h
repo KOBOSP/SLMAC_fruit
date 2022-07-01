@@ -42,7 +42,7 @@ class LocalMapping
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    LocalMapping(System* pSys, Atlas* pAtlas, const float bMonocular, bool bInertial, Settings *settings);
+    LocalMapping(System* pSys, Atlas* pAtlas, const float bMonocular, bool bHaveIm, Settings *settings);
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
@@ -100,8 +100,8 @@ protected:
 
     System *mpSystem;
 
-    bool mbMonocular;
-    bool mbInertial;
+    bool mbHaveMono;
+    bool mbHaveImu;
 
     void ResetIfRequested();
     bool mbResetRequested;
@@ -144,7 +144,7 @@ protected:
 
     Eigen::MatrixXd infoInertial;
     float mfCullKFRedundantTh;
-    float mTinit;
+    float mTimeFirstToCur;
     int mnWeakCovisTh, mnStrongCovisTh, mnSingleMaxCullKFsNum;
 
     };

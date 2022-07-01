@@ -85,8 +85,6 @@ namespace ORB_SLAM3 {
             }
             mpAtlas->CreateNewMap();
         }
-        // 如果是有imu的传感器类型，设置mbIsInertial = true;以后的跟踪和预积分将和这个标志有关
-        mpAtlas->SetInertialSensor();
         KeyFrame::mnStrongCovisTh = mSettings->mnStrongCovisTh;
 
         mpFrameDrawer = new FrameDrawer(mpAtlas, mSettings->mnColorNum);
@@ -282,9 +280,9 @@ namespace ORB_SLAM3 {
         std::cout << "There are " << std::to_string(vpMaps.size()) << " maps in the atlas" << std::endl;
         for (Map *pMap :vpMaps) {
             std::cout << "  Map " << std::to_string(pMap->GetId()) << " has "
-                      << std::to_string(pMap->GetAllKeyFrames().size()) << " KFs" << std::endl;
-            if (pMap->GetAllKeyFrames().size() > numMaxKFs) {
-                numMaxKFs = pMap->GetAllKeyFrames().size();
+                      << std::to_string(pMap->GetKeyFramesNumInMap()) << " KFs" << std::endl;
+            if (pMap->GetKeyFramesNumInMap() > numMaxKFs) {
+                numMaxKFs = pMap->GetKeyFramesNumInMap();
                 pBiggerMap = pMap;
             }
         }
@@ -361,8 +359,8 @@ namespace ORB_SLAM3 {
         Map *pBiggerMap;
         int numMaxKFs = 0;
         for (Map *pMap :vpMaps) {
-            if (pMap && pMap->GetAllKeyFrames().size() > numMaxKFs) {
-                numMaxKFs = pMap->GetAllKeyFrames().size();
+            if (pMap && pMap->GetKeyFramesNumInMap() > numMaxKFs) {
+                numMaxKFs = pMap->GetKeyFramesNumInMap();
                 pBiggerMap = pMap;
             }
         }
@@ -417,14 +415,14 @@ namespace ORB_SLAM3 {
 
     double System::GetTimeFromIMUInit() {
         double aux = mpLocalMapper->GetCurrKFTime() - mpLocalMapper->mFirstTs;
-        if ((aux > 0.) && mpAtlas->isImuInitialized())
+        if ((aux > 0.) && mpAtlas->GetImuInitialized())
             return mpLocalMapper->GetCurrKFTime() - mpLocalMapper->mFirstTs;
         else
             return 0.f;
     }
 
     bool System::isLost() {
-        if (!mpAtlas->isImuInitialized())
+        if (!mpAtlas->GetImuInitialized())
             return false;
         else {
             if ((mpTracker->mState == Tracking::LOST)) //||(mpTracker->mState==Tracking::RECENTLY_LOST))

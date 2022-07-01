@@ -82,7 +82,7 @@ namespace ORB_SLAM3 {
                     // Step 3 如果检测到融合（当前关键帧与其他地图有关联）, 则合并地图
                     if (mbMergeDetected) {
                         // 在imu没有初始化就放弃融合
-                        if (!mpCurrentKF->GetMap()->isImuInitialized()) {
+                        if (!mpCurrentKF->GetMap()->GetImuInitialized()) {
                             cout << "IMU is not initilized, merge is aborted" << endl;
                         } else {
                             // 拿到融合帧在自己地图所在坐标系(w2)下的位姿
@@ -102,31 +102,29 @@ namespace ORB_SLAM3 {
                             mSold_new = (gSw2c * gScw1);
 
                             // 如果是imu模式
-                            if (mpCurrentKF->GetMap()->IsInertial() && mpMergeMatchedKF->GetMap()->IsInertial()) {
-                                cout << "Merge check transformation with IMU" << endl;
-                                // 如果尺度变换太大, 认为累积误差较大，则放弃融合
-                                if (mSold_new.scale() < 0.90 || mSold_new.scale() > 1.1) {
-                                    mpMergeLastCurrentKF->SetErase();
-                                    mpMergeMatchedKF->SetErase();
-                                    mnMergeNumCoincidences = 0;
-                                    mvpMergeMatchedMPs.clear();
-                                    mvpMergeMPs.clear();
-                                    mnMergeNumNotFound = 0;
-                                    mbMergeDetected = false;
-                                    Verbose::PrintMess("scale bad estimated. Abort merging", Verbose::VERBOSITY_NORMAL);
-                                    continue;
-                                }
+                            cout << "Merge check transformation with IMU" << endl;
+                            // 如果尺度变换太大, 认为累积误差较大，则放弃融合
+                            if (mSold_new.scale() < 0.90 || mSold_new.scale() > 1.1) {
+                                mpMergeLastCurrentKF->SetErase();
+                                mpMergeMatchedKF->SetErase();
+                                mnMergeNumCoincidences = 0;
+                                mvpMergeMatchedMPs.clear();
+                                mvpMergeMPs.clear();
+                                mnMergeNumNotFound = 0;
+                                mbMergeDetected = false;
+                                Verbose::PrintMess("scale bad estimated. Abort merging", Verbose::VERBOSITY_NORMAL);
+                                continue;
+                            }
 
-                                // If inertial, force only yaw
-                                // 如果是imu模式并且完成了初始化,强制将焊接变换的 roll 和 pitch 设为0
-                                // 通过物理约束来保证两个坐标轴都是水平的
-                                if (mpCurrentKF->GetMap()->GetIniertialBA1()) // TODO, maybe with GetIniertialBA1
-                                {
-                                    Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
-                                    phi(0) = 0;
-                                    phi(1) = 0;
-                                    mSold_new = g2o::Sim3(ExpSO3(phi), mSold_new.translation(), 1.0);
-                                }
+                            // If inertial, force only yaw
+                            // 如果是imu模式并且完成了初始化,强制将焊接变换的 roll 和 pitch 设为0
+                            // 通过物理约束来保证两个坐标轴都是水平的
+                            if (mpCurrentKF->GetMap()->GetImuIniertialBA1()) // TODO, maybe with GetImuIniertialBA1
+                            {
+                                Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
+                                phi(0) = 0;
+                                phi(1) = 0;
+                                mSold_new = g2o::Sim3(ExpSO3(phi), mSold_new.translation(), 1.0);
                             }
 
                             // 这个变量没有用到
@@ -181,35 +179,29 @@ namespace ORB_SLAM3 {
                         Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);
                         // 更新 mg2oLoopScw
                         mg2oLoopScw = mg2oLoopSlw; //*mvg2oSim3LoopTcw[nCurrentIndex];
-                        // 如果是带imu的模式则做下判断，纯视觉跳过
-                        if (mpCurrentKF->GetMap()->IsInertial()) {
-                            // 拿到当前关键帧相对于世界坐标系的位姿
-                            Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
-                            g2o::Sim3 g2oTwc(Twc.unit_quaternion(), Twc.translation(), 1.0);
-                            // mg2oLoopScw是通过回环检测的Sim3计算出的回环矫正后的当前关键帧的初始位姿, Twc是当前关键帧回环矫正前的位姿.
-                            // g2oSww_new 可以理解为correction
-                            g2o::Sim3 g2oSww_new = g2oTwc * mg2oLoopScw;
+                        // 拿到当前关键帧相对于世界坐标系的位姿
+                        Sophus::SE3d Twc = mpCurrentKF->GetPoseInverse().cast<double>();
+                        g2o::Sim3 g2oTwc(Twc.unit_quaternion(), Twc.translation(), 1.0);
+                        // mg2oLoopScw是通过回环检测的Sim3计算出的回环矫正后的当前关键帧的初始位姿, Twc是当前关键帧回环矫正前的位姿.
+                        // g2oSww_new 可以理解为correction
+                        g2o::Sim3 g2oSww_new = g2oTwc * mg2oLoopScw;
 
-                            // 拿到 roll ,pitch ,yaw
-                            Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
-                            cout << "phi = " << phi.transpose() << endl;
-                            // 这里算是通过imu重力方向验证回环结果, 如果pitch或roll角度偏差稍微有一点大,则回环失败. 对yaw容忍比较大(20度)
-                            if (fabs(phi(0)) < 0.008f && fabs(phi(1)) < 0.008f && fabs(phi(2)) < 0.349f) {
-                                // 如果是imu模式
-                                if (mpCurrentKF->GetMap()->IsInertial()) {
-                                    // If inertial, force only yaw
-                                    // 如果是imu模式,强制将焊接变换的的 roll 和 pitch 设为0
-                                    if (mpCurrentKF->GetMap()->GetIniertialBA2()) {
-                                        phi(0) = 0;
-                                        phi(1) = 0;
-                                        g2oSww_new = g2o::Sim3(ExpSO3(phi), g2oSww_new.translation(), 1.0);
-                                        mg2oLoopScw = g2oTwc.inverse() * g2oSww_new;
-                                    }
-                                }
-                            } else {
-                                cout << "BAD LOOP!!!" << endl;
-                                bGoodLoop = false;
+                        // 拿到 roll ,pitch ,yaw
+                        Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
+                        cout << "phi = " << phi.transpose() << endl;
+                        // 这里算是通过imu重力方向验证回环结果, 如果pitch或roll角度偏差稍微有一点大,则回环失败. 对yaw容忍比较大(20度)
+                        if (fabs(phi(0)) < 0.008f && fabs(phi(1)) < 0.008f && fabs(phi(2)) < 0.349f) {
+                            // If inertial, force only yaw
+                            // 如果是imu模式,强制将焊接变换的的 roll 和 pitch 设为0
+                            if (mpCurrentKF->GetMap()->GetImuIniertialBA2()) {
+                                phi(0) = 0;
+                                phi(1) = 0;
+                                g2oSww_new = g2o::Sim3(ExpSO3(phi), g2oSww_new.translation(), 1.0);
+                                mg2oLoopScw = g2oTwc.inverse() * g2oSww_new;
                             }
+                        } else {
+                            cout << "BAD LOOP!!!" << endl;
+                            bGoodLoop = false;
                         }
                         if (bGoodLoop) {
                             mvpLoopMapPoints = mvpLoopMPs;
@@ -226,6 +218,8 @@ namespace ORB_SLAM3 {
                         mnLoopNumNotFound = 0;
                         mbLoopDetected = false;
                     }
+                } else if (mpLastMap) {
+                    InitializeRtk();
                 }
             }
             // 查看是否有外部线程请求复位当前线程
@@ -237,6 +231,70 @@ namespace ORB_SLAM3 {
             usleep(5000);
         }
         SetFinished();
+    }
+
+    void LoopClosing::InitializeRtk() {
+        if (mpLastMap->GetKeyFramesNumInMap() < 50 || !mpLastMap->GetImuInitialized()) {
+            return;
+        }
+        const vector<KeyFrame *> vpKFs = mpLastMap->GetAllKeyFrames();
+        size_t nRansacMaxIts = vpKFs.size();
+        size_t nIterations = 0;
+        Eigen::Matrix3f P3Dc1i;
+        Eigen::Matrix3f P3Dc2i;
+        Eigen::Matrix3f R12i, RBest12i;
+        Eigen::Vector3f t12i, tBest12i;
+        float s12i, sBest12i, fRtkToLocalDist, fBestRtkToLocalDist = 1e10, fBestOriDist = 0;
+        Eigen::Matrix4f T12i, TBest12i;
+        Eigen::Matrix4f T21i;
+        bool bFixScale = false;
+        if (mpLastMap->GetRtkInitialized()) {
+            mpLastMap->GetSim3RtkToLocal(TBest12i, RBest12i, tBest12i, sBest12i);
+            for (size_t i = 0; i < vpKFs.size(); i++) {
+                fBestOriDist += (sBest12i * RBest12i * vpKFs[i]->GetRtkTrans() + tBest12i -
+                                 vpKFs[i]->GetCameraCenter()).norm();
+            }
+            fBestOriDist /= vpKFs.size();
+        } else {
+            fBestOriDist = 1e10;
+        }
+        while (nIterations < nRansacMaxIts) {
+            nIterations++;
+            fRtkToLocalDist = 0;
+            // Get min set of points
+            for (short i = 0; i < 3; ++i) {
+                int randi = DUtils::Random::RandomInt(0, vpKFs.size() - 1);
+                P3Dc1i.col(i) = vpKFs[randi]->GetCameraCenter();
+                P3Dc2i.col(i) = vpKFs[randi]->GetRtkTrans();
+            }
+            if ((P3Dc2i.col(0) - P3Dc2i.col(1)).isZero(1e-3) || (P3Dc2i.col(1) - P3Dc2i.col(2)).isZero(1e-3) ||
+                (P3Dc2i.col(0) - P3Dc2i.col(2)).isZero(1e-3)) {
+                continue;
+            }
+            Sim3Solver::ComputeSim3(P3Dc1i, P3Dc2i, R12i, t12i, s12i, T12i, T21i, bFixScale);
+            if (s12i < 0.9 || s12i > 1.1) {
+                continue;
+            }
+            for (size_t i = 0; i < vpKFs.size(); i++) {
+                fRtkToLocalDist += (s12i * R12i * vpKFs[i]->GetRtkTrans() + t12i - vpKFs[i]->GetCameraCenter()).norm();
+            }
+            fRtkToLocalDist /= vpKFs.size();
+
+            if (fBestRtkToLocalDist > fRtkToLocalDist) {
+                sBest12i = s12i;
+                RBest12i = R12i;
+                tBest12i = t12i;
+                TBest12i = T12i;
+                fBestRtkToLocalDist = fRtkToLocalDist;
+            }
+        }
+
+        if (fBestRtkToLocalDist < 5 && fBestRtkToLocalDist < fBestOriDist) {
+            mpLastMap->SetRtkInitialized();
+            mpLastMap->SetSim3RtkToLocal(TBest12i, RBest12i, tBest12i, sBest12i);
+            cout << "NowDist: OriDist: sBest: " << fBestRtkToLocalDist << " " << fBestOriDist << " " << sBest12i
+                 << endl;
+        }
     }
 
 /**
@@ -256,6 +314,7 @@ namespace ORB_SLAM3 {
         return (!mlpLoopKeyFrameQueue.empty());
     }
 
+
 /**
  * @brief 检测有没有共同区域,包括检测回环和融合匹配,sim3计算,验证
  * 对应于ORB-SLAM2里的函数DetectLoop
@@ -267,7 +326,6 @@ namespace ORB_SLAM3 {
         // 如果一开始就不做回环的话这里就退出了，这个线程也就名存实亡了
         if (!mbActiveLC)
             return false;
-
         {
             // Step 1 从队列中取出一个关键帧,作为当前检测共同区域的关键帧
             unique_lock<mutex> lock(mMutexLoopQueue);
@@ -284,7 +342,7 @@ namespace ORB_SLAM3 {
 
         // Step 2 在某些情况下不进行共同区域检测
         // 1.imu模式下还没经过第二阶段初始化则不考虑
-        if (mpLastMap->IsInertial() && !mpLastMap->GetIniertialBA2()) {
+        if (!mpLastMap->GetImuIniertialBA2()) {
             mpKeyFrameDB->add(mpCurrentKF);
             mpCurrentKF->SetErase();
             return false;
@@ -292,7 +350,7 @@ namespace ORB_SLAM3 {
 
 
         // 3.当前地图关键帧少于12则不进行检测
-        if (mpLastMap->GetAllKeyFrames().size() < 12) {
+        if (mpLastMap->GetKeyFramesNumInMap() < 12) {
             // cout << "LoopClousure: Stereo KF inserted without check, map is small: " << mpCurrentKF->mnId << endl;
             mpKeyFrameDB->add(mpCurrentKF);
             mpCurrentKF->SetErase();
@@ -524,7 +582,8 @@ namespace ORB_SLAM3 {
                 //!bug, 以下gScw_estimation应该通过上述sim3优化后的位姿来更新。以下mScw应该改为 gscm * gswm^-1
 //                g2o::Sim3 gScw_estimation(Converter::toMatrix3d(mScw.rowRange(0, 3).colRange(0, 3)),
 //                                          Converter::toVector3d(mScw.rowRange(0, 3).col(3)), 1.0);
-                g2o::Sim3 gScw_estimation((gScm*(gSwm.inverse())).rotation(), (gScm*(gSwm.inverse())).translation(),1.0);
+                g2o::Sim3 gScw_estimation((gScm * (gSwm.inverse())).rotation(), (gScm * (gSwm.inverse())).translation(),
+                                          1.0);
                 vector<MapPoint *> vpMatchedMP;
                 vpMatchedMP.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
 
@@ -600,7 +659,7 @@ namespace ORB_SLAM3 {
         //Verbose::PrintMess("BoW candidates: There are " + to_string(vpBowCandKFs.ParameterSize()) + " possible candidates ", Verbose::VERBOSITY_DEBUG);
         // 2. 对每个候选关键帧都进行详细的分析
         for (KeyFrame *pKFi : vpBowCandKFs) {
-            if (!pKFi || pKFi->isBad()){
+            if (!pKFi || pKFi->isBad()) {
                 continue;
             }
 
@@ -1129,7 +1188,7 @@ namespace ORB_SLAM3 {
             // Get Map Mutex
             unique_lock<mutex> lock(pLoopMap->mMutexMapUpdate);
 
-            const bool bImuInit = pLoopMap->isImuInitialized();
+            const bool bImuInit = pLoopMap->GetImuInitialized();
             // 3.1：通过mg2oLoopScw（认为是准的）来进行位姿传播，得到当前关键帧的共视关键帧的世界坐标系下Sim3 位姿（还没有修正）
             // 遍历"当前关键帧组""
             for (vector<KeyFrame *>::iterator vit = mvpCurrentConnectedKFs.begin(), vend = mvpCurrentConnectedKFs.end();
@@ -1278,7 +1337,7 @@ namespace ORB_SLAM3 {
         bool bFixedScale = mbFixScale;
         // TODO CHECK; Solo para el monocular inertial
         //cout << "Optimize essential graph" << endl;
-        if (pLoopMap->IsInertial() && pLoopMap->isImuInitialized()) {
+        if (pLoopMap->GetImuInitialized()) {
             Optimizer::OptimizeEssentialGraph4DoF(pLoopMap, mpLoopMatchedKF, mpCurrentKF, NonCorrectedSim3,
                                                   CorrectedSim3, LoopConnections);
         } else {
@@ -1296,7 +1355,7 @@ namespace ORB_SLAM3 {
 
         // Launch a new thread to perform Global Bundle Adjustment (Only if few keyframes, if not it would take too much time)
         // 闭环地图没有imu初始化或者 仅有一个地图且内部关键帧<200时才执行全局BA，否则太慢
-        if (!pLoopMap->isImuInitialized() || (pLoopMap->GetKeyFramesNumInMap() < 200 && mpAtlas->CountMaps() == 1)) {
+        if (!pLoopMap->GetImuInitialized() || (pLoopMap->GetKeyFramesNumInMap() < 200 && mpAtlas->CountMaps() == 1)) {
             // Step 9. 新建一个线程用于全局BA优化
             // OptimizeEssentialGraph只是优化了一些主要关键帧的位姿，这里进行全局BA可以全局优化所有位姿和MapPoints
             mbRunningGBA = true;
@@ -1388,32 +1447,26 @@ namespace ORB_SLAM3 {
 
         // 这段代码只在visual状态下才会被使用，所以只会执行else
         // Step 1.1 构造当前关键帧局部共视帧窗口
-        if (pCurrentMap->IsInertial() && pMergeMap->IsInertial()) //TODO Check the correct initialization
-        {
-            KeyFrame *pKFi = mpCurrentKF;
-            int nInserted = 0;
-            while (pKFi && nInserted < numTemporalKFs) {
-                spLocalWindowKFs.insert(pKFi);
-                pKFi = mpCurrentKF->mPrevKF;
-                nInserted++;
+        KeyFrame *pKFi = mpCurrentKF;
+        int nInserted = 0;
+        while (pKFi && nInserted < numTemporalKFs) {
+            spLocalWindowKFs.insert(pKFi);
+            pKFi = mpCurrentKF->mPrevKF;
+            nInserted++;
 
-                set<MapPoint *> spMPi = pKFi->GetMapPoints();
-                spLocalWindowMPs.insert(spMPi.begin(), spMPi.end());
-            }
+            set<MapPoint *> spMPi = pKFi->GetMapPoints();
+            spLocalWindowMPs.insert(spMPi.begin(), spMPi.end());
+        }
+
+        pKFi = mpCurrentKF->mNextKF;
+        while (pKFi)  //! 这里会死循环,不过无所谓，这个外面的if永远不会执行
+        {
+            spLocalWindowKFs.insert(pKFi);
+
+            set<MapPoint *> spMPi = pKFi->GetMapPoints();
+            spLocalWindowMPs.insert(spMPi.begin(), spMPi.end());
 
             pKFi = mpCurrentKF->mNextKF;
-            while (pKFi)  //! 这里会死循环,不过无所谓，这个外面的if永远不会执行
-            {
-                spLocalWindowKFs.insert(pKFi);
-
-                set<MapPoint *> spMPi = pKFi->GetMapPoints();
-                spLocalWindowMPs.insert(spMPi.begin(), spMPi.end());
-
-                pKFi = mpCurrentKF->mNextKF;
-            }
-        } else {
-            // 把自己先加到窗口内
-            spLocalWindowKFs.insert(mpCurrentKF);
         }
 
         // 拿到当前关键帧的numTemporalKFs(15)个最佳共视关键帧
@@ -1465,8 +1518,6 @@ namespace ORB_SLAM3 {
         // Step 1.3 构造融合帧的共视帧窗口
         // 融合关键帧的共视关键帧们
         set<KeyFrame *> spMergeConnectedKFs;
-        // 这段代码只在visual状态下才会被使用，所以只会执行else
-        if (pCurrentMap->IsInertial() && pMergeMap->IsInertial()) //TODO Check the correct initialization
         {
             KeyFrame *pKFi = mpMergeMatchedKF;
             int nInserted = 0;
@@ -1475,15 +1526,12 @@ namespace ORB_SLAM3 {
                 pKFi = mpCurrentKF->mPrevKF;
                 nInserted++;
             }
+        }
 
-            pKFi = mpMergeMatchedKF->mNextKF;
-            while (pKFi && nInserted < numTemporalKFs) {
-                spMergeConnectedKFs.insert(pKFi);
-                pKFi = mpCurrentKF->mNextKF;
-            }
-        } else {
-            // 先把融合关键帧自己添加到窗口内
-            spMergeConnectedKFs.insert(mpMergeMatchedKF);
+        pKFi = mpMergeMatchedKF->mNextKF;
+        while (pKFi && nInserted < numTemporalKFs) {
+            spMergeConnectedKFs.insert(pKFi);
+            pKFi = mpCurrentKF->mNextKF;
         }
         // 拿到融合关键帧最好的numTemporalKFs(25)个最佳共视关键帧
         vpCovisibleKFs = mpMergeMatchedKF->GetBestCovisibilityKeyFrames(numTemporalKFs);
@@ -1598,7 +1646,7 @@ namespace ORB_SLAM3 {
             pKFi->mTcwMerge = correctedTiw.cast<float>();
 
             // !纯视觉模式，以下代码不执行
-            if (pCurrentMap->isImuInitialized()) {
+            if (pCurrentMap->GetImuInitialized()) {
                 Eigen::Quaternionf Rcor = (g2oCorrectedSiw.rotation().inverse() *
                                            vNonCorrectedSim3[pKFi].rotation()).cast<float>();
                 pKFi->mVwbMerge = Rcor * pKFi->GetVelocity();
@@ -1688,7 +1736,7 @@ namespace ORB_SLAM3 {
                 pCurrentMap->EraseKeyFrame(pKFi);
 
                 // 下面是没用的代码
-                if (pCurrentMap->isImuInitialized()) {
+                if (pCurrentMap->GetImuInitialized()) {
                     pKFi->SetVelocity(pKFi->mVwbMerge);
                 }
             }
@@ -1825,7 +1873,7 @@ namespace ORB_SLAM3 {
             // 固定 : 所有融合帧共视窗口内的关键帧 + 所有当前关键帧共视窗口内的关键帧
             // 优化:  当前关键帧所在地图里的所有关键帧(除了当前关键帧共视窗口内的关键帧) + 当前地图里的所有地图点
             Optimizer::OptimizeEssentialGraph(mpCurrentKF, vpMergeConnectedKFs, vpLocalCurrentWindowKFs,
-                                                  vpCurrentMapKFs, vpCurrentMapMPs);
+                                              vpCurrentMapKFs, vpCurrentMapMPs);
 
 
             {
@@ -1869,7 +1917,8 @@ namespace ORB_SLAM3 {
         // 这里没有imu, 所以isImuInitialized一定是false, 此时地图融合Atlas至少2个地图，所以第二个条件也一定是false
         // Step 9 全局BA
         if (bRelaunchBA &&
-            (!pCurrentMap->isImuInitialized() || (pCurrentMap->GetKeyFramesNumInMap() < 200 && mpAtlas->CountMaps() == 1))) {
+            (!pCurrentMap->GetImuInitialized() ||
+             (pCurrentMap->GetKeyFramesNumInMap() < 200 && mpAtlas->CountMaps() == 1))) {
             // Launch a new thread to perform Global Bundle Adjustment
             mbRunningGBA = true;
             mbFinishedGBA = false;
@@ -1982,7 +2031,7 @@ namespace ORB_SLAM3 {
         // 反正都要融合了，这里就拔苗助长完成IMU优化，回头直接全部放到融合地图里就好了
         const int numKFnew = pCurrentMap->GetKeyFramesNumInMap();
 
-        if (!pCurrentMap->GetIniertialBA2()) {
+        if (!pCurrentMap->GetImuIniertialBA2()) {
             // Map is not completly initialized
             Eigen::Vector3d bg, ba;
             bg << 0., 0., 0.;
@@ -1996,14 +2045,14 @@ namespace ORB_SLAM3 {
 
             // Set map initialized
             // 设置IMU已经完成初始化
-            pCurrentMap->SetIniertialBA2();
-            pCurrentMap->SetIniertialBA1();
+            pCurrentMap->SetImuIniertialBA2();
+            pCurrentMap->SetImuIniertialBA1();
             pCurrentMap->SetImuInitialized();
 
         }
 
 
-        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
+        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFId() << endl;
 
         // Load KFs and MPs from merge map
         //cout << "updating current map" << endl;
@@ -2056,7 +2105,7 @@ namespace ORB_SLAM3 {
             }
         }
 
-        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
+        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFId() << endl;
 
         //cout << "end updating current map" << endl;
 
@@ -2083,7 +2132,7 @@ namespace ORB_SLAM3 {
         }
 
 
-        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
+        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFId() << endl;
 
         //cout << "end update essential graph" << endl;
 
@@ -2133,7 +2182,7 @@ namespace ORB_SLAM3 {
         std::copy(spMapPointMerge.begin(), spMapPointMerge.end(), std::back_inserter(vpCheckFuseMapPoint));
         //cout << "Finished to update relationship between KFs" << endl;
 
-        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
+        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFId() << endl;
 
         /*good = pCurrentMap->CheckEssentialGraph();
     if(!good)
@@ -2144,7 +2193,7 @@ namespace ORB_SLAM3 {
         SearchAndFuse(vpCurrentConnectedKFs, vpCheckFuseMapPoint);
         //cout << "end SearchAndFuse" << endl;
 
-        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
+        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFId() << endl;
 
         /*good = pCurrentMap->CheckEssentialGraph();
     if(!good)
@@ -2169,7 +2218,7 @@ namespace ORB_SLAM3 {
         }
         //cout << "end update connections" << endl;
 
-        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
+        //cout << "MergeMap init ID: " << pMergeMap->GetInitKFId() << "       CurrMap init ID: " << pCurrentMap->GetInitKFid() << endl;
 
         /*good = pCurrentMap->CheckEssentialGraph();
     if(!good)
@@ -2210,15 +2259,15 @@ namespace ORB_SLAM3 {
     void LoopClosing::CheckObservations(set<KeyFrame *> &spKFsMap1, set<KeyFrame *> &spKFsMap2) {
         cout << "----------------------" << endl;
         for (KeyFrame *pKFi1 : spKFsMap1) {
-            map < KeyFrame * , int > mMatchedMP;
-            set < MapPoint * > spMPs = pKFi1->GetMapPoints();
+            map<KeyFrame *, int> mMatchedMP;
+            set<MapPoint *> spMPs = pKFi1->GetMapPoints();
 
             for (MapPoint *pMPij : spMPs) {
                 if (!pMPij || pMPij->isBad()) {
                     continue;
                 }
 
-                map < KeyFrame * , tuple < int, int >> mMPijObs = pMPij->GetObsKFAndLRIdx();
+                map<KeyFrame *, tuple<int, int >> mMPijObs = pMPij->GetObsKFAndLRIdx();
                 for (KeyFrame *pKFi2 : spKFsMap2) {
                     if (mMPijObs.find(pKFi2) != mMPijObs.end()) {
                         if (mMatchedMP.find(pKFi2) != mMatchedMP.end()) {
@@ -2236,7 +2285,7 @@ namespace ORB_SLAM3 {
             } else {
                 cout << "CHECK-OBS: KF " << pKFi1->mnId << " has matched MP with " << mMatchedMP.size()
                      << " KF from the other map" << endl;
-                for (pair < KeyFrame * , int > matchedKF : mMatchedMP) {
+                for (pair<KeyFrame *, int> matchedKF : mMatchedMP) {
                     cout << "   -KF: " << matchedKF.first->mnId << ", Number of matches: " << matchedKF.second << endl;
                 }
             }
@@ -2266,7 +2315,7 @@ namespace ORB_SLAM3 {
             g2o::Sim3 g2oScw = mit->second;
             Sophus::Sim3f Scw = Converter::toSophus(g2oScw);
 
-            vector < MapPoint * > vpReplacePoints(vpMapPoints.size(), static_cast<MapPoint *>(NULL));
+            vector<MapPoint *> vpReplacePoints(vpMapPoints.size(), static_cast<MapPoint *>(NULL));
 
             // 新点表示pKFi对应的点，老点表示pKFi对应的回环点
             // 将vpMapPoints投到pKF里面看看有没有匹配的MP，如果没有直接添加，如果有，暂时将老点放入至vpReplacePoints
@@ -2274,7 +2323,7 @@ namespace ORB_SLAM3 {
             int numFused = matcher.Fuse(pKFi, Scw, vpMapPoints, 4, vpReplacePoints);
 
             // Get Map Mutex
-            unique_lock <mutex> lock(pMap->mMutexMapUpdate);
+            unique_lock<mutex> lock(pMap->mMutexMapUpdate);
             // 更新点
             const int nLP = vpMapPoints.size();
             for (int i = 0; i < nLP; i++) {
@@ -2319,11 +2368,11 @@ namespace ORB_SLAM3 {
             Scw.rotationMatrix() - Tcw.rotationMatrix() << std::endl <<
             Scw.translation() - Tcw.translation() << std::endl <<
             Scw.scale() - 1.f << std::endl;*/
-            vector < MapPoint * > vpReplacePoints(vpMapPoints.size(), static_cast<MapPoint *>(NULL));
+            vector<MapPoint *> vpReplacePoints(vpMapPoints.size(), static_cast<MapPoint *>(NULL));
             matcher.Fuse(pKF, Scw, vpMapPoints, 4, vpReplacePoints);
 
             // Get Map Mutex
-            unique_lock <mutex> lock(pMap->mMutexMapUpdate);
+            unique_lock<mutex> lock(pMap->mMutexMapUpdate);
             const int nLP = vpMapPoints.size();
             for (int i = 0; i < nLP; i++) {
                 MapPoint *pRep = vpReplacePoints[i];
@@ -2344,13 +2393,13 @@ namespace ORB_SLAM3 {
  */
     void LoopClosing::RequestReset() {
         {
-            unique_lock <mutex> lock(mMutexReset);
+            unique_lock<mutex> lock(mMutexReset);
             cout << "LC: LoopCloser Reset Recieved" << endl;
             mbResetRequested = true;
         }
         while (1) {
             {
-                unique_lock <mutex> lock2(mMutexReset);
+                unique_lock<mutex> lock2(mMutexReset);
                 if (!mbResetRequested)
                     break;
             }
@@ -2361,14 +2410,14 @@ namespace ORB_SLAM3 {
 
     void LoopClosing::RequestResetActiveMap(Map *pMap) {
         {
-            unique_lock <mutex> lock(mMutexReset);
+            unique_lock<mutex> lock(mMutexReset);
             cout << "LC: ActiveMap Reset Recieved" << endl;
             mbResetActiveMapRequested = true;
             mpMapToReset = pMap;
         }
         while (1) {
             {
-                unique_lock <mutex> lock2(mMutexReset);
+                unique_lock<mutex> lock2(mMutexReset);
                 if (!mbResetActiveMapRequested)
                     break;
             }
@@ -2382,7 +2431,7 @@ namespace ORB_SLAM3 {
  * @brief 当前线程调用,检查是否有外部线程请求复位当前线程,如果有的话就复位回环检测线程
  */
     void LoopClosing::ResetIfRequested() {
-        unique_lock <mutex> lock(mMutexReset);
+        unique_lock<mutex> lock(mMutexReset);
         // 如果有来自于外部的线程的复位请求,那么就复位当前线程
         if (mbResetRequested) {
             cout << "LC: LoopCloser Reset Doing" << endl;
@@ -2399,7 +2448,7 @@ namespace ORB_SLAM3 {
                 KeyFrame *pKFi = *it;
                 if (pKFi->GetMap() == mpMapToReset) {
                     it = mlpLoopKeyFrameQueue.erase(it);
-                } else{
+                } else {
                     ++it;
                 }
             }
@@ -2417,11 +2466,11 @@ namespace ORB_SLAM3 {
         Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
 
         // imu 初始化成功才返回true，只要一阶段成功就为true
-        const bool bImuInit = pActiveMap->isImuInitialized();
+        const bool bImuInit = pActiveMap->GetImuInitialized();
 
         if (!bImuInit)
             Optimizer::GlobalBundleAdjustemntWithoutImu(pActiveMap, 10, &mbStopGBA, nLoopKF, false);
-        else{
+        else {
             // 仅有一个地图且内部关键帧<200，并且IMU完成了第一阶段初始化后才会进行下面
             Optimizer::GlobalBundleAdjustemetWithImu(pActiveMap, 7, false, nLoopKF, &mbStopGBA);
         }
@@ -2439,7 +2488,7 @@ namespace ORB_SLAM3 {
             if (idx != mnFullBAIdx)
                 return;
 
-            if (!bImuInit && pActiveMap->isImuInitialized())
+            if (!bImuInit && pActiveMap->GetImuInitialized())
                 return;
 
             if (!mbStopGBA) {
@@ -2577,27 +2626,27 @@ namespace ORB_SLAM3 {
 
 // 由外部线程调用,请求终止当前线程
     void LoopClosing::RequestFinish() {
-        unique_lock <mutex> lock(mMutexFinish);
+        unique_lock<mutex> lock(mMutexFinish);
         // cout << "LC: Finish requested" << endl;
         mbRequestFinish = true;
     }
 
 // 当前线程调用,查看是否有外部线程请求当前线程
     bool LoopClosing::CheckRequestFinish() {
-        unique_lock <mutex> lock(mMutexFinish);
+        unique_lock<mutex> lock(mMutexFinish);
         return mbRequestFinish;
     }
 
 // 有当前线程调用,执行完成该函数之后线程主函数退出,线程销毁
     void LoopClosing::SetFinished() {
-        unique_lock <mutex> lock(mMutexFinish);
+        unique_lock<mutex> lock(mMutexFinish);
         mbFinished = true;
         cout << "LoopClose Finished" << endl;
     }
 
 // 由外部线程调用,判断当前回环检测线程是否已经正确终止了
     bool LoopClosing::CheckFinished() {
-        unique_lock <mutex> lock(mMutexFinish);
+        unique_lock<mutex> lock(mMutexFinish);
         return mbFinished;
     }
 

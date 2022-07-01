@@ -175,7 +175,7 @@ namespace ORB_SLAM3 {
                 vAvailableIndices.pop_back();
             }
 
-            ComputeSim3(P3Dc1i, P3Dc2i);
+            ComputeSim3(P3Dc1i, P3Dc2i, mR12i, mt12i, ms12i, mT12i, mT21i, mbFixScale);
 
             CheckInliers();
 
@@ -243,7 +243,7 @@ namespace ORB_SLAM3 {
                 vAvailableIndices.pop_back();
             }
 
-            ComputeSim3(P3Dc1i, P3Dc2i);
+            ComputeSim3(P3Dc1i, P3Dc2i, mR12i, mt12i, ms12i, mT12i, mT21i, mbFixScale);
 
             CheckInliers();
 
@@ -287,7 +287,8 @@ namespace ORB_SLAM3 {
     }
 
 
-    void Sim3Solver::ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2) {
+    void Sim3Solver::ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2, Eigen::Matrix3f &R12i, Eigen::Vector3f &t12i,
+                                 float &s12i, Eigen::Matrix4f &T12i, Eigen::Matrix4f &T21i, bool &bFixScale) {
         // Custom implementation of:
         // Horn 1987, Closed-form solution of absolute orientataion using unit quaternions
 
@@ -343,14 +344,14 @@ namespace ORB_SLAM3 {
         double ang = atan2(vec.norm(), evec(0, maxIndex));
 
         vec = 2 * ang * vec / vec.norm(); //Angle-axis representation. quaternion angle is the half
-        mR12i = Sophus::SO3f::exp(vec).matrix();
+        R12i = Sophus::SO3f::exp(vec).matrix();
 
         // Step 5: Rotate set 2
-        Eigen::Matrix3f P3 = mR12i * Pr2;
+        Eigen::Matrix3f P3 = R12i * Pr2;
 
         // Step 6: Scale
 
-        if (!mbFixScale) {
+        if (!bFixScale) {
             double cvnom = Converter::toCvMat(Pr1).dot(Converter::toCvMat(P3));
             double nom = (Pr1.array() * P3.array()).sum();
             if (abs(nom - cvnom) > 1e-3)
@@ -359,32 +360,31 @@ namespace ORB_SLAM3 {
             aux_P3 = P3.array() * P3.array();
             double den = aux_P3.sum();
 
-            ms12i = nom / den;
+            s12i = nom / den;
         } else
-            ms12i = 1.0f;
+            s12i = 1.0f;
 
         // Step 7: Translation
-        mt12i = O1 - ms12i * mR12i * O2;
+        t12i = O1 - s12i * R12i * O2;
 
         // Step 8: Transformation
 
         // Step 8.1 T12
-        mT12i.setIdentity();
+        T12i.setIdentity();
 
-        Eigen::Matrix3f sR = ms12i * mR12i;
-        mT12i.block<3, 3>(0, 0) = sR;
-        mT12i.block<3, 1>(0, 3) = mt12i;
+        Eigen::Matrix3f sR = s12i * R12i;
+        T12i.block<3, 3>(0, 0) = sR;
+        T12i.block<3, 1>(0, 3) = t12i;
 
 
         // Step 8.2 T21
-        mT21i.setIdentity();
-        Eigen::Matrix3f sRinv = (1.0 / ms12i) * mR12i.transpose();
+        T21i.setIdentity();
+        Eigen::Matrix3f sRinv = (1.0 / s12i) * R12i.transpose();
 
-        // sRinv.copyTo(mT21i.rowRange(0,3).colRange(0,3));
-        mT21i.block<3, 3>(0, 0) = sRinv;
+        T21i.block<3, 3>(0, 0) = sRinv;
 
-        Eigen::Vector3f tinv = -sRinv * mt12i;
-        mT21i.block<3, 1>(0, 3) = tinv;
+        Eigen::Vector3f tinv = -sRinv * t12i;
+        T21i.block<3, 1>(0, 3) = tinv;
     }
 
 

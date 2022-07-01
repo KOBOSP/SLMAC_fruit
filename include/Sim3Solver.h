@@ -43,17 +43,15 @@ public:
 
     Eigen::Matrix4f iterate(int nIterations, bool &bNoMore, std::vector<bool> &vbInliers, int &nInliers);
     Eigen::Matrix4f iterate(int nIterations, bool &bNoMore, vector<bool> &vbInliers, int &nInliers, bool &bConverge);
-
+    static void ComputeCentroid(Eigen::Matrix3f &P, Eigen::Matrix3f &Pr, Eigen::Vector3f &C);
+    static void ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2, Eigen::Matrix3f &R12i, Eigen::Vector3f &t12i,
+                            float &s12i, Eigen::Matrix4f &T12i, Eigen::Matrix4f &T21i, bool &bFixScale);
     Eigen::Matrix4f GetEstimatedTransformation();
     Eigen::Matrix3f GetEstimatedRotation();
     Eigen::Vector3f GetEstimatedTranslation();
     float GetEstimatedScale();
 
 protected:
-
-    void ComputeCentroid(Eigen::Matrix3f &P, Eigen::Matrix3f &Pr, Eigen::Vector3f &C);
-
-    void ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2);
 
     void CheckInliers();
 

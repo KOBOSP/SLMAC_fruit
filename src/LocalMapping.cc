@@ -34,12 +34,12 @@ namespace ORB_SLAM3 {
  * @param pSys 系统类指针
  * @param pAtlas atlas
  * @param bMonocular 是否是单目 (bug)用float赋值了
- * @param bInertial 是否是惯性模式
+ * @param bHaveIm 是否是惯性模式
  * @param sSeqName 序列名字，没用到
  */
-    LocalMapping::LocalMapping(System *pSys, Atlas *pAtlas, const float bMonocular, bool bInertial, Settings *settings)
+    LocalMapping::LocalMapping(System *pSys, Atlas *pAtlas, const float bHaveMono, bool bHaveImu, Settings *settings)
             :
-            mpSystem(pSys), mbMonocular(bMonocular), mbInertial(bInertial), mbResetRequested(false),
+            mpSystem(pSys), mbHaveMono(bHaveMono), mbHaveImu(bHaveImu), mbResetRequested(false),
             mbResetRequestedActiveMap(false), mbRequestFinish(false), mbFinished(true), mpAtlas(pAtlas),
             bInitializing(false),
             mbAbortBA(false), mbPaused(false), mbRequestPause(false), mbNotPauseOrFinish(false),
@@ -57,7 +57,7 @@ namespace ORB_SLAM3 {
          * mbFinished:         判断最终LocalMapping::Run() 是否完成的标志。
          */
         mbBadImu = false;
-        mTinit = 0.f;
+        mTimeFirstToCur = 0.f;
         mbFarPoints = true;
         mfThFarPoints = settings->mfThFarPoints;
         mfCullKFRedundantTh = settings->mfCullKFRedundantTh;
@@ -135,7 +135,7 @@ namespace ORB_SLAM3 {
                     // 当前地图中关键帧数目大于2个
                     if (mpAtlas->KeyFramesInMap() > 2) {
                         // Step 6.1 处于IMU模式并且当前关键帧所在的地图已经完成IMU初始化
-                        if (mbInertial && mpCurrentKeyFrame->GetMap()->isImuInitialized()) {
+                        if (mbHaveImu && mpCurrentKeyFrame->GetMap()->GetImuInitialized()) {
                             // 计算上一关键帧到当前关键帧相机光心的距离 + 上上关键帧到上一关键帧相机光心的距离
                             float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() -
                                           mpCurrentKeyFrame->GetCameraCenter()).norm() +
@@ -143,12 +143,12 @@ namespace ORB_SLAM3 {
                                           mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
                             // 如果距离大于5厘米，记录当前KF和上一KF时间戳的差，累加到mTinit
                             if (dist > 0.05)
-                                mTinit += mpCurrentKeyFrame->mdTimestamp - mpCurrentKeyFrame->mPrevKF->mdTimestamp;
+                                mTimeFirstToCur += mpCurrentKeyFrame->mdTimestamp - mpCurrentKeyFrame->mPrevKF->mdTimestamp;
                             // 当前关键帧所在的地图尚未完成IMU BA2（IMU第三阶段初始化）
-                            if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()) {
+                            if (!mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2()) {
                                 // 如果累计时间差小于10s 并且 距离小于2厘米，认为运动幅度太小，不足以初始化IMU，将mbBadImu设置为true
-                                if ((mTinit < 10.f) && (dist < 0.02)) {
-                                    cout << "Not enough motion for initializing. Reseting..." << endl;
+                                if ((mTimeFirstToCur < 10.f) && (dist < 0.02)) {
+                                    cout << "Not enough motion for initializing ImuBA2. Reseting..." << endl;
                                     unique_lock<mutex> lock(mMutexReset);
                                     mbResetRequestedActiveMap = true;
                                     mbBadImu = true;  // 在跟踪线程里会重置当前活跃地图
@@ -156,11 +156,11 @@ namespace ORB_SLAM3 {
                             }
                             // 判断成功跟踪匹配的点数是否足够多
                             // 条件---------1.1、跟踪成功的内点数目大于75-----1.2、并且是单目--或--2.1、跟踪成功的内点数目大于100-----2.2、并且不是单目
-                            bool bLarge = ((mpTracker->GetMatchesInliers() > 100) && !mbMonocular);
+                            bool bLarge = (mpTracker->GetMatchNumInLM() > 100);
                             // 局部地图+IMU一起优化，优化关键帧位姿、地图点、IMU参数
                             Optimizer::LocalBAWithImu(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
                                                       num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA, bLarge,
-                                                      !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
+                                                      !mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2());
                             b_doneLBA = true;
                         } else {
                             // Step 6.2 不是IMU模式或者当前关键帧所在的地图还未完成IMU初始化
@@ -174,7 +174,7 @@ namespace ORB_SLAM3 {
                     }
                     // Initialize IMU here
                     // Step 7 当前关键帧所在地图未完成IMU初始化（第一阶段）
-                    if (!mpCurrentKeyFrame->GetMap()->isImuInitialized() && mbInertial) {
+                    if (!mpCurrentKeyFrame->GetMap()->GetImuInitialized() && mbHaveImu) {
                         // 在函数InitializeIMU里设置IMU成功初始化标志 SetImuInitialized
                         // IMU第一阶段初始化
                         InitializeIMU(1e2, 1e5, true);
@@ -187,22 +187,22 @@ namespace ORB_SLAM3 {
                     // 冗余的判定：该关键帧的90%的地图点可以被其它关键帧观测到
                     KeyFrameCulling();
                     // Step 9 如果距离IMU第一阶段初始化成功累计时间差小于100s，进行VIBA
-                    if ((mTinit < 50.0f) && mbInertial) {
+                    if ((mTimeFirstToCur < 50.0f) && mbHaveImu) {
                         // Step 9.1 根据条件判断是否进行VIBA1（IMU第二阶段初始化）
                         // 条件：1、当前关键帧所在的地图还未完成IMU初始化---并且--------2、正常跟踪状态----------
-                        if (mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->mState == Tracking::OK) {
+                        if (mpCurrentKeyFrame->GetMap()->GetImuInitialized() && mpTracker->mState == Tracking::OK) {
                             // 当前关键帧所在的地图还未完成VIBA 1
-                            if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA1()) {// 如果累计时间差大于5s，开始VIBA1（IMU第二阶段初始化）
-                                if (mTinit > 5.0f) {
+                            if (!mpCurrentKeyFrame->GetMap()->GetImuIniertialBA1()) {// 如果累计时间差大于5s，开始VIBA1（IMU第二阶段初始化）
+                                if (mTimeFirstToCur > 5.0f) {
                                     cout << "Start VIBA 1" << endl;
-                                    mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
+                                    mpCurrentKeyFrame->GetMap()->SetImuIniertialBA1();
                                     InitializeIMU(1.f, 1e5, true);
                                     cout << "End VIBA 1" << endl;
                                 }
-                            } else if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()) {// Step 9.2 根据条件判断是否进行VIBA2（IMU第三阶段初始化）
-                                if (mTinit > 15.0f) {
+                            } else if (!mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2()) {// Step 9.2 根据条件判断是否进行VIBA2（IMU第三阶段初始化）
+                                if (mTimeFirstToCur > 15.0f) {
                                     cout << "Start VIBA 2" << endl;
-                                    mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
+                                    mpCurrentKeyFrame->GetMap()->SetImuIniertialBA2();
                                     InitializeIMU(0.f, 0.f, true);
                                     cout << "End VIBA 2" << endl;
                                 }
@@ -367,7 +367,7 @@ namespace ORB_SLAM3 {
         vector<KeyFrame *> vpNeighKFs = mpCurrentKeyFrame->GetBestCovisibilityKeyFrames(nn);
 
         // imu模式下在附近添加更多的帧进来
-        if (mbInertial) {
+        if (mbHaveImu) {
             KeyFrame *pKF = mpCurrentKeyFrame;
             int count = 0;
             // 在总数不够且上一关键帧存在，且添加的帧没有超过总数时
@@ -436,8 +436,8 @@ namespace ORB_SLAM3 {
             // Step 4：通过BoW对两关键帧的未匹配的特征点快速匹配，用极线约束抑制离群点，生成新的匹配点对
             vector<pair<size_t, size_t> > vMatchedIndices;
             // 当惯性模式下，并且经过三次初始化，且为刚丢失状态
-            bool bCoarse = mbInertial && mpTracker->mState == Tracking::RECENTLY_LOST &&
-                           mpCurrentKeyFrame->GetMap()->GetIniertialBA2();
+            bool bCoarse = mbHaveImu && mpTracker->mState == Tracking::RECENTLY_LOST &&
+                           mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2();
 
             // 通过极线约束的方式找到匹配点（且该点还没有成为MP，注意非单目已经生成的MP这里直接跳过不做匹配，所以最后并不会覆盖掉特征点对应的MP）
             matcher.SearchKFsByTriangulation(mpCurrentKeyFrame, pKF2, vMatchedIndices, false, bCoarse);
@@ -528,9 +528,9 @@ namespace ORB_SLAM3 {
                 // 视差角度小时用三角法恢复3D点，视差角大时（离相机近）用双目恢复3D点（双目以及深度有效）
                 if (cosParallaxRays < cosParallaxStereo && cosParallaxRays > 0 && (bStereo1 || bStereo2 ||
                                                                                    (cosParallaxRays < 0.9996 &&
-                                                                                    mbInertial) ||
+                                                                                    mbHaveImu) ||
                                                                                    (cosParallaxRays < 0.9998 &&
-                                                                                    !mbInertial))) {
+                                                                                    !mbHaveImu))) {
                     // 三角化，包装成了函数
                     goodProj = GeometricTools::Triangulate(xn1, xn2, eigTcw1, eigTcw2, x3D);
                     if (!goodProj)
@@ -723,7 +723,7 @@ namespace ORB_SLAM3 {
 
         // Extend to temporal neighbors
         // imu模式下加了一些prevKF
-        if (mbInertial) {
+        if (mbHaveImu) {
             KeyFrame *pKFi = mpCurrentKeyFrame->mPrevKF;
             while (vpProjectKFs.size() < 2 * nn && pKFi) {
                 if (pKFi->isBad() || pKFi->mnFuseFlagInLocalMapping == mpCurrentKeyFrame->mnId) {
@@ -930,11 +930,11 @@ namespace ORB_SLAM3 {
         mpCurrentKeyFrame->UpdateBestCovisibles();
         // 1. 根据Covisibility Graph提取当前帧的共视关键帧
         vector<KeyFrame *> vpLocalKeyFrames = mpCurrentKeyFrame->GetVectorCovisibleKeyFrames();
-        const bool bInitImu = mpAtlas->isImuInitialized();
+        const bool bInitImu = mpAtlas->GetImuInitialized();
 
         // Compoute last KF from optimizable window:
         unsigned int last_ID;
-        if (mbInertial) {
+        if (mbHaveImu) {
             int nPre = 0;
             KeyFrame *aux_KF = mpCurrentKeyFrame;
             // 找到第前21个关键帧的关键帧id
@@ -951,7 +951,7 @@ namespace ORB_SLAM3 {
             nProcessedKFNum++;
             KeyFrame *pKF = *vit;
             // 如果是地图里第1个关键帧或者是标记为坏帧，则跳过
-            if ((pKF->mnId == pKF->GetMap()->GetInitKFid()) || pKF->isBad())
+            if ((pKF->mnId == pKF->GetMap()->GetInitKFId()) || pKF->isBad())
                 continue;
             // Step 2：提取每个共视关键帧的地图点
             const vector<MapPoint *> vpMapPoints = pKF->GetMapPointsInKF();
@@ -969,7 +969,7 @@ namespace ORB_SLAM3 {
                 if (pMP->isBad()) {
                     continue;
                 }
-                if (!mbMonocular) {
+                if (!mbHaveMono) {
                     // 对于双目，仅考虑近处（不超过基线的40倍 ）的地图点
                     if (pKF->mvfMPDepth[i] > pKF->mfThDepth || pKF->mvfMPDepth[i] < 0)
                         continue;
@@ -1029,7 +1029,7 @@ namespace ORB_SLAM3 {
                         pKF->mPrevKF = static_cast<KeyFrame *>(NULL);
                         pKF->SetBadFlag();
                     }// 没经过imu初始化的第三阶段，且关键帧与其前一个关键帧的距离小于0.02m，且前后两个关键帧时间间隔小于3s
-                    else if (!mpCurrentKeyFrame->GetMap()->GetIniertialBA2() &&
+                    else if (!mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2() &&
                              ((pKF->GetImuPosition() - pKF->mPrevKF->GetImuPosition()).norm() < 0.02) &&
                              (dTPN < 3)) {
                         pKF->mNextKF->mpImuPreintegrated->MergePrevious(pKF->mpImuPreintegrated);
@@ -1103,7 +1103,7 @@ namespace ORB_SLAM3 {
                 cout << "LM: ActiveMap Reset Doing" << endl;
                 mlNewKeyFrames.clear();
                 mlpRecentAddedMapPoints.clear();
-                mTinit = 0.f;
+                mTimeFirstToCur = 0.f;
                 mbBadImu = false;
                 mbResetRequested = false;
                 mbResetRequestedActiveMap = false;
@@ -1202,7 +1202,7 @@ namespace ORB_SLAM3 {
 
         // Compute and KF velocities mRwg estimation
         // 在IMU连一次初始化都没有做的情况下
-        if (!mpCurrentKeyFrame->GetMap()->isImuInitialized()) {
+        if (!mpCurrentKeyFrame->GetMap()->GetImuInitialized()) {
             Eigen::Matrix3f Rwg;
             Eigen::Vector3f DirG;
             DirG.setZero();
@@ -1246,7 +1246,7 @@ namespace ORB_SLAM3 {
             // 获得重力方向到当前速度方向的旋转向量
             Rwg = Sophus::SO3f::exp(vzg).matrix();
             mRwg = Rwg.cast<double>();
-            mTinit = mpCurrentKeyFrame->mdTimestamp - mFirstTs;
+            mTimeFirstToCur = mpCurrentKeyFrame->mdTimestamp - mFirstTs;
         } else {
             mRwg = Eigen::Matrix3d::Identity();
             mbg = mpCurrentKeyFrame->GetGyroBias().cast<double>();
@@ -1255,7 +1255,7 @@ namespace ORB_SLAM3 {
 
         mScale = 1.0;
         // 3. 计算残差及偏置差，优化尺度重力方向及速度偏置，偏置先验为0，双目时不优化尺度
-        Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbMonocular, infoInertial,
+        Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbHaveMono, infoInertial,
                                         false, false, priorG, priorA);
 
         // 尺度太小的话初始化认为失败
@@ -1269,7 +1269,7 @@ namespace ORB_SLAM3 {
         {
             unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
             // 尺度变化超过设定值，或者非单目时（无论带不带imu，但这个函数只在带imu时才执行，所以这个可以理解为双目imu）
-            if ((fabs(mScale - 1.f) > 0.00001) || !mbMonocular) {
+            if ((fabs(mScale - 1.f) > 0.00001) || !mbHaveMono) {
                 // 4.1 恢复重力方向与尺度信息
                 Sophus::SE3f Twg(mRwg.cast<float>().transpose(), Eigen::Vector3f::Zero());
                 mpAtlas->GetCurrentMap()->ApplyScaledRotation(Twg, mScale, true);
@@ -1281,7 +1281,7 @@ namespace ORB_SLAM3 {
             // 即使初始化成功后面还会执行这个函数重新初始化
             // 在之前没有初始化成功情况下（此时刚刚初始化成功）对每一帧都标记，后面的kf全部都在tracking里面标记为true
             // 也就是初始化之前的那些关键帧即使有imu信息也不算
-            if (!mpAtlas->isImuInitialized()) {
+            if (!mpAtlas->GetImuInitialized()) {
                 for (int i = 0; i < nNearKFsNum; i++) {
                     KeyFrame *pKF2 = vpNearKFs[i];
                     pKF2->bImu = true;
@@ -1294,8 +1294,7 @@ namespace ORB_SLAM3 {
         mpTracker->UpdateFrameIMU(1.0, vpNearKFs[0]->GetImuBias(), mpCurrentKeyFrame);
 
         // 设置经过初始化了
-        if (!mpAtlas->isImuInitialized()) {
-            // ! 重要！标记初始化成功
+        if (!mpAtlas->GetImuInitialized()) {
             mpAtlas->SetImuInitialized();
             mpCurrentKeyFrame->bImu = true;
         }
@@ -1486,7 +1485,7 @@ namespace ORB_SLAM3 {
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
         // 3.1 如果尺度更新较多，或是在双目imu情况下更新地图
         // 0.4版本这个值为0.00001
-        if ((fabs(mScale - 1.f) > 0.002) || !mbMonocular) {
+        if ((fabs(mScale - 1.f) > 0.002) || !mbHaveMono) {
             Sophus::SE3f Tgw(mRwg.cast<float>().transpose(), Eigen::Vector3f::Zero());
             mpAtlas->GetCurrentMap()->ApplyScaledRotation(Tgw, mScale, true);
             mpTracker->UpdateFrameIMU(mScale, mpCurrentKeyFrame->GetImuBias(), mpCurrentKeyFrame);

@@ -50,7 +50,7 @@ namespace ORB_SLAM3 {
     }
 
     KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB)
-            : bImu(pMap->isImuInitialized()), mnFrameId(F.mnId), mdTimestamp(F.mdTimestamp),
+            : bImu(pMap->GetImuInitialized()), mnFrameId(F.mnId), mdTimestamp(F.mdTimestamp),
               mnGridCols(FRAME_GRID_COLS),
               mnGridRows(FRAME_GRID_ROWS),
               mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
@@ -120,9 +120,15 @@ namespace ORB_SLAM3 {
             mOwb = mRwc * mImuCalib.mTcb.translation() + mTwc.translation();
         }
     }
+
     void KeyFrame::SetRtkTrans(Eigen::Matrix<float, 3, 1> trw) {
         unique_lock<mutex> lock(mMutexPose);
         mtrw = trw;
+    }
+
+    Eigen::Matrix<float, 3, 1> KeyFrame::GetRtkTrans() {
+        unique_lock<mutex> lock(mMutexPose);
+        return mtrw;
     }
 
     void KeyFrame::SetVelocity(const Eigen::Vector3f &Vw) {
@@ -493,7 +499,7 @@ namespace ORB_SLAM3 {
             mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 
             // Step 5 更新生成树的连接
-            if (mbFirstConnection && mnId != mpMap->GetInitKFid()) {
+            if (mbFirstConnection && mnId != mpMap->GetInitKFId()) {
                 // 初始化该关键帧的父关键帧为共视程度最高的那个关键帧
                 mpParent = mvpOrderedConnectedKeyFrames.front();
                 // 建立双向连接关系，将当前关键帧作为其子关键帧
@@ -611,7 +617,7 @@ namespace ORB_SLAM3 {
         {
             unique_lock<mutex> lock(mMutexConnections);
             // 初始关键帧不能删除
-            if (mnId == mpMap->GetInitKFid()) {
+            if (mnId == mpMap->GetInitKFId()) {
                 return;
             } else if (mbNotErase) {
                 // mbNotErase表示不应该删除，于是把mbToBeErased置为true，假装已经删除，其实没有删除

@@ -88,7 +88,7 @@ public:
     }
 
     void CreateMapInAtlas();
-    int GetMatchesInliers();
+    int GetMatchNumInLM();
     float GetImageScale();
 
 public:

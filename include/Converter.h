@@ -52,9 +52,9 @@ public:
     static cv::Mat toCvMat(const Eigen::Matrix<double,3,1> &m);
     static cv::Mat toCvMat(const Eigen::Matrix<float,3,1> &m);
     static cv::Mat toCvMat(const Eigen::Matrix<float,3,3> &m);
-
     static cv::Mat toCvMat(const Eigen::MatrixXf &m);
     static cv::Mat toCvMat(const Eigen::MatrixXd &m);
+    static void tosRt(const Eigen::Matrix<float, 4, 4> &Sim3T, float &s, Eigen::Matrix<float, 3, 3> &R, Eigen::Matrix<float, 3, 1> &t);
 
     static cv::Mat toCvSE3(const Eigen::Matrix<double,3,3> &R, const Eigen::Matrix<double,3,1> &t);
     static cv::Mat tocvSkewMatrix(const cv::Mat &v);

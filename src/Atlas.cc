@@ -59,8 +59,8 @@ namespace ORB_SLAM3 {
         // 如果当前活跃地图有效，先存储当前地图为不活跃地图后退出
         if (mpCurrentMap) {
             // mnLastInitKFidMap为当前地图创建时第1个关键帧的id，它是在上一个地图最大关键帧id的基础上增加1
-            if (!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFid())
-                mnLastInitKFidMap = mpCurrentMap->GetMaxKFid() + 1; // The init KF is the next of current maximum
+            if (!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFId())
+                mnLastInitKFidMap = mpCurrentMap->GetMaxKFId() + 1; // The init KF is the next of current maximum
 
             // 将当前地图储存起来，其实就是把mIsInUse标记为false
             mpCurrentMap->SetStoredMap();
@@ -255,25 +255,24 @@ namespace ORB_SLAM3 {
         mspBadMaps.clear();
     }
 
-    bool Atlas::isInertial() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->IsInertial();
-    }
-
-    void Atlas::SetInertialSensor() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        // 接着又调用Map类的SetInertialSensor成员函数,将其设置为imu属性,以后的跟踪和预积分将和这个标志有关
-        mpCurrentMap->SetInertialSensor();
-    }
 
     void Atlas::SetImuInitialized() {
         unique_lock<mutex> lock(mMutexAtlas);
         mpCurrentMap->SetImuInitialized();
     }
 
-    bool Atlas::isImuInitialized() {
+    bool Atlas::GetImuInitialized() {
         unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->isImuInitialized();
+        return mpCurrentMap->GetImuInitialized();
+    }
+    void Atlas::SetRtkInitialized() {
+        unique_lock<mutex> lock(mMutexAtlas);
+        mpCurrentMap->SetRtkInitialized();
+    }
+
+    bool Atlas::isRtkInitialized() {
+        unique_lock<mutex> lock(mMutexAtlas);
+        return mpCurrentMap->GetRtkInitialized();
     }
 
 /**
@@ -282,8 +281,8 @@ namespace ORB_SLAM3 {
     void Atlas::PreSave() {
         // 1. 更新mnLastInitKFidMap
         if (mpCurrentMap) {
-            if (!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFid())
-                mnLastInitKFidMap = mpCurrentMap->GetMaxKFid() + 1; // The init KF is the next of current maximum
+            if (!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFId())
+                mnLastInitKFidMap = mpCurrentMap->GetMaxKFId() + 1; // The init KF is the next of current maximum
         }
 
         // 比较map id
@@ -304,7 +303,7 @@ namespace ORB_SLAM3 {
                 continue;
 
             // 如果地图为空，则跳过
-            if (pMi->GetAllKeyFrames().size() == 0) {
+            if (pMi->GetKeyFramesNumInMap() == 0) {
                 // Empty map, erase before of save it.
                 SetMapBad(pMi);
                 continue;
@@ -332,7 +331,7 @@ namespace ORB_SLAM3 {
         for (Map *pMi : mvpBackupMaps) {
             mspMaps.insert(pMi);
             pMi->PostLoad(mpKeyFrameDB, mpORBVocabulary, mpCams);
-            numKF += pMi->GetAllKeyFrames().size();
+            numKF += pMi->GetKeyFramesNumInMap();
             numMP += pMi->GetAllMapPoints().size();
         }
         mvpBackupMaps.clear();
@@ -361,7 +360,7 @@ namespace ORB_SLAM3 {
         unique_lock<mutex> lock(mMutexAtlas);
         long unsigned int num = 0;
         for (Map *pMap_i : mspMaps) {
-            num += pMap_i->GetAllKeyFrames().size();
+            num += pMap_i->GetKeyFramesNumInMap();
         }
 
         return num;
