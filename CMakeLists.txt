@@ -92,7 +92,6 @@ add_library(${PROJECT_NAME} SHARED
         src/G2oTypes.cc
         src/CameraModels/Pinhole.cpp
         src/CameraModels/KannalaBrandt8.cpp
-        src/OptimizableTypes.cpp
         src/MLPnPsolver.cpp
         src/GeometricTools.cc
         src/Settings.cc
@@ -119,7 +118,6 @@ add_library(${PROJECT_NAME} SHARED
         include/CameraModels/GeometricCamera.h
         include/CameraModels/Pinhole.h
         include/CameraModels/KannalaBrandt8.h
-        include/OptimizableTypes.h
         include/MLPnPsolver.h
         include/GeometricTools.h
         include/SerializationUtils.h
@@ -129,7 +127,6 @@ add_library(${PROJECT_NAME} SHARED
 target_link_libraries(${PROJECT_NAME}
         ${OpenCV_LIBS}
         ${EIGEN3_LIBS}
-        #${Pangolin_LIBRARIES}
         ${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/Pangolin/build/src/libpangolin.so
         ${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/DBoW2/lib/libDBoW2.so
         ${PROJECT_SOURCE_DIR}/../ORB3Thirdparty/g2o/lib/libg2o.so

@@ -521,7 +521,7 @@ namespace ORB_SLAM3 {
         if (mState == NOT_INITIALIZED) {
             // 双目RGBD相机的初始化共用一个函数
             StereoInitialization();
-            //mpFrameDrawer->Update(this);
+            //mpFrameDrawer->Update6DoF(this);
             if (mState != OK) // If rightly initialized, mState=OK
             {
                 // 如果没有成功初始化，直接返回
@@ -549,7 +549,7 @@ namespace ORB_SLAM3 {
                     (mCurFrame.mnId < mnFrameIdLastReloc + mnFrameNumDurRefLoc)) {
                     bOK = TrackReferenceKeyFrame();
                 } else {
-                    // Update last frame pose according to its reference keyframe
+                    // Update6DoF last frame pose according to its reference keyframe
                     UpdateLastFramePose();
                     if (mpAtlas->GetImuInitialized()) {
                         // Predict state with IMU if it is initialized and it doesnt need reset
@@ -628,14 +628,14 @@ namespace ORB_SLAM3 {
                     cout << "State RECENTLY_LOST to LOST" << endl;
                 }
             }
-            // Update drawer
+            // Update6DoF drawer
             mpFrameDrawer->Update(this, mpViewer->mbFrameBoth);
             if (mCurFrame.HasPose())
                 mpMapDrawer->SetCurrentCameraPose(mCurFrame.GetPose());
 
             // Step 9 如果跟踪成功 或 最近刚刚跟丢，更新速度，清除无效地图点，按需创建关键帧
             if (bOK || mState == RECENTLY_LOST) {
-                // Update motion model
+                // Update6DoF motion model
                 // Step 9.1 更新恒速运动模型 TrackWithMotionModel 中的mVelocity
                 if (mLastFrame.HasPose() && mCurFrame.HasPose()) {
                     Sophus::SE3f LastTwc = mLastFrame.GetPose().inverse();
@@ -927,7 +927,7 @@ namespace ORB_SLAM3 {
  * 双目和rgbd情况：选取有有深度值的并且没有被选为地图点的点生成新的临时地图点，提高跟踪鲁棒性
  */
     void Tracking::UpdateLastFramePose() {
-        // Update pose according to reference keyframe
+        // Update6DoF pose according to reference keyframe
         // Step 1：利用参考关键帧更新上一帧在世界坐标系下的位姿
         // 上一普通帧的参考关键帧，注意这里用的是参考关键帧（位姿准）而不是上上一帧的普通帧
         KeyFrame *pRef = mLastFrame.mpReferenceKF;
@@ -1054,7 +1054,7 @@ namespace ORB_SLAM3 {
 
         mnLMInFMatchNum = 0;
 
-        // Update MapPoints Statistics
+        // Update6DoF MapPoints Statistics
         // Step 4：更新当前帧的地图点被观测程度，并统计跟踪局部地图后匹配数目
         for (int i = 0; i < mCurFrame.mnKPsLeftNum; i++) {
             if (mCurFrame.mvpMPs[i]) {
@@ -1426,7 +1426,7 @@ namespace ORB_SLAM3 {
  * 2、由这些关键帧观测到的MapPoints
  */
     void Tracking::UpdateKFsAndMPsInLocal() {
-        // Update
+        // Update6DoF
         // 用共视图来更新局部关键帧和局部地图点
         UpdateLocalKeyFrames();
         UpdateLocalMapPoints();
@@ -1449,7 +1449,7 @@ namespace ORB_SLAM3 {
         for (vector<KeyFrame *>::const_reverse_iterator itKF = mvpLocalKeyFrames.rbegin(), itEndKF = mvpLocalKeyFrames.rend();
              itKF != itEndKF; ++itKF) {
             KeyFrame *pKF = *itKF;
-            const vector<MapPoint *> vpMPs = pKF->GetMapPointsInKF();
+            const vector<MapPoint *> vpMPs = pKF->GetVectorMapPointsInKF();
 
             // step 2：将局部关键帧的地图点添加到mvpLocalMapPoints
             for (vector<MapPoint *>::const_iterator itMP = vpMPs.begin(), itEndMP = vpMPs.end();

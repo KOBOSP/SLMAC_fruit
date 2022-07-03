@@ -249,7 +249,7 @@ namespace ORB_SLAM3 {
             mAvgAcc = (mfTs * mAvgAcc + dR * AccDeBias * TDelta) / (mfTs + TDelta);
             mAvgGyr = (mfTs * mAvgGyr + GyrDeBias * TDelta) / (mfTs + TDelta);
 
-            // Update delta position dP and velocity dV (rely on no-updated delta rotation)
+            // Update6DoF delta position dP and velocity dV (rely on no-updated delta rotation)
             // 根据没有更新的dR来更新dP与dV  eq.(38)
             dP = dP + dV * TDelta + 0.5f * dR * AccDeBias * TDelta * TDelta;
             dV = dV + dR * AccDeBias * TDelta;
@@ -264,7 +264,7 @@ namespace ORB_SLAM3 {
             B.block<3, 3>(3, 3) = dR * TDelta;
             B.block<3, 3>(6, 3) = 0.5f * dR * TDelta * TDelta;
 
-            // Update position and velocity jacobians wrt bias correction
+            // Update6DoF position and velocity jacobians wrt bias correction
             // 因为随着时间推移，不可能每次都重新计算雅克比矩阵，所以需要做J(k+1) = j(k) + (~)这类事，分解方式与AB矩阵相同
             // 论文作者对forster论文公式的基础上做了变形，然后递归更新，参见 https://github.com/UZ-SLAMLab/ORB_SLAM3/issues/212
             JPa = JPa + JVa * TDelta - 0.5f * dR * TDelta * TDelta;
@@ -272,7 +272,7 @@ namespace ORB_SLAM3 {
             JVa = JVa - dR * TDelta;
             JVg = JVg - dR * TDelta * Wacc * JRg;
 
-            // Update delta rotation
+            // Update6DoF delta rotation
             // Step 2. 构造函数，会根据更新后的bias进行角度积分
             IntegratedRotation dRi(Gyr, mBiasOri, TDelta);
             // 强行归一化使其符合旋转矩阵的格式
@@ -284,14 +284,14 @@ namespace ORB_SLAM3 {
             B.block<3, 3>(0, 0) = dRi.rightJ * TDelta;
 
             // 小量delta初始为0，更新后通常也为0，故省略了小量的更新
-            // Update covariance
+            // Update6DoF covariance
             // Step 3.更新协方差，frost经典预积分论文的第63个公式，推导了噪声（ηa, ηg）对dR dV dP 的影响
             C.block<9, 9>(0, 0) = A * C.block<9, 9>(0, 0) * A.transpose() +
                                   B * mCovNoise * B.transpose();  // B矩阵为9*6矩阵 mCovNoise 6*6对角矩阵，3个陀螺仪噪声的平方，3个加速度计噪声的平方
             // 这一部分最开始是0矩阵，随着积分次数增加，每次都加上随机游走，偏置的信息矩阵
             C.block<6, 6>(9, 9) += mCovWalk;
 
-            // Update rotation jacobian wrt bias correction
+            // Update6DoF rotation jacobian wrt bias correction
             // 计算偏置的雅克比矩阵，r对bg的导数，∂ΔRij/∂bg = (ΔRjj-1) * ∂ΔRij-1/∂bg - Jr(j-1)*mTs
             // 论文作者对forster论文公式的基础上做了变形，然后递归更新，参见 https://github.com/UZ-SLAMLab/ORB_SLAM3/issues/212
             // ? 为什么先更新JPa、JPg、JVa、JVg最后更新JRg? 答：这里必须先更新dRi才能更新到这个值，但是为什么JPg和JVg依赖的上一个JRg值进行更新的？

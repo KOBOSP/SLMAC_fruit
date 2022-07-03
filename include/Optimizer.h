@@ -74,9 +74,9 @@ public:
 
 
     // if bFixScale is true, optimize SE3 (stereo,rgbd), Sim3 otherwise (mono) (NEW)
-    static int OptimizeSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint *> &vpMatches1,
-                            g2o::Sim3 &g2oS12, const float th2, const bool bFixScale,
-                            Eigen::Matrix<double,7,7> &mAcumHessian, const bool bAllPoints=false);
+    static int OptimizeKFsSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint *> &vpMatches1,
+                               g2o::Sim3 &g2oS12, const float th2, const bool bFixScale,
+                               Eigen::Matrix<double,7,7> &mAcumHessian, const bool bAllPoints=false);
 
     void static MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool *pbStopFlag, Map *pMap, LoopClosing::KeyFrameAndPose &corrPoses);
 

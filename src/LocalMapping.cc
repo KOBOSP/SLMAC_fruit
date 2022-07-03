@@ -133,44 +133,40 @@ namespace ORB_SLAM3 {
                 // 已经处理完队列中的最后的一个关键帧，并且闭环检测没有请求停止LocalMapping
                 if (!HaveNewKeyFrames() && !CheckRequestPause()) {
                     // 当前地图中关键帧数目大于2个
-                    if (mpAtlas->KeyFramesInMap() > 2) {
-                        // Step 6.1 处于IMU模式并且当前关键帧所在的地图已经完成IMU初始化
-                        if (mbHaveImu && mpCurrentKeyFrame->GetMap()->GetImuInitialized()) {
-                            // 计算上一关键帧到当前关键帧相机光心的距离 + 上上关键帧到上一关键帧相机光心的距离
-                            float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() -
-                                          mpCurrentKeyFrame->GetCameraCenter()).norm() +
-                                         (mpCurrentKeyFrame->mPrevKF->mPrevKF->GetCameraCenter() -
-                                          mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
-                            // 如果距离大于5厘米，记录当前KF和上一KF时间戳的差，累加到mTinit
-                            if (dist > 0.05)
-                                mTimeFirstToCur += mpCurrentKeyFrame->mdTimestamp - mpCurrentKeyFrame->mPrevKF->mdTimestamp;
-                            // 当前关键帧所在的地图尚未完成IMU BA2（IMU第三阶段初始化）
-                            if (!mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2()) {
-                                // 如果累计时间差小于10s 并且 距离小于2厘米，认为运动幅度太小，不足以初始化IMU，将mbBadImu设置为true
-                                if ((mTimeFirstToCur < 10.f) && (dist < 0.02)) {
-                                    cout << "Not enough motion for initializing ImuBA2. Reseting..." << endl;
-                                    unique_lock<mutex> lock(mMutexReset);
-                                    mbResetRequestedActiveMap = true;
-                                    mbBadImu = true;  // 在跟踪线程里会重置当前活跃地图
-                                }
+                    if (mpAtlas->KeyFramesInMap() < 3) {
+                        continue;
+                    }
+                    // Step 6.1 处于IMU模式并且当前关键帧所在的地图已经完成IMU初始化
+                    if (mbHaveImu && mpCurrentKeyFrame->GetMap()->GetImuInitialized()) {
+                        // 计算上一关键帧到当前关键帧相机光心的距离 + 上上关键帧到上一关键帧相机光心的距离
+                        float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() -
+                                      mpCurrentKeyFrame->GetCameraCenter()).norm() +
+                                     (mpCurrentKeyFrame->mPrevKF->mPrevKF->GetCameraCenter() -
+                                      mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
+                        // 如果距离大于5厘米，记录当前KF和上一KF时间戳的差，累加到mTinit
+                        if (dist > 0.05)
+                            mTimeFirstToCur += mpCurrentKeyFrame->mdTimestamp - mpCurrentKeyFrame->mPrevKF->mdTimestamp;
+                        // 当前关键帧所在的地图尚未完成IMU BA2（IMU第三阶段初始化）
+                        if (!mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2()) {
+                            // 如果累计时间差小于10s 并且 距离小于2厘米，认为运动幅度太小，不足以初始化IMU，将mbBadImu设置为true
+                            if ((mTimeFirstToCur < 10.f) && (dist < 0.02)) {
+                                cout << "Not enough motion for initializing ImuBA2. Reseting..." << endl;
+                                unique_lock<mutex> lock(mMutexReset);
+                                mbResetRequestedActiveMap = true;
+                                mbBadImu = true;  // 在跟踪线程里会重置当前活跃地图
                             }
-                            // 判断成功跟踪匹配的点数是否足够多
-                            // 条件---------1.1、跟踪成功的内点数目大于75-----1.2、并且是单目--或--2.1、跟踪成功的内点数目大于100-----2.2、并且不是单目
-                            bool bLarge = (mpTracker->GetMatchNumInLM() > 100);
-                            // 局部地图+IMU一起优化，优化关键帧位姿、地图点、IMU参数
-                            Optimizer::LocalBAWithImu(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
-                                                      num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA, bLarge,
-                                                      !mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2());
-                            b_doneLBA = true;
-                        } else {
-                            // Step 6.2 不是IMU模式或者当前关键帧所在的地图还未完成IMU初始化
-                            // 局部地图BA，不包括IMU数据
-                            // 注意这里的第二个参数是按地址传递的,当这里的 mbAbortBA 状态发生变化时，能够及时执行/停止BA
-                            // 局部地图优化，不包括IMU信息。优化关键帧位姿、地图点
-                            Optimizer::LocalBAWithoutImu(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
-                                                         num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA);
-                            b_doneLBA = true;
                         }
+                        bool bLarge = (mpTracker->GetMatchNumInLM() > 100);
+                        // 局部地图+IMU一起优化，优化关键帧位姿、地图点、IMU参数
+                        Optimizer::LocalBAWithImu(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
+                                                  num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA, bLarge,
+                                                  !mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2());
+                        b_doneLBA = true;
+                    } else {
+                        // Step 6.2 不是IMU模式或者当前关键帧所在的地图还未完成IMU初始化
+                        Optimizer::LocalBAWithoutImu(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),
+                                                     num_FixedKF_BA, num_OptKF_BA, num_MPs_BA, num_edges_BA);
+                        b_doneLBA = true;
                     }
                     // Initialize IMU here
                     // Step 7 当前关键帧所在地图未完成IMU初始化（第一阶段）
@@ -272,7 +268,7 @@ namespace ORB_SLAM3 {
         // Associate MapPoints to the new keyframe and update normal and descriptor
         // Step 3：当前处理关键帧中有效的地图点，更新normal，描述子等信息
         // TrackLocalMap中和当前帧新匹配上的地图点和当前关键帧进行关联绑定
-        const vector<MapPoint *> vpMapPointsInKF = mpCurrentKeyFrame->GetMapPointsInKF();
+        const vector<MapPoint *> vpMapPointsInKF = mpCurrentKeyFrame->GetVectorMapPointsInKF();
         // 对当前处理的这个关键帧中的所有的地图点展开遍历
         for (size_t i = 0; i < vpMapPointsInKF.size(); i++) {
             MapPoint *pMP = vpMapPointsInKF[i];
@@ -296,7 +292,7 @@ namespace ORB_SLAM3 {
             }
         }
 
-        // Update links in the Covisibility Graph
+        // Update6DoF links in the Covisibility Graph
         // Step 4：更新关键帧间的连接关系（共视图）
         mpCurrentKeyFrame->UpdateCovisGraph();
 
@@ -741,7 +737,7 @@ namespace ORB_SLAM3 {
         ORBmatcher matcher;
 
         // Step 3：将当前帧的地图点分别与一级二级相邻关键帧地图点进行融合 -- 正向
-        vector<MapPoint *> vpMapPointsInKF = mpCurrentKeyFrame->GetMapPointsInKF();
+        vector<MapPoint *> vpMapPointsInKF = mpCurrentKeyFrame->GetVectorMapPointsInKF();
         for (vector<KeyFrame *>::iterator vKFit = vpProjectKFs.begin(), vend = vpProjectKFs.end();
              vKFit != vend; vKFit++) {
             KeyFrame *pKFi = *vKFit;
@@ -768,7 +764,7 @@ namespace ORB_SLAM3 {
              vitKF != vendKF; vitKF++) {
             KeyFrame *pKFi = *vitKF;
 
-            vector<MapPoint *> vpMapPointsInKFi = pKFi->GetMapPointsInKF();
+            vector<MapPoint *> vpMapPointsInKFi = pKFi->GetVectorMapPointsInKF();
 
             // 遍历当前一级邻接和二级邻接关键帧中所有的MapPoints,找出需要进行融合的并且加入到集合中
             for (vector<MapPoint *>::iterator vMPit = vpMapPointsInKFi.begin(), vendMP = vpMapPointsInKFi.end();
@@ -792,9 +788,9 @@ namespace ORB_SLAM3 {
         matcher.SearchKFAndMapPointsByProjection(mpCurrentKeyFrame, vpProjectMPs);
 
 
-        // Update points
+        // Update6DoF points
         // Step 5：更新当前帧地图点的描述子、深度、观测主方向等属性
-        vpMapPointsInKF = mpCurrentKeyFrame->GetMapPointsInKF();
+        vpMapPointsInKF = mpCurrentKeyFrame->GetVectorMapPointsInKF();
         for (size_t i = 0, iend = vpMapPointsInKF.size(); i < iend; i++) {
             MapPoint *pMP = vpMapPointsInKF[i];
             if (pMP) {
@@ -807,7 +803,7 @@ namespace ORB_SLAM3 {
             }
         }
 
-        // Update connections in covisibility graph
+        // Update6DoF connections in covisibility graph
         // Step 6：更新当前帧的MapPoints后更新与其它帧的连接关系
         // 更新covisibility图
         mpCurrentKeyFrame->UpdateCovisGraph();
@@ -954,7 +950,7 @@ namespace ORB_SLAM3 {
             if ((pKF->mnId == pKF->GetMap()->GetInitKFId()) || pKF->isBad())
                 continue;
             // Step 2：提取每个共视关键帧的地图点
-            const vector<MapPoint *> vpMapPoints = pKF->GetMapPointsInKF();
+            const vector<MapPoint *> vpMapPoints = pKF->GetVectorMapPointsInKF();
 
             // 记录冗余观测点的数目
             int nRedMPs = 0;
@@ -1402,7 +1398,7 @@ namespace ORB_SLAM3 {
             }
                 // 如果没有参与，与关键帧的更新方式类似
             else {
-                // Update according to the correction of its reference keyframe
+                // Update6DoF according to the correction of its reference keyframe
                 KeyFrame *pRefKF = pMP->GetReferenceKeyFrame();
 
                 if (pRefKF->mnBAGlobalForKF != GBAid)

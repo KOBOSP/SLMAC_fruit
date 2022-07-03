@@ -159,7 +159,7 @@ namespace ORB_SLAM3 {
      */
     int ORBmatcher::SearchKFAndFByBoW(KeyFrame *pKF, Frame &F, vector<MapPoint *> &vpMapPointMatches) {
         // 获取该关键帧的地图点
-        const vector<MapPoint *> vpMapPointsKF = pKF->GetMapPointsInKF();
+        const vector<MapPoint *> vpMapPointsKF = pKF->GetVectorMapPointsInKF();
 
         // 和普通帧F特征点的索引一致
         vpMapPointMatches = vector<MapPoint *>(F.mnKPsLeftNum, static_cast<MapPoint *>(NULL));
@@ -645,7 +645,7 @@ namespace ORB_SLAM3 {
 
         }
 
-        //Update prev matched
+        //Update6DoF prev matched
         // Step 7 将最后通过筛选的匹配好的特征点保存到vbPrevMatched
         for (size_t i1 = 0, iend1 = vnMatches12.size(); i1 < iend1; i1++)
             if (vnMatches12[i1] >= 0)
@@ -668,12 +668,12 @@ namespace ORB_SLAM3 {
         // Step 1 分别取出两个关键帧的特征点、BoW 向量、地图点、描述子
         const vector<cv::KeyPoint> &vKeysUn1 = pKF1->mvKPsUn;
         const DBoW2::FeatureVector &vFeatVec1 = pKF1->mFeatVec;
-        const vector<MapPoint *> vpMapPoints1 = pKF1->GetMapPointsInKF();
+        const vector<MapPoint *> vpMapPoints1 = pKF1->GetVectorMapPointsInKF();
         const cv::Mat &Descriptors1 = pKF1->mDescriptors;
 
         const vector<cv::KeyPoint> &vKeysUn2 = pKF2->mvKPsUn;
         const DBoW2::FeatureVector &vFeatVec2 = pKF2->mFeatVec;
-        const vector<MapPoint *> vpMapPoints2 = pKF2->GetMapPointsInKF();
+        const vector<MapPoint *> vpMapPoints2 = pKF2->GetVectorMapPointsInKF();
         const cv::Mat &Descriptors2 = pKF2->mDescriptors;
 
         // 保存匹配结果
@@ -853,7 +853,7 @@ namespace ORB_SLAM3 {
                     const size_t idx1 = f1it->second[i1];
 
                     // Step 2.3：通过特征点索引idx1在pKF1中取出对应的MapPoint
-                    MapPoint *pMP1 = pKF1->GetMapPoint(idx1);
+                    MapPoint *pMP1 = pKF1->GetIdxMapPoint(idx1);
 
                     // If there is already a MapPoint skip
                     // 由于寻找的是未匹配的特征点，所以pMP1应该为NULL
@@ -881,7 +881,7 @@ namespace ORB_SLAM3 {
                         size_t idx2 = f2it->second[i2];
 
                         // 通过特征点索引idx2在pKF2中取出对应的MapPoint
-                        MapPoint *pMP2 = pKF2->GetMapPoint(idx2);
+                        MapPoint *pMP2 = pKF2->GetIdxMapPoint(idx2);
 
                         // If we have already matched or there is a MapPoint skip
                         // 如果pKF2当前特征点索引idx2已经被匹配过或者对应的3d点非空，那么跳过这个索引idx2
@@ -1152,7 +1152,7 @@ namespace ORB_SLAM3 {
             // Step 7 找到投影点对应的最佳匹配特征点，根据是否存在地图点来融合
             // 最佳匹配距离要小于阈值
             if (bestDist <= TH_LOW) {
-                MapPoint *pMPinKF = pKF->GetMapPoint(bestIdx);
+                MapPoint *pMPinKF = pKF->GetIdxMapPoint(bestIdx);
                 if (pMPinKF) {
                     // 如果最佳匹配点有对应有效地图点，选择被观测次数最多的那个替换
                     if (!pMPinKF->isBad()) {
@@ -1292,7 +1292,7 @@ namespace ORB_SLAM3 {
             // If there is already a MapPoint replace otherwise add new measurement
             // Step 7 替换或新增地图点
             if (bestDist <= TH_LOW) {
-                MapPoint *pMPinKF = pKF->GetMapPoint(bestIdx);
+                MapPoint *pMPinKF = pKF->GetIdxMapPoint(bestIdx);
                 if (pMPinKF) {
                     // 如果这个地图点已经存在，则记录要替换信息
                     // 这里不能直接替换，原因是需要对地图点加锁后才能替换，否则可能会crash。所以先记录，在加锁后替换
@@ -1341,10 +1341,10 @@ namespace ORB_SLAM3 {
         Sophus::Sim3f S21 = S12.inverse();
 
         // 取出关键帧中的地图点
-        const vector<MapPoint *> vpMapPoints1 = pKF1->GetMapPointsInKF();
+        const vector<MapPoint *> vpMapPoints1 = pKF1->GetVectorMapPointsInKF();
         const int N1 = vpMapPoints1.size();
 
-        const vector<MapPoint *> vpMapPoints2 = pKF2->GetMapPointsInKF();
+        const vector<MapPoint *> vpMapPoints2 = pKF2->GetVectorMapPointsInKF();
         const int N2 = vpMapPoints2.size();
 
         // pKF1中特征点的匹配情况，有匹配为true，否则false
@@ -1742,7 +1742,7 @@ namespace ORB_SLAM3 {
         //! 原作者代码是 const float factor = 1.0f/HISTO_LENGTH; 是错误的，更改为下面代码
         const float factor = HISTO_LENGTH/360.0f;
 
-        const vector<MapPoint *> vpMPs = pKF->GetMapPointsInKF();
+        const vector<MapPoint *> vpMPs = pKF->GetVectorMapPointsInKF();
 
         // Step 2 遍历关键帧中的每个地图点，通过相机投影模型，得到投影到当前帧的像素坐标
         for (size_t i = 0, iend = vpMPs.size(); i < iend; i++) {

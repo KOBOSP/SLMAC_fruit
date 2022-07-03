@@ -249,9 +249,9 @@ public:
     void EraseMapPointMatch(MapPoint* pMP);
     void ReplaceMapPointMatch(const int &idx, MapPoint* pMP);
     std::set<MapPoint*> GetMapPoints();
-    std::vector<MapPoint*> GetMapPointsInKF();
+    std::vector<MapPoint*> GetVectorMapPointsInKF();
     int TrackedMapPoints(const int &minObs);
-    MapPoint* GetMapPoint(const size_t &idx);
+    MapPoint* GetIdxMapPoint(const size_t &idx);
 
     // KeyPoint functions
     std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r, const bool bRight = false) const;
@@ -262,7 +262,7 @@ public:
 
     // Enable/Disable bad flag changes
     void SetNotErase();
-    void SetErase();
+    void SetCanErase();
 
     // Set/check bad flag
     void SetBadFlag();

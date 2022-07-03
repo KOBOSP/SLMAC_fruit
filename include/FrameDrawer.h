@@ -43,7 +43,7 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     FrameDrawer(Atlas* pAtlas, int nCN);
 
-    // Update info from the last processed frame.
+    // Update6DoF info from the last processed frame.
     void Update(Tracking *pTracker, bool bFrameBoth);
 
     // Draw last processed frame.

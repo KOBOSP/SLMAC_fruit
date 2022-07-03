@@ -382,13 +382,13 @@ namespace ORB_SLAM3 {
     }
 
 // 获取当前关键帧的具体的地图点
-    vector<MapPoint *> KeyFrame::GetMapPointsInKF() {
+    vector<MapPoint *> KeyFrame::GetVectorMapPointsInKF() {
         unique_lock<mutex> lock(mMutexFeatures);
         return mvpMapPoints;
     }
 
 // 获取当前关键帧的具体的某个地图点
-    MapPoint *KeyFrame::GetMapPoint(const size_t &idx) {
+    MapPoint *KeyFrame::GetIdxMapPoint(const size_t &idx) {
         unique_lock<mutex> lock(mMutexFeatures);
         return mvpMapPoints[idx];
     }
@@ -590,7 +590,7 @@ namespace ORB_SLAM3 {
  * @brief 删除当前的这个关键帧,表示不进行回环检测过程;由回环检测线程调用
  * 
  */
-    void KeyFrame::SetErase() {
+    void KeyFrame::SetCanErase() {
         {
             unique_lock<mutex> lock(mMutexConnections);
             // 如果当前关键帧和其他的关键帧没有形成回环关系,那么就删吧
@@ -611,7 +611,7 @@ namespace ORB_SLAM3 {
  * 
  * mbNotErase作用：表示要删除该关键帧及其连接关系但是这个关键帧有可能正在回环检测或者计算sim3操作，这时候虽然这个关键帧冗余，但是却不能删除，
  * 仅设置mbNotErase为true，这时候调用setbadflag函数时，不会将这个关键帧删除，只会把mbTobeErase变成true，代表这个关键帧可以删除但不到时候,先记下来以后处理。
- * 在闭环线程里调用 SetErase()会根据mbToBeErased 来删除之前可以删除还没删除的帧。
+ * 在闭环线程里调用 SetCanErase()会根据mbToBeErased 来删除之前可以删除还没删除的帧。
  */
     void KeyFrame::SetBadFlag() {
         {
@@ -647,7 +647,7 @@ namespace ORB_SLAM3 {
             mConnectedKeyFrameWeights.clear();
             mvpOrderedConnectedKeyFrames.clear();
 
-            // Update Spanning Tree
+            // Update6DoF Spanning Tree
             // Step 4 更新生成树，主要是处理好父子关键帧，不然会造成整个关键帧维护的图断裂，或者混乱，不能够为后端提供较好的初值
             // 子关键帧候选父关键帧
             set<KeyFrame *> sParentCandidates;

@@ -120,29 +120,6 @@ namespace ORB_SLAM3 {
         DR.setIdentity();
     }
 
-/** 
- * @brief 设置相关数据
- */
-    void ImuCamPose::SetParam(
-            const std::vector<Eigen::Matrix3d> &_Rcw, const std::vector<Eigen::Vector3d> &_tcw,
-            const std::vector<Eigen::Matrix3d> &_Rbc, const std::vector<Eigen::Vector3d> &_tbc, const double &_bf) {
-        Rbc = _Rbc;
-        tbc = _tbc;
-        Rcw = _Rcw;
-        tcw = _tcw;
-        const int num_cams = Rbc.size();
-        Rcb.resize(num_cams);
-        tcb.resize(num_cams);
-
-        for (int i = 0; i < tcb.size(); i++) {
-            Rcb[i] = Rbc[i].transpose();
-            tcb[i] = -Rcb[i] * tbc[i];
-        }
-        Rwb = Rcw[0].transpose() * Rcb[0];
-        twb = Rcw[0].transpose() * (tcb[0] - tcw[0]);
-
-        bf = _bf;
-    }
 
 /** 
  * @brief 单目投影
@@ -176,23 +153,23 @@ namespace ORB_SLAM3 {
  * @brief 优化算出更新值，更新到状态中
  * @param pu 更新值
  */
-    void ImuCamPose::Update(const double *pu) {
+    void ImuCamPose::Update6DoF(const double *pu) {
         Eigen::Vector3d ur, ut;
         ur << pu[0], pu[1], pu[2];
         ut << pu[3], pu[4], pu[5];
 
-        // Update body pose
+        // Update6DoF body pose
         twb += Rwb * ut;
         Rwb = Rwb * ExpSO3(ur);
 
         // Normalize rotation after 5 updates
         its++;
-        if (its >= 3) {
+        if (its >= 5) {
             NormalizeRotation(Rwb);
             its = 0;
         }
 
-        // Update camera poses
+        // Update6DoF camera poses
         const Eigen::Matrix3d Rbw = Rwb.transpose();
         const Eigen::Vector3d tbw = -Rbw * twb;
 
@@ -204,7 +181,7 @@ namespace ORB_SLAM3 {
     }
 
 // 更新世界坐标系
-    void ImuCamPose::UpdateW(const double *pu) {
+    void ImuCamPose::Update4DoF(const double *pu) {
         Eigen::Vector3d ur, ut;
         ur << pu[0], pu[1], pu[2];
         ut << pu[3], pu[4], pu[5];
@@ -213,7 +190,7 @@ namespace ORB_SLAM3 {
         const Eigen::Matrix3d dR = ExpSO3(ur);
         DR = dR * DR;
         Rwb = DR * Rwb0;
-        // Update body pose
+        // Update6DoF body pose
         twb += ut;
 
         // Normalize rotation after 5 updates
@@ -227,7 +204,7 @@ namespace ORB_SLAM3 {
             its = 0;
         }
 
-        // Update camera pose
+        // Update6DoF camera pose
         const Eigen::Matrix3d Rbw = Rwb.transpose();
         const Eigen::Vector3d tbw = -Rbw * twb;
 
@@ -237,106 +214,13 @@ namespace ORB_SLAM3 {
         }
     }
 
-// 关于逆深度的，暂未使用
-    InvDepthPoint::InvDepthPoint(double _rho, double _u, double _v, KeyFrame *pHostKF) : u(_u), v(_v), rho(_rho),
-                                                                                         fx(pHostKF->fx),
-                                                                                         fy(pHostKF->fy),
-                                                                                         cx(pHostKF->cx),
-                                                                                         cy(pHostKF->cy),
-                                                                                         bf(pHostKF->mfBaselineFocal) {
-    }
-
-    void InvDepthPoint::Update(const double *pu) {
-        rho += *pu;
-    }
-
-/** 
- * @brief 写入状态量
- */
-    bool VertexPose6DoF::read(std::istream &is) {
-        std::vector<Eigen::Matrix<double, 3, 3> > Rcw;
-        std::vector<Eigen::Matrix<double, 3, 1> > tcw;
-        std::vector<Eigen::Matrix<double, 3, 3> > Rbc;
-        std::vector<Eigen::Matrix<double, 3, 1> > tbc;
-
-        const int num_cams = _estimate.Rbc.size();
-        for (int idx = 0; idx < num_cams; idx++) {
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++)
-                    is >> Rcw[idx](i, j);
-            }
-            for (int i = 0; i < 3; i++) {
-                is >> tcw[idx](i);
-            }
-
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++)
-                    is >> Rbc[idx](i, j);
-            }
-            for (int i = 0; i < 3; i++) {
-                is >> tbc[idx](i);
-            }
-
-            float nextParam;
-            for (size_t i = 0; i < _estimate.pCamera[idx]->ParameterSize(); i++) {
-                is >> nextParam;
-                _estimate.pCamera[idx]->SetParameter(nextParam, i);
-            }
-        }
-
-        double bf;
-        is >> bf;
-        _estimate.SetParam(Rcw, tcw, Rbc, tbc, bf);
-        updateCache();
-
-        return true;
-    }
-
-/** 
- * @brief 读出状态量
- */
-    bool VertexPose6DoF::write(std::ostream &os) const {
-        std::vector<Eigen::Matrix<double, 3, 3> > Rcw = _estimate.Rcw;
-        std::vector<Eigen::Matrix<double, 3, 1> > tcw = _estimate.tcw;
-
-        std::vector<Eigen::Matrix<double, 3, 3> > Rbc = _estimate.Rbc;
-        std::vector<Eigen::Matrix<double, 3, 1> > tbc = _estimate.tbc;
-
-        const int num_cams = tcw.size();
-
-        for (int idx = 0; idx < num_cams; idx++) {
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++)
-                    os << Rcw[idx](i, j) << " ";
-            }
-            for (int i = 0; i < 3; i++) {
-                os << tcw[idx](i) << " ";
-            }
-
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++)
-                    os << Rbc[idx](i, j) << " ";
-            }
-            for (int i = 0; i < 3; i++) {
-                os << tbc[idx](i) << " ";
-            }
-
-            for (size_t i = 0; i < _estimate.pCamera[idx]->ParameterSize(); i++) {
-                os << _estimate.pCamera[idx]->GetParameter(i) << " ";
-            }
-        }
-
-        os << _estimate.bf << " ";
-
-        return os.good();
-    }
 
 /** 
  * @brief 单目视觉边计算雅克比
  * _jacobianOplusXi对应着_vertices[0] 也就是误差对于三维点的雅克比
  * _jacobianOplusXj就对应着位姿
  */
-    void EdgeMonoAndMPWithImu::linearizeOplus() {
+    void EdgeMonoPoseAndMPInImu::linearizeOplus() {
         const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[1]);
         const g2o::VertexSBAPointXYZ *VPoint = static_cast<const g2o::VertexSBAPointXYZ *>(_vertices[0]);
 
@@ -365,7 +249,7 @@ namespace ORB_SLAM3 {
  * @brief 单目视觉纯位姿边计算雅克比
  * _jacobianOplusXi对应着_vertices[0] 也就是误差对于位姿的雅克比
  */
-    void EdgeMonoOnlyWithImu::linearizeOplus() {
+    void EdgeMonoPoseOnlyInImu::linearizeOplus() {
         const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[0]);
 
         const Eigen::Matrix3d &Rcw = VPose->estimate().Rcw[cam_idx];
@@ -391,7 +275,7 @@ namespace ORB_SLAM3 {
  * _jacobianOplusXi对应着_vertices[0] 也就是误差对于三维点的雅克比
  * _jacobianOplusXj就对应着位姿
  */
-    void EdgeStereoAndMPWithImu::linearizeOplus() {
+    void EdgeStereoPoseAndMPInImu::linearizeOplus() {
         const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[1]);
         const g2o::VertexSBAPointXYZ *VPoint = static_cast<const g2o::VertexSBAPointXYZ *>(_vertices[0]);
 
@@ -426,7 +310,7 @@ namespace ORB_SLAM3 {
  * @brief 双目视觉纯位姿边计算雅克比，多了一维误差
  * _jacobianOplusXi对应着_vertices[0] 也就是误差对于位姿的雅克比
  */
-    void EdgeStereoOnlyWithImu::linearizeOplus() {
+    void EdgeStereoPoseOnlyInImu::linearizeOplus() {
         const VertexPose6DoF *VPose = static_cast<const VertexPose6DoF *>(_vertices[0]);
 
         const Eigen::Matrix3d &Rcw = VPose->estimate().Rcw[cam_idx];
@@ -481,14 +365,17 @@ namespace ORB_SLAM3 {
     }
 
 
+
 /** 
  * @brief 局部地图中imu的局部地图优化（此时已经初始化完毕不需要再优化重力方向与尺度）
  * @param pInt 预积分相关内容
  */
-    EdgeImuRVPOnly::EdgeImuRVPOnly(IMU::Preintegrated *pInt) : JRg(pInt->JRg.cast<double>()),
-                                                               JVg(pInt->JVg.cast<double>()), JPg(pInt->JPg.cast<double>()),
-                                                               JVa(pInt->JVa.cast<double>()),
-                                                               JPa(pInt->JPa.cast<double>()), mpInt(pInt), dt(pInt->mfTs) {
+    EdgeImuRVPOnlyInImu::EdgeImuRVPOnlyInImu(IMU::Preintegrated *pInt) : JRg(pInt->JRg.cast<double>()),
+                                                                         JVg(pInt->JVg.cast<double>()),
+                                                                         JPg(pInt->JPg.cast<double>()),
+                                                                         JVa(pInt->JVa.cast<double>()),
+                                                                         JPa(pInt->JPa.cast<double>()),
+                                                                         mpInt(pInt), dt(pInt->mfTs) {
         // 准备工作，把预积分类里面的值先取出来，包含信息的是两帧之间n多个imu信息预积分来的
         // This edge links 6 vertices
         // 6元边
@@ -515,13 +402,13 @@ namespace ORB_SLAM3 {
 /**
  * @brief 计算误差
  */
-    void EdgeImuRVPOnly::computeError() {
+    void EdgeImuRVPOnlyInImu::computeError() {
         // TODO Maybe Reintegrate inertial measurments when difference between linearization point and current estimate is too big
-        const VertexPose6DoF *VP1 = static_cast<const VertexPose6DoF *>(_vertices[0]);           //位姿Ti
+        const VertexPose6DoF *VP1 = static_cast<const VertexPose6DoF *>(_vertices[0]);    //位姿Ti
         const VertexVelocity *VV1 = static_cast<const VertexVelocity *>(_vertices[1]);    //速度vi
         const VertexGyrBias *VG1 = static_cast<const VertexGyrBias *>(_vertices[2]);    //零偏Bgi
         const VertexAccBias *VA1 = static_cast<const VertexAccBias *>(_vertices[3]);      //零偏Bai
-        const VertexPose6DoF *VP2 = static_cast<const VertexPose6DoF *>(_vertices[4]);           //位姿Tj
+        const VertexPose6DoF *VP2 = static_cast<const VertexPose6DoF *>(_vertices[4]);    //位姿Tj
         const VertexVelocity *VV2 = static_cast<const VertexVelocity *>(_vertices[5]);   //速度vj
         const IMU::Bias b1(VA1->estimate()[0], VA1->estimate()[1], VA1->estimate()[2], VG1->estimate()[0],
                            VG1->estimate()[1], VG1->estimate()[2]);
@@ -538,7 +425,7 @@ namespace ORB_SLAM3 {
     }
 
 // 计算雅克比矩阵
-    void EdgeImuRVPOnly::linearizeOplus() {
+    void EdgeImuRVPOnlyInImu::linearizeOplus() {
         const VertexPose6DoF *VP1 = static_cast<const VertexPose6DoF *>(_vertices[0]);
         const VertexVelocity *VV1 = static_cast<const VertexVelocity *>(_vertices[1]);
         const VertexGyrBias *VG1 = static_cast<const VertexGyrBias *>(_vertices[2]);
@@ -612,12 +499,12 @@ namespace ORB_SLAM3 {
     }
 
 // localmapping中imu初始化所用的边，除了正常的几个优化变量外还优化了重力方向与尺度
-    EdgeImuRVPWithGS::EdgeImuRVPWithGS(IMU::Preintegrated *pInt) : JRg(pInt->JRg.cast<double>()),
-                                                                   JVg(pInt->JVg.cast<double>()),
-                                                                   JPg(pInt->JPg.cast<double>()),
-                                                                   JVa(pInt->JVa.cast<double>()),
-                                                                   JPa(pInt->JPa.cast<double>()), mpInt(pInt),
-                                                                   dt(pInt->mfTs) {
+    EdgeImuRVPGSInImu::EdgeImuRVPGSInImu(IMU::Preintegrated *pInt) : JRg(pInt->JRg.cast<double>()),
+                                                                     JVg(pInt->JVg.cast<double>()),
+                                                                     JPg(pInt->JPg.cast<double>()),
+                                                                     JVa(pInt->JVa.cast<double>()),
+                                                                     JPa(pInt->JPa.cast<double>()), mpInt(pInt),
+                                                                     dt(pInt->mfTs) {
         // 准备工作，把预积分类里面的值先取出来，包含信息的是两帧之间n多个imu信息预积分来的
         // This edge links 8 vertices
         // 8元边
@@ -642,7 +529,7 @@ namespace ORB_SLAM3 {
 
 
 // 计算误差
-    void EdgeImuRVPWithGS::computeError() {
+    void EdgeImuRVPGSInImu::computeError() {
         // TODO Maybe Reintegrate inertial measurments when difference between linearization point and current estimate is too big
         const VertexPose6DoF *VP1 = static_cast<const VertexPose6DoF *>(_vertices[0]);
         const VertexVelocity *VV1 = static_cast<const VertexVelocity *>(_vertices[1]);
@@ -672,7 +559,7 @@ namespace ORB_SLAM3 {
     }
 
 // 计算雅克比矩阵
-    void EdgeImuRVPWithGS::linearizeOplus() {
+    void EdgeImuRVPGSInImu::linearizeOplus() {
         const VertexPose6DoF *VP1 = static_cast<const VertexPose6DoF *>(_vertices[0]);
         const VertexVelocity *VV1 = static_cast<const VertexVelocity *>(_vertices[1]);
         const VertexGyrBias *VG = static_cast<const VertexGyrBias *>(_vertices[2]);
@@ -770,7 +657,7 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 滑窗边缘化时用的先验边
  */
-    EdgePriorRVPAndBiasGA::EdgePriorRVPAndBiasGA(PriorRVPAndBiasGA *c) {
+    EdgePriorRVPBiasGAInImu::EdgePriorRVPBiasGAInImu(PriorRVPAndBiasGA *c) {
         resize(4);
         Rwb = c->Rwb;
         twb = c->twb;
@@ -783,7 +670,7 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 先验边计算误差
  */
-    void EdgePriorRVPAndBiasGA::computeError() {
+    void EdgePriorRVPBiasGAInImu::computeError() {
         const VertexPose6DoF *VP = static_cast<const VertexPose6DoF *>(_vertices[0]);
         const VertexVelocity *VV = static_cast<const VertexVelocity *>(_vertices[1]);
         const VertexGyrBias *VG = static_cast<const VertexGyrBias *>(_vertices[2]);
@@ -801,11 +688,11 @@ namespace ORB_SLAM3 {
 /** 
  * @brief 先验边计算雅克比
  */
-    void EdgePriorRVPAndBiasGA::linearizeOplus() {
+    void EdgePriorRVPBiasGAInImu::linearizeOplus() {
         const VertexPose6DoF *VP = static_cast<const VertexPose6DoF *>(_vertices[0]);
         const Eigen::Vector3d er = LogSO3(Rwb.transpose() * VP->estimate().Rwb);
-        // 就很神奇，_jacobianOplus个数等于边的个数，里面的大小等于观测值维度（也就是3旋转3平移3速度6偏置）× 每个节点待优化值的维度
-        // 源码可读性太差了。。。里面会自动分配矩阵大小，计算改变量时按照对应位置来
+        // _jacobianOplus个数等于边的个数，里面的大小等于观测值维度（也就是3旋转3平移3速度6偏置）× 每个节点待优化值的维度
+        // 里面会自动分配矩阵大小，计算改变量时按照对应位置来
         _jacobianOplus[0].setZero();
         // LOG(Rbw*R*EXP(φ)) = LOG(EXP(LOG(Rbw*R) + Jr(-1)*φ)) = LOG(Rbw*R) + Jr(-1)*φ
         _jacobianOplus[0].block<3, 3>(0, 0) = InverseRightJacobianSO3(er);   // Jr(-1)
@@ -819,16 +706,14 @@ namespace ORB_SLAM3 {
         _jacobianOplus[3].block<3, 3>(12, 0) = Eigen::Matrix3d::Identity();
     }
 
-    void EdgePriorAccBias::linearizeOplus() {
+    void EdgePriorAccBiasInImu::linearizeOplus() {
         // Jacobian wrt bias
         _jacobianOplusXi.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
-
     }
 
-    void EdgePriorGyrBias::linearizeOplus() {
+    void EdgePriorGyrBiasInImu::linearizeOplus() {
         // Jacobian wrt bias
         _jacobianOplusXi.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
-
     }
 
 // SO3 FUNCTIONS
@@ -903,5 +788,4 @@ namespace ORB_SLAM3 {
         W << 0.0, -w[2], w[1], w[2], 0.0, -w[0], -w[1], w[0], 0.0;
         return W;
     }
-
 }

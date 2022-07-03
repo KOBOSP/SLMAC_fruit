@@ -295,16 +295,16 @@ namespace ORB_SLAM3 {
         cv::initUndistortRectifyMap(K2, GetCamera2DistoCoef(), R_r2_u2, P2.rowRange(0, 3).colRange(0, 3),
                                     mImgSize, CV_32F, Map2X, Map2Y);
 
-        //Update calibration
+        //Update6DoF calibration
         mCalibration1->SetParameter(P1.at<double>(0, 0), 0);
         mCalibration1->SetParameter(P1.at<double>(1, 1), 1);
         mCalibration1->SetParameter(P1.at<double>(0, 2), 2);
         mCalibration1->SetParameter(P1.at<double>(1, 2), 3);
 
-        //Update bf
+        //Update6DoF bf
         mfBaselineFocal = mfBaseline * P1.at<double>(0, 0);
 
-        //Update relative pose between camera 1 and IMU if necessary
+        //Update6DoF relative pose between camera 1 and IMU if necessary
         Eigen::Matrix3f eigenR_r1_u1;
         cv::cv2eigen(R_r1_u1,eigenR_r1_u1);
         Sophus::SE3f T_r1_u1(eigenR_r1_u1,Eigen::Vector3f::Zero());

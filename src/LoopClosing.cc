@@ -105,8 +105,8 @@ namespace ORB_SLAM3 {
                             cout << "Merge check transformation with IMU" << endl;
                             // 如果尺度变换太大, 认为累积误差较大，则放弃融合
                             if (mSold_new.scale() < 0.90 || mSold_new.scale() > 1.1) {
-                                mpMergeLastCurrentKF->SetErase();
-                                mpMergeMatchedKF->SetErase();
+                                mpMergeLastCurrentKF->SetCanErase();
+                                mpMergeMatchedKF->SetCanErase();
                                 mnMergeNumCoincidences = 0;
                                 mvpMergeMatchedMPs.clear();
                                 mvpMergeMPs.clear();
@@ -136,7 +136,6 @@ namespace ORB_SLAM3 {
                             Verbose::PrintMess("*Merge detected", Verbose::VERBOSITY_QUIET);
                             // TODO UNCOMMENT
                             // 如果是imu模式,则开启 Visual-Inertial Map Merging
-                            // 如果纯视觉模式,则开启 Visual-Welding Map Merging
                             MergeLocalWithImu();
                             Verbose::PrintMess("Merge finished!", Verbose::VERBOSITY_QUIET);
                         }
@@ -148,8 +147,8 @@ namespace ORB_SLAM3 {
 
                         // CheckRequestReset all variables
                         // 重置所有融合相关变量
-                        mpMergeLastCurrentKF->SetErase();
-                        mpMergeMatchedKF->SetErase();
+                        mpMergeLastCurrentKF->SetCanErase();
+                        mpMergeMatchedKF->SetCanErase();
                         mnMergeNumCoincidences = 0;
                         mvpMergeMatchedMPs.clear();
                         mvpMergeMPs.clear();
@@ -159,8 +158,8 @@ namespace ORB_SLAM3 {
                         // 重置所有回环相关变量, 说明对与当前帧同时有回环和融合的情况只进行融合
                         if (mbLoopDetected) {
                             // CheckRequestReset Loop variables
-                            mpLoopLastCurrentKF->SetErase();
-                            mpLoopMatchedKF->SetErase();
+                            mpLoopLastCurrentKF->SetCanErase();
+                            mpLoopMatchedKF->SetCanErase();
                             mnLoopNumCoincidences = 0;
                             mvpLoopMatchedMPs.clear();
                             mvpLoopMPs.clear();
@@ -210,8 +209,8 @@ namespace ORB_SLAM3 {
                             mnNumCorrection += 1;
                         }
                         // CheckRequestReset all variables
-                        mpLoopLastCurrentKF->SetErase();
-                        mpLoopMatchedKF->SetErase();
+                        mpLoopLastCurrentKF->SetCanErase();
+                        mpLoopMatchedKF->SetCanErase();
                         mnLoopNumCoincidences = 0;
                         mvpLoopMatchedMPs.clear();
                         mvpLoopMPs.clear();
@@ -238,61 +237,45 @@ namespace ORB_SLAM3 {
             return;
         }
         const vector<KeyFrame *> vpKFs = mpLastMap->GetAllKeyFrames();
-        size_t nRansacMaxIts = vpKFs.size();
-        size_t nIterations = 0;
-        Eigen::Matrix3f P3Dc1i;
-        Eigen::Matrix3f P3Dc2i;
-        Eigen::Matrix3f R12i, RBest12i;
-        Eigen::Vector3f t12i, tBest12i;
-        float s12i, sBest12i, fRtkToLocalDist, fBestRtkToLocalDist = 1e10, fBestOriDist = 0;
-        Eigen::Matrix4f T12i, TBest12i;
-        Eigen::Matrix4f T21i;
+
+        Eigen::Matrix3f R12i, RBestOri12i;
+        Eigen::Vector3f t12i, tBestOri12i;
+        float s12i, sBestOri12i, fRtkToLocalDist, fBestOriDist = 0;
+        Eigen::Matrix4f T12i, TBestOri12i;
         bool bFixScale = false;
         if (mpLastMap->GetRtkInitialized()) {
-            mpLastMap->GetSim3RtkToLocal(TBest12i, RBest12i, tBest12i, sBest12i);
+            mpLastMap->GetSim3RtkToLocal(TBestOri12i, RBestOri12i, tBestOri12i, sBestOri12i);
             for (size_t i = 0; i < vpKFs.size(); i++) {
-                fBestOriDist += (sBest12i * RBest12i * vpKFs[i]->GetRtkTrans() + tBest12i -
+                fBestOriDist += (sBestOri12i * RBestOri12i * vpKFs[i]->GetRtkTrans() + tBestOri12i -
                                  vpKFs[i]->GetCameraCenter()).norm();
             }
             fBestOriDist /= vpKFs.size();
         } else {
             fBestOriDist = 1e10;
         }
-        while (nIterations < nRansacMaxIts) {
-            nIterations++;
-            fRtkToLocalDist = 0;
-            // Get min set of points
-            for (short i = 0; i < 3; ++i) {
-                int randi = DUtils::Random::RandomInt(0, vpKFs.size() - 1);
-                P3Dc1i.col(i) = vpKFs[randi]->GetCameraCenter();
-                P3Dc2i.col(i) = vpKFs[randi]->GetRtkTrans();
-            }
-            if ((P3Dc2i.col(0) - P3Dc2i.col(1)).isZero(1e-3) || (P3Dc2i.col(1) - P3Dc2i.col(2)).isZero(1e-3) ||
-                (P3Dc2i.col(0) - P3Dc2i.col(2)).isZero(1e-3)) {
-                continue;
-            }
-            Sim3Solver::ComputeSim3(P3Dc1i, P3Dc2i, R12i, t12i, s12i, T12i, T21i, bFixScale);
-            if (s12i < 0.9 || s12i > 1.1) {
-                continue;
-            }
-            for (size_t i = 0; i < vpKFs.size(); i++) {
-                fRtkToLocalDist += (s12i * R12i * vpKFs[i]->GetRtkTrans() + t12i - vpKFs[i]->GetCameraCenter()).norm();
-            }
-            fRtkToLocalDist /= vpKFs.size();
 
-            if (fBestRtkToLocalDist > fRtkToLocalDist) {
-                sBest12i = s12i;
-                RBest12i = R12i;
-                tBest12i = t12i;
-                TBest12i = T12i;
-                fBestRtkToLocalDist = fRtkToLocalDist;
-            }
+        Eigen::Matrix<float, 3, Eigen::Dynamic> TKFLocal(3, vpKFs.size());
+        Eigen::Matrix<float, 3, Eigen::Dynamic> TKFRtk(3, vpKFs.size());
+        for (size_t i = 0; i < vpKFs.size(); ++i) {
+            TKFLocal.col(i) = vpKFs[i]->GetCameraCenter();
+            TKFRtk.col(i) = vpKFs[i]->GetRtkTrans();
+        }
+        T12i = Eigen::umeyama(TKFRtk, TKFLocal, true);
+        Converter::tosRt(T12i, s12i, R12i, t12i);
+        if (s12i < 0.9 || s12i > 1.1) {
+            return;
         }
 
-        if (fBestRtkToLocalDist < 5 && fBestRtkToLocalDist < fBestOriDist) {
+        fRtkToLocalDist = 0;
+        for (size_t i = 0; i < vpKFs.size(); i++) {
+            fRtkToLocalDist += (s12i * R12i * vpKFs[i]->GetRtkTrans() + t12i - vpKFs[i]->GetCameraCenter()).norm();
+        }
+        fRtkToLocalDist /= vpKFs.size();
+
+        if (fRtkToLocalDist < 5 && fRtkToLocalDist < fBestOriDist) {
             mpLastMap->SetRtkInitialized();
-            mpLastMap->SetSim3RtkToLocal(TBest12i, RBest12i, tBest12i, sBest12i);
-            cout << "NowDist: OriDist: sBest: " << fBestRtkToLocalDist << " " << fBestOriDist << " " << sBest12i
+            mpLastMap->SetSim3RtkToLocal(T12i, R12i, t12i, s12i);
+            cout << "NowDist: OriDist: sBest: " << fRtkToLocalDist << " " << fBestOriDist << " " << s12i
                  << endl;
         }
     }
@@ -322,57 +305,37 @@ namespace ORB_SLAM3 {
  * @return false
  */
     bool LoopClosing::DetectCommonRegionsExist() {
-        // To deactivate placerecognition. No loopclosing nor merging will be performed
         // 如果一开始就不做回环的话这里就退出了，这个线程也就名存实亡了
         if (!mbActiveLC)
             return false;
         {
             // Step 1 从队列中取出一个关键帧,作为当前检测共同区域的关键帧
             unique_lock<mutex> lock(mMutexLoopQueue);
-            // 从队列头开始取，也就是先取早进来的关键帧
             mpCurrentKF = mlpLoopKeyFrameQueue.front();
-            // 取出关键帧后从队列里弹出该关键帧
             mlpLoopKeyFrameQueue.pop_front();
-            // Avoid that a keyframe can be erased while it is being process by this thread
             // 设置当前关键帧不要在优化的过程中被删除
             mpCurrentKF->SetNotErase();
-            // 当前关键帧对应的地图
             mpLastMap = mpCurrentKF->GetMap();
         }
 
         // Step 2 在某些情况下不进行共同区域检测
-        // 1.imu模式下还没经过第二阶段初始化则不考虑
-        if (!mpLastMap->GetImuIniertialBA2()) {
+        if (!mpLastMap->GetImuIniertialBA2() || mpLastMap->GetKeyFramesNumInMap() < 12) {
             mpKeyFrameDB->add(mpCurrentKF);
-            mpCurrentKF->SetErase();
+            mpCurrentKF->SetCanErase();
             return false;
         }
 
-
-        // 3.当前地图关键帧少于12则不进行检测
-        if (mpLastMap->GetKeyFramesNumInMap() < 12) {
-            // cout << "LoopClousure: Stereo KF inserted without check, map is small: " << mpCurrentKF->mnId << endl;
-            mpKeyFrameDB->add(mpCurrentKF);
-            mpCurrentKF->SetErase();
-            return false;
-        }
 
         //cout << "LoopClousure: Checking KF: " << mpCurrentKF->mnId << endl;
 
         //Check the last candidates with geometric validation
-        // Loop candidates
-        // Step 3 基于前一帧的历史信息判断是否进行时序几何校验,注意这里是基于共视几何校验失败才会运行的代码,阅读代码的时候可以先看后面
-        bool bLoopDetectedInKF = false;  // 某次时序验证是否成功
+        bool bLoopDetectedInKF = false;
         bool bCheckSpatial = false;
 
 
-        // Step 3.1 回环的时序几何校验。注意初始化时mnLoopNumCoincidences=0, 所以可以先跳过看后面
-        // 如果成功验证总次数大于0
+        // Step 3.1 回环的时序几何校验。注意初始化时mnLoopNumCoincidences=0,
         if (mnLoopNumCoincidences > 0) {
             bCheckSpatial = true;
-            // Find from the last KF candidates
-            // 通过上一关键帧的信息,计算新的当前帧的sim3
-            // Tcl = Tcw*Twl
             Sophus::SE3d mTcl = (mpCurrentKF->GetPose() * mpLoopLastCurrentKF->GetPoseInverse()).cast<double>();
             g2o::Sim3 gScl(mTcl.unit_quaternion(), mTcl.translation(), 1.0);
             g2o::Sim3 gScw = gScl * mg2oLoopSlw;
@@ -389,7 +352,7 @@ namespace ORB_SLAM3 {
                 // 累计正检验的成功次数
                 mnLoopNumCoincidences++;
                 // 不再参与新的回环检测
-                mpLoopLastCurrentKF->SetErase();
+                mpLoopLastCurrentKF->SetCanErase();
                 // 将当前关键帧作为上次关键帧
                 mpLoopLastCurrentKF = mpCurrentKF;
                 mg2oLoopSlw = gScw;  // 记录当前优化的结果为{last T_cw}即为 T_lw
@@ -400,13 +363,10 @@ namespace ORB_SLAM3 {
                 mbLoopDetected = mnLoopNumCoincidences >= 3;
                 // 记录失败的时序校验数为0
                 mnLoopNumNotFound = 0;
-                //! 这里的条件反了,不过对功能没什么影响,只是打印信息
                 if (mbLoopDetected) {
                     cout << "PR: Loop detected with Reffine Sim3" << endl;
                 }
-            }
-                // 如果没找到共同区域(时序验证失败一次)
-            else {
+            } else {
                 // 当前时序验证失败
                 bLoopDetectedInKF = false;
                 // 递增失败的时序验证次数
@@ -414,22 +374,18 @@ namespace ORB_SLAM3 {
                 // 若果连续两帧时序验证失败则整个回环检测失败
                 if (mnLoopNumNotFound >= 2) {
                     // 失败后标记重置一些信息
-                    mpLoopLastCurrentKF->SetErase();
-                    mpLoopMatchedKF->SetErase();
+                    mpLoopLastCurrentKF->SetCanErase();
+                    mpLoopMatchedKF->SetCanErase();
                     mnLoopNumCoincidences = 0;
                     mvpLoopMatchedMPs.clear();
                     mvpLoopMPs.clear();
                     mnLoopNumNotFound = 0;
                 }
-
             }
         }
 
         //Merge candidates
         bool bMergeDetectedInKF = false;
-        // Step 3.2 融合的时序几何校验: 注意初始化时mnMergeNumCoincidences=0, 所以可以先跳过看后面
-        // mnMergeNumCoincidences表示成功校验总次数，初始化为0
-        // 会先经过后面共视几何校验，如果小于3，会进到如下判断开始时序几何校验
         if (mnMergeNumCoincidences > 0) {
             // Find from the last KF candidates
             // 通过上一关键帧的信息,计算新的当前帧的sim3
@@ -453,84 +409,56 @@ namespace ORB_SLAM3 {
                 // 成功验证的总次数+1
                 mnMergeNumCoincidences++;
                 // 不再参与新的回环检测
-                mpMergeLastCurrentKF->SetErase();
+                mpMergeLastCurrentKF->SetCanErase();
                 mpMergeLastCurrentKF = mpCurrentKF;
                 mg2oMergeSlw = gScw;
                 mvpMergeMatchedMPs = vpMatchedMPs;
                 // 如果验证数大于等于3则为成功
                 mbMergeDetected = mnMergeNumCoincidences >= 3;
-            }
-                // 如果没找到共同区域(时序验证失败一次)
-            else {
-                // 没有找到融合
+            } else {
                 mbMergeDetected = false;
-                // 当前时序验证失败
                 bMergeDetectedInKF = false;
-
-                // 递增失败的时序验证次数
                 mnMergeNumNotFound++;
                 // 若果连续两帧时序验证失败则整个融合检测失败
                 if (mnMergeNumNotFound >= 2) {
                     // 失败后标记重置一些信息
-                    mpMergeLastCurrentKF->SetErase();
-                    mpMergeMatchedKF->SetErase();
+                    mpMergeLastCurrentKF->SetCanErase();
+                    mpMergeMatchedKF->SetCanErase();
                     mnMergeNumCoincidences = 0;
                     mvpMergeMatchedMPs.clear();
                     mvpMergeMPs.clear();
                     mnMergeNumNotFound = 0;
                 }
-
-
             }
         }
 
-        // Step 3.3 若校验成功则把当前帧添加进数据库,且返回true表示找到共同区域
-        // 注意初始化时mbMergeDetected=mbLoopDetected=false
         if (mbMergeDetected || mbLoopDetected) {
             mpKeyFrameDB->add(mpCurrentKF);
             return true;
         }
 
-        //TODO: This is only necessary if we use a minimun score for pick the best candidates
-        // 这句并没有使用,作者把orbslam2里面通过minScore作为阀值筛选候选帧的策略抛弃了
-        const vector<KeyFrame *> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
-
-        // Extract candidates from the bag of words
-        // Step 4 若当前关键帧没有被检测到回环或融合,则分别通过bow拿到当前帧最好的三个回环候选帧和融合候选帧
         vector<KeyFrame *> vpMergeBowCand, vpLoopBowCand;
         if (!bMergeDetectedInKF || !bLoopDetectedInKF) {
-            // 分别找到3个最好的候选帧, 回环候选帧放在vpLoopBowCand中,融合候选帧放在vpMergeBowCand中
             mpKeyFrameDB->DetectNBestLoopAndMergeKFs(mpCurrentKF, vpLoopBowCand, vpMergeBowCand, 3);
 
         }
 
-        // Check the BoW candidates if the geometric candidate list is empty
-        //Loop candidates
-        // Step 4.1 若当前关键帧没有被检测到回环,并且候选帧数量不为0,则对回环候选帧进行论文中第8页的2-5步
+        // Check the BoW candidates if the geometric candidate list is not empty
         if (!bLoopDetectedInKF && !vpLoopBowCand.empty()) {
-            // mnLoopNumCoincidences是成功几何验证的帧数，超过3就认为最终验证成功（mbLoopDetected=true），不超过继续进行时序验证
-            // mpLoopMatchedKF 最后成功匹配的候选关键帧
             mbLoopDetected = DetectCommonRegionsFromBoW(vpLoopBowCand, mpLoopMatchedKF, mpLoopLastCurrentKF,
                                                         mg2oLoopSlw, mnLoopNumCoincidences, mvpLoopMPs,
                                                         mvpLoopMatchedMPs);
         }
-        // Merge candidates
-        // Step 4.2 若当前关键帧没有被检测到融合,并且候选帧数量不为0,则对融合候帧进行论文中第8页的2-5步
         if (!bMergeDetectedInKF && !vpMergeBowCand.empty()) {
-            // mnLoopNumCoincidences是成功几何验证的帧数，超过3就认为最终验证成功（mbMergeDetected=true），不超过继续进行时序验证
             mbMergeDetected = DetectCommonRegionsFromBoW(vpMergeBowCand, mpMergeMatchedKF, mpMergeLastCurrentKF,
                                                          mg2oMergeSlw, mnMergeNumCoincidences, mvpMergeMPs,
                                                          mvpMergeMatchedMPs);
         }
-        // Step 5 根据结果确定有没有检测到共同区域
-        // 把当前帧添加到关键帧数据库中
         mpKeyFrameDB->add(mpCurrentKF);
-        // 如果检测到一种类型共同区域返回true
         if (mbMergeDetected || mbLoopDetected) {
             return true;
         }
-        // 如果没检测到则把当前关键帧erase(不参与后续共同区域检测)
-        mpCurrentKF->SetErase();
+        mpCurrentKF->SetCanErase();
         return false;
     }
 
@@ -573,8 +501,8 @@ namespace ORB_SLAM3 {
             // 单目情况下不锁定尺度
             bool bFixedScale = mbFixScale;       // TODO CHECK; Solo para el monocular inertial
             // 3.2 优化gScm，mp固定
-            int numOptMatches = Optimizer::OptimizeSim3(mpCurrentKF, pMatchedKF, vpMatchedMPs, gScm, 10, bFixedScale,
-                                                        mHessian7x7, true);
+            int numOptMatches = Optimizer::OptimizeKFsSim3(mpCurrentKF, pMatchedKF, vpMatchedMPs, gScm, 10, bFixedScale,
+                                                           mHessian7x7, true);
 
             //Verbose::PrintMess("Sim3 reffine: There are " + to_string(numOptMatches) + " matches after of the optimization ", Verbose::VERBOSITY_DEBUG);
             // 若匹配的数量大于一定的数目
@@ -583,9 +511,9 @@ namespace ORB_SLAM3 {
 //                g2o::Sim3 gScw_estimation(Converter::toMatrix3d(mScw.rowRange(0, 3).colRange(0, 3)),
 //                                          Converter::toVector3d(mScw.rowRange(0, 3).col(3)), 1.0);
                 g2o::Sim3 gScw_estimation((gScm * (gSwm.inverse())).rotation(), (gScm * (gSwm.inverse())).translation(),
-                                          1.0);
+                                          (gScm * (gSwm.inverse())).scale());
                 vector<MapPoint *> vpMatchedMP;
-                vpMatchedMP.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
+                vpMatchedMP.resize(mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
 
                 // 再次通过优化后的Sim3搜索匹配点
                 nNumProjMatches = FindMatchesByProjection(pCurrentKF, pMatchedKF, gScw_estimation, spAlreadyMatchedMPs,
@@ -623,14 +551,14 @@ namespace ORB_SLAM3 {
             std::vector<KeyFrame *> &vpBowCandKFs, KeyFrame *&pMatchedKF2, KeyFrame *&pLastCurrentKF, g2o::Sim3 &g2oScw,
             int &nNumCoincidences, std::vector<MapPoint *> &vpMPs, std::vector<MapPoint *> &vpMatchedMPs) {
         // 一些后面会使用的阀值
-        int nBoWMatches = 20; // 最低bow匹配特征点数
-        int nBoWInliers = 15; // RANSAC最低的匹配点数
-        int nSim3Inliers = 20; // sim3 最低内点数
-        int nProjMatches = 50; // 通过投影得到的匹配点数量最低阀值
-        int nProjOptMatches = 80; // 通过更小的半径,更严的距离搜索到的匹配点数量
+        int nThBoWMatches = 20; // 最低bow匹配特征点数
+        int nThBoWInliers = 15; // RANSAC最低的匹配点数
+        int nThSim3Inliers = 20; // sim3 最低内点数
+        int nThProjMatches = 50; // 通过投影得到的匹配点数量最低阀值
+        int nThProjOptMatches = 80; // 通过更小的半径,更严的距离搜索到的匹配点数量
 
         // 1. 获取当前帧的共视帧(在共同区域检测中应该避免当前关键帧的共视关键帧中)
-        set<KeyFrame *> spConnectedKeyFrames = mpCurrentKF->GetConnectedKeyFrames();
+        set<KeyFrame *> spCurKFConnectedKFs = mpCurrentKF->GetConnectedKeyFrames();
 
         // change 定义最佳共视关键帧的数量 0.4版本这里为5
         int nNumCovisibles = 10;
@@ -648,54 +576,37 @@ namespace ORB_SLAM3 {
         std::vector<MapPoint *> vpBestMapPoints;
         std::vector<MapPoint *> vpBestMatchedMapPoints;
 
-        // bow中候选关键帧的数量
         int nNumCandKFs = vpBowCandKFs.size();
-
-        // 这三个变量是作者为了后面打印观察记录的信息,可以忽略
-        vector<int> vnStage(nNumCandKFs, 0);
-        vector<int> vnMatchesStage(nNumCandKFs, 0);
-        int index = 0;
-
-        //Verbose::PrintMess("BoW candidates: There are " + to_string(vpBowCandKFs.ParameterSize()) + " possible candidates ", Verbose::VERBOSITY_DEBUG);
-        // 2. 对每个候选关键帧都进行详细的分析
         for (KeyFrame *pKFi : vpBowCandKFs) {
             if (!pKFi || pKFi->isBad()) {
                 continue;
             }
 
-            // std::cout << "KF candidate: " << pKFi->mnId << std::endl;
-            // Current KF against KF with covisibles version
-            // 2.1 获得候选关键帧的局部窗口 W_m
             // 拿到候选关键帧的10个最优共视帧
-            std::vector<KeyFrame *> vpCovKFi = pKFi->GetBestCovisibilityKeyFrames(nNumCovisibles);
-            if (vpCovKFi.empty()) {
+            std::vector<KeyFrame *> vpCandCovKFi = pKFi->GetBestCovisibilityKeyFrames(nNumCovisibles);
+            if (vpCandCovKFi.empty()) {
                 std::cout << "Covisible list empty" << std::endl;
-                vpCovKFi.emplace_back(pKFi);
+                vpCandCovKFi.emplace_back(pKFi);
             } else {
                 // 再加上候选关键帧自己(这里操作比较迷,看起来只是为了把候选关键帧放到容器的第一顺位)
-                vpCovKFi.emplace_back(vpCovKFi[0]);
-                vpCovKFi[0] = pKFi;
+                vpCandCovKFi.emplace_back(vpCandCovKFi[0]);
+                vpCandCovKFi[0] = pKFi;
             }
 
-            // 标记是否因为窗口内有当前关键帧的共视关键帧
             bool bAbortByNearKF = false;
-            // 遍历窗口内的每个关键帧
-            for (int j = 0; j < vpCovKFi.size(); ++j) {
-                // 如果窗口中的帧是当前帧的共视帧则结束这个循环
-                if (spConnectedKeyFrames.find(vpCovKFi[j]) != spConnectedKeyFrames.end()) {
+            for (int j = 0; j < vpCandCovKFi.size(); ++j) {
+                if (spCurKFConnectedKFs.find(vpCandCovKFi[j]) != spCurKFConnectedKFs.end()) {
                     bAbortByNearKF = true;
                     break;
                 }
             }
             if (bAbortByNearKF) {
-                //std::cout << "Check BoW aborted because is close to the matched one " << std::endl;
                 continue;
             }
-            //std::cout << "Check BoW continue because is far to the matched one " << std::endl;
 
             // search by bow 返回的参数, 记录窗口Wm中每个关键帧有哪些点能在当前关键帧Ka中通过bow找到匹配点
             std::vector<std::vector<MapPoint *> > vvpMatchedMPs;
-            vvpMatchedMPs.resize(vpCovKFi.size());
+            vvpMatchedMPs.resize(vpCandCovKFi.size());
 
             // 记录整个窗口中有那些点能在Ka中通过bow找到匹配点(这个set是辅助容器,避免重复添加地图点)
             std::set<MapPoint *> spMatchedMPi;
@@ -706,22 +617,20 @@ namespace ORB_SLAM3 {
             // 记录窗口中能通过bow在当前关键帧ka中找到最多匹配点的数量
             int nMostBoWNumMatches = 0;
 
-            // 下面两个变量是为了sim3 solver准备的
+            // 下面两个变量是为了sim3 solver准备的            // 标记是否因为窗口内有当前关键帧的共视关键帧
             //记录窗口中的地图点能在当前关键帧中找到的匹配的点(数量的上限是当前关键帧地图点的数量)
-            std::vector<MapPoint *> vpMatchedPoints = std::vector<MapPoint *>(mpCurrentKF->GetMapPointsInKF().size(),
+            std::vector<MapPoint *> vpMatchedPoints = std::vector<MapPoint *>(mpCurrentKF->GetVectorMapPointsInKF().size(),
                                                                               static_cast<MapPoint *>(NULL));
             // 记录上面的地图点分别对应窗口中的关键帧(数量的上限是当前关键帧地图点的数量)
             std::vector<KeyFrame *> vpKeyFrameMatchedMP = std::vector<KeyFrame *>(
-                    mpCurrentKF->GetMapPointsInKF().size(), static_cast<KeyFrame *>(NULL));
+                    mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<KeyFrame *>(NULL));
 
 
-            // 遍历窗口内Wm的每个关键帧
             // 2.3 通过Bow寻找候选帧窗口内的关键帧地图点与当前关键帧的匹配点
-            for (int j = 0; j < vpCovKFi.size(); ++j) {
-                if (!vpCovKFi[j] || vpCovKFi[j]->isBad())
+            for (int j = 0; j < vpCandCovKFi.size(); ++j) {
+                if (!vpCandCovKFi[j] || vpCandCovKFi[j]->isBad())
                     continue;
-
-                int num = matcherByBoW.SearchKFsByBoWInLoopClosing(mpCurrentKF, vpCovKFi[j], vvpMatchedMPs[j]);
+                int num = matcherByBoW.SearchKFsByBoWInLoopClosing(mpCurrentKF, vpCandCovKFi[j], vvpMatchedMPs[j]);
                 if (num > nMostBoWNumMatches) {
                     nMostBoWNumMatches = num;
                 }
@@ -729,38 +638,29 @@ namespace ORB_SLAM3 {
 
             // 遍历窗口内的每个关键帧
             // 2.4 把窗口内的匹配点转换为Sim3Solver接口定义的格式
-            for (int j = 0; j < vpCovKFi.size(); ++j) {
+            for (int j = 0; j < vpCandCovKFi.size(); ++j) {
                 // 遍历窗口内的某一个关键帧与当前关键帧由bow得到的匹配的地图点
-                // 注意这里每个vvpMatchedMPs[j]的大小都是相等的且等于当前关键帧中的总地图点数量,详细请看searchByBow
                 for (int k = 0; k < vvpMatchedMPs[j].size(); ++k) {
-                    // 地图点指针
                     MapPoint *pMPi_j = vvpMatchedMPs[j][k];
-                    // 如果指针为空或地图点被标记为bad,则跳过当前循环
                     if (!pMPi_j || pMPi_j->isBad())
                         continue;
 
-                    // 窗口内不同关键帧与当前关键帧可能看到相同的3D点, 利用辅助容器避免重复添加
                     if (spMatchedMPi.find(pMPi_j) == spMatchedMPi.end()) {
-                        // 利用辅助容器记录添加过的点
                         spMatchedMPi.insert(pMPi_j);
-                        // 统计窗口内有多少地图点能在当前关键中找到匹配
                         numBoWMatches++;
-
-                        //记录窗口中的地图点能在当前关键帧中找到的匹配的点
                         vpMatchedPoints[k] = pMPi_j;
-                        // 记录上面的地图点分别对应窗口中的关键帧(数量的上限是当前关键帧地图点的数量)
-                        vpKeyFrameMatchedMP[k] = vpCovKFi[j];
+                        vpKeyFrameMatchedMP[k] = vpCandCovKFi[j];
                     }
                 }
             }
             // 1. 前面统计了vpCovKFi中每个帧与当前帧匹配点的位置，可否用点数高的代替
             // 2. 有可能作者认为在DetectNBestCandidates已经找到共视关键帧中分数最多的了，所以这里不做判断直接使用原始的候选关键帧
-            //pMostBoWMatchesKF = vpCovKFi[pMostBoWMatchesKF];
+            //pMostBoWMatchesKF = vpCandCovKFi[pMostBoWMatchesKF];
 
             // 当窗口内的帧不是当前关键帧的相邻帧且匹配点足够多时
             // 3. 利用RANSAC寻找候选关键帧窗口与当前关键帧的相对位姿T_cm的初始值(可能是Sim3)
-            // nBoWMatches = 20; // 最低bow匹配特征点数
-            if (numBoWMatches >= nBoWMatches) // TODO pick a good threshold
+            // nThBoWMatches = 20; // 最低bow匹配特征点数
+            if (numBoWMatches >= nThBoWMatches) // TODO pick a good threshold
             {
                 // Geometric validation
                 bool bFixedScale = mbFixScale;
@@ -770,7 +670,7 @@ namespace ORB_SLAM3 {
                 Sim3Solver solver = Sim3Solver(mpCurrentKF, pMostBoWMatchesKF, vpMatchedPoints, bFixedScale,
                                                vpKeyFrameMatchedMP);
                 // Sim3Solver Ransac 置信度0.99，至少20个inliers 最多300次迭
-                solver.SetRansacParameters(0.99, nBoWInliers, 300); // at least 15 inliers
+                solver.SetRansacParameters(0.99, nThBoWInliers, 300); // at least 15 inliers
 
                 bool bNoMore = false;
                 vector<bool> vbInliers;
@@ -780,24 +680,19 @@ namespace ORB_SLAM3 {
                 // 3.2 迭代到收敛
                 while (!bConverge && !bNoMore) {
                     mTcm = solver.iterate(20, bNoMore, vbInliers, nInliers, bConverge);
-                    //Verbose::PrintMess("BoW guess: Solver achieve " + to_string(nInliers) + " geometrical inliers among " + to_string(nBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
+                    //Verbose::PrintMess("BoW guess: Solver achieve " + to_string(nInliers) + " geometrical inliers among " + to_string(nThBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
                 }
 
                 // 3.3 Guide matching refinement: 利用初始的Scm信息,进行双向重投影,并非线性优化得到更精确的Scm
                 if (bConverge) {
                     //std::cout << "Check BoW: SolverSim3 converged" << std::endl;
 
-                    //Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among " + to_string(nBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
+                    //Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among " + to_string(nThBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
                     // Match by reprojection
-                    vpCovKFi.clear();
+                    vpCandCovKFi.clear();
                     // 拿到窗口内匹配最多的帧的最佳10个共视帧和它自己组成的窗口
-                    vpCovKFi = pMostBoWMatchesKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
-                    vpCovKFi.emplace_back(pMostBoWMatchesKF);
-                    // 这个后面没有用到
-                    set<KeyFrame *> spCheckKFs(vpCovKFi.begin(), vpCovKFi.end());
-
-                    //std::cout << "There are " << vpCovKFi.ParameterSize() <<" near KFs" << std::endl;
-
+                    vpCandCovKFi = pMostBoWMatchesKF->GetBestCovisibilityKeyFrames(nNumCovisibles);
+                    vpCandCovKFi.emplace_back(pMostBoWMatchesKF);
                     // 辅助容器,避免重复添加地图点
                     set<MapPoint *> spMapPoints;
                     // 这两个容器是searchByProjection定义的容器
@@ -808,9 +703,9 @@ namespace ORB_SLAM3 {
                     // vpMapPoints  {mp1, mp2, mp3, mp4}
                     // vpKeyFrames  {kf1, kf1, kf2, kf3}
                     // 遍历窗Wm内的所有关键帧
-                    for (KeyFrame *pCovKFi : vpCovKFi) {
+                    for (KeyFrame *pCovKFi : vpCandCovKFi) {
                         // 遍历窗口内每个关键帧的所有地图点
-                        for (MapPoint *pCovMPij : pCovKFi->GetMapPointsInKF()) {
+                        for (MapPoint *pCovMPij : pCovKFi->GetVectorMapPointsInKF()) {
                             // 如果指针为空或者改地图点被标记为bad
                             if (!pCovMPij || pCovMPij->isBad())
                                 continue;
@@ -839,9 +734,9 @@ namespace ORB_SLAM3 {
 
                     // 记录最后searchByProjection的结果
                     vector<MapPoint *> vpMatchedMP;
-                    vpMatchedMP.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
+                    vpMatchedMP.resize(mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
                     vector<KeyFrame *> vpMatchedKF;
-                    vpMatchedKF.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<KeyFrame *>(NULL));
+                    vpMatchedKF.resize(mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<KeyFrame *>(NULL));
                     // 3.3.1 重新利用之前计算的mScw信息, 通过投影寻找更多的匹配点
                     int numProjMatches = matcherByProjection.SearchMPsAndKFsByProjectionInLC(mpCurrentKF, mScw,
                                                                                              vpMapPoints,
@@ -851,19 +746,19 @@ namespace ORB_SLAM3 {
                                                                                              1.5);
                     //cout <<"BoW: " << numProjMatches << " matches between " << vpMapPoints.ParameterSize() << " points with coarse Sim3" << endl;
 
-                    // 如果拿到了足够多的匹配点, nProjMatches = 50
-                    if (numProjMatches >= nProjMatches) {
+                    // 如果拿到了足够多的匹配点, nThProjMatches = 50
+                    if (numProjMatches >= nThProjMatches) {
                         // Optimize Sim3 transformation with every matches
                         Eigen::Matrix<double, 7, 7> mHessian7x7;
 
                         bool bFixedScale = mbFixScale;
                         // 3.3.2 利用搜索到的更多的匹配点用Sim3优化投影误差得到的更好的 gScm
                         // pKFi是候选关键帧
-                        int numOptMatches = Optimizer::OptimizeSim3(mpCurrentKF, pKFi, vpMatchedMP, gScm, 10,
-                                                                    mbFixScale, mHessian7x7, true);
+                        int numOptMatches = Optimizer::OptimizeKFsSim3(mpCurrentKF, pKFi, vpMatchedMP, gScm, 10,
+                                                                       mbFixScale, mHessian7x7, true);
 
                         // 3.3.3 如果内点足够多,用更小的半径搜索匹配点,并且再次进行优化(p.s.这里与论文不符,并没有再次优化)
-                        if (numOptMatches >= nSim3Inliers) {
+                        if (numOptMatches >= nThSim3Inliers) {
                             // 前面已经声明了这些变量了,无需再次声明
                             g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
                                            pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
@@ -871,7 +766,7 @@ namespace ORB_SLAM3 {
                             Sophus::Sim3f mScw = Converter::toSophus(gScw);
 
                             vector<MapPoint *> vpMatchedMP;
-                            vpMatchedMP.resize(mpCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
+                            vpMatchedMP.resize(mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
                             // 3.3.4 重新利用之前计算的mScw信息, 通过更小的半径和更严格的距离的投影寻找匹配点
                             // 5 : 半径的增益系数(对比之前下降了)---> 更小的半径, 1.0 , hamming distance 的阀值增益系数---> 允许更小的距离
                             int numProjOptMatches = matcherByProjection.SearchKFAndMPsByProjectionInLC(mpCurrentKF,
@@ -881,36 +776,7 @@ namespace ORB_SLAM3 {
                                                                                                        1.0);
 
                             // 当新的投影得到的内点数量大于nProjOptMatches=80时
-                            if (numProjOptMatches >= nProjOptMatches) {
-                                /// 以下为调试信息
-                                int max_x = -1, min_x = 1000000;
-                                int max_y = -1, min_y = 1000000;
-                                for (MapPoint *pMPi : vpMatchedMP) {
-                                    if (!pMPi || pMPi->isBad()) {
-                                        continue;
-                                    }
-
-                                    tuple<size_t, size_t> indexes = pMPi->GetIndexInKeyFrame(pKFi);
-                                    int index = get<0>(indexes);
-                                    if (index >= 0) {
-                                        int coord_x = pKFi->mvKPsUn[index].pt.x;
-                                        if (coord_x < min_x) {
-                                            min_x = coord_x;
-                                        }
-                                        if (coord_x > max_x) {
-                                            max_x = coord_x;
-                                        }
-                                        int coord_y = pKFi->mvKPsUn[index].pt.y;
-                                        if (coord_y < min_y) {
-                                            min_y = coord_y;
-                                        }
-                                        if (coord_y > max_y) {
-                                            max_y = coord_y;
-                                        }
-                                    }
-                                }
-                                // 调试完毕
-
+                            if (numProjOptMatches >= nThProjOptMatches) {
                                 // 4. 用当前关键帧的相邻关键来验证前面得到的Tam(共视几何校验)
                                 // 统计验证成功的关键帧数量
                                 int nNumKFs = 0;
@@ -949,12 +815,6 @@ namespace ORB_SLAM3 {
                                     j++;
                                 }
 
-                                // 这里又是没有用的代码,只是记录一点信息,可能是为了方便打印检查
-                                if (nNumKFs < 3) {
-                                    vnStage[index] = 8;
-                                    vnMatchesStage[index] = nNumKFs;
-                                }
-
                                 // 记录第二次searchByProjection得到最多匹配点的关键帧的各种信息,最后作为回环帧/融合帧
                                 if (nBestMatchesReproj < numProjOptMatches) {
                                     nBestMatchesReproj = numProjOptMatches; // 投影匹配的数量
@@ -968,12 +828,7 @@ namespace ORB_SLAM3 {
                         }
                     }
                 }
-                /*else
-            {
-                Verbose::PrintMess("BoW candidate: it don'mTs match with the current one", Verbose::VERBOSITY_DEBUG);
-            }*/
             }
-            index++;
         }
 
         // 如果成功找到了共同区域帧把记录的最优值存到输出变量中
@@ -987,16 +842,6 @@ namespace ORB_SLAM3 {
             vpMatchedMPs = vpBestMatchedMapPoints;
             // 如果有三个成功验证则return ture
             return nNumCoincidences >= 3;
-        } else {
-            // 这里是一些无用的变量, 左值只用来打印检查
-            int maxStage = -1;
-            int maxMatched;
-            for (int i = 0; i < vnStage.size(); ++i) {
-                if (vnStage[i] > maxStage) {
-                    maxStage = vnStage[i];
-                    maxMatched = vnMatchesStage[i];
-                }
-            }
         }
         // 如果少于3个当前关键帧的共视关键帧验证了这个候选帧,那么返回失败,注意,这里的失败并不代表最终的验证失败,后续会开启时序校验
         return false;
@@ -1091,7 +936,7 @@ namespace ORB_SLAM3 {
         // 对于窗口内每个关键帧
         for (KeyFrame *pKFi : vpMatchCovKFs) {
             // 对于每个关键帧的地图点
-            for (MapPoint *pMPij : pKFi->GetMapPointsInKF()) {
+            for (MapPoint *pMPij : pKFi->GetVectorMapPointsInKF()) {
                 // 如果指针不是空,且点不是bad
                 if (!pMPij || pMPij->isBad())
                     continue;
@@ -1108,11 +953,10 @@ namespace ORB_SLAM3 {
         ORBmatcher matcher(0.9, true);
 
         // 3. 初始化被匹配到的地图点容器, 匹配上限是当前帧的地图点数量
-        vpMatchedMapPoints.resize(pCurrentKF->GetMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
+        vpMatchedMapPoints.resize(pCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
         // 把窗口中的点向当前关键帧投影, 搜索匹配点, 注意验证的时候用的搜索半径是最小的
         int num_matches = matcher.SearchKFAndMPsByProjectionInLC(pCurrentKF, mScw, vpMapPoints, vpMatchedMapPoints, 3,
                                                                  1.5);
-
         return num_matches;
     }
 
@@ -1178,7 +1022,7 @@ namespace ORB_SLAM3 {
         g2o::Sim3 g2oScw(Tcw.unit_quaternion().cast<double>(), Tcw.translation().cast<double>(), 1.0);
         NonCorrectedSim3[mpCurrentKF] = g2oScw;
 
-        // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
+        // Update6DoF keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
         Sophus::SE3d correctedTcw(mg2oLoopScw.rotation(), mg2oLoopScw.translation() / mg2oLoopScw.scale());
         mpCurrentKF->SetPose(correctedTcw.cast<float>());
         Map *pLoopMap = mpCurrentKF->GetMap();
@@ -1208,7 +1052,7 @@ namespace ORB_SLAM3 {
                     //Pose corrected with the Sim3 of the loop closure
                     // 存放闭环g2o优化后当前关键帧的共视关键帧的Sim3 位姿
                     CorrectedSim3[pKFi] = g2oCorrectedSiw;
-                    // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
+                    // Update6DoF keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
                     Sophus::SE3d correctedTiw(g2oCorrectedSiw.rotation(),
                                               g2oCorrectedSiw.translation() / g2oCorrectedSiw.scale());
                     pKFi->SetPose(correctedTiw.cast<float>());
@@ -1228,10 +1072,10 @@ namespace ORB_SLAM3 {
                 g2o::Sim3 g2oCorrectedSwi = g2oCorrectedSiw.inverse();
                 g2o::Sim3 g2oSiw = NonCorrectedSim3[pKFi];
 
-                // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
+                // Update6DoF keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
                 /*Sophus::SE3d correctedTiw(g2oCorrectedSiw.rotation(),g2oCorrectedSiw.translation() / g2oCorrectedSiw.scale());
             pKFi->SetPose(correctedTiw.cast<float>());*/
-                vector<MapPoint *> vpMPsi = pKFi->GetMapPointsInKF();
+                vector<MapPoint *> vpMPsi = pKFi->GetVectorMapPointsInKF();
                 // 遍历待矫正共视关键帧中的每一个地图点
                 for (size_t iMP = 0, endMPi = vpMPsi.size(); iMP < endMPi; iMP++) {
                     MapPoint *pMPi = vpMPsi[iMP];
@@ -1273,7 +1117,7 @@ namespace ORB_SLAM3 {
             mpAtlas->GetCurrentMap()->IncreaseChangeIdx();
 
             // Start Loop Fusion
-            // Update matched map points and replace if duplicated
+            // Update6DoF matched map points and replace if duplicated
             // Step 4. 检查当前帧的地图点与经过闭环匹配后该帧的地图点是否存在冲突，对冲突的进行替换或填补
             // mvpCurrentMatchedPoints 是当前关键帧和闭环关键帧组的所有地图点进行投影得到的匹配点
             for (size_t i = 0; i < mvpLoopMatchedMPs.size(); i++) {
@@ -1282,7 +1126,7 @@ namespace ORB_SLAM3 {
                     // 匹配投影得到的地图点
                     MapPoint *pLoopMP = mvpLoopMatchedMPs[i];
                     // 原来的地图点
-                    MapPoint *pCurMP = mpCurrentKF->GetMapPoint(i);
+                    MapPoint *pCurMP = mpCurrentKF->GetIdxMapPoint(i);
                     // 如果有重复的MapPoint，则用匹配的地图点代替现有的
                     // 因为匹配的地图点是经过一系列操作后比较精确的，现有的地图点很可能有累计误差
                     if (pCurMP)
@@ -1317,7 +1161,7 @@ namespace ORB_SLAM3 {
             KeyFrame *pKFi = *vit;
             // 6.2 得到与当前帧相连关键帧的相连关键帧（二级相连）
             vector<KeyFrame *> vpPreviousNeighbors = pKFi->GetVectorCovisibleKeyFrames();
-            // Update connections. Detect new links.
+            // Update6DoF connections. Detect new links.
             // 6.3 更新一级相连关键帧的连接关系(会把当前关键帧添加进去,因为地图点已经更新和替换了)
             pKFi->UpdateCovisGraph();
             // 6.4 取出该帧更新后的连接关系
@@ -1633,7 +1477,7 @@ namespace ORB_SLAM3 {
             // 这一句没有什么作用,下面又被覆盖了
             pKFi->mTcwMerge = pKFi->GetPose();
 
-            // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
+            // Update6DoF keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
             // 根据上面计算得到的融合矫正后的初始位姿(Sim3),更新窗口内每个关键帧的mTcwMerge(矫正后的初始位姿)
             double s = g2oCorrectedSiw.scale();
             pKFi->mfScale = s;
@@ -1801,7 +1645,7 @@ namespace ORB_SLAM3 {
 
         }
 
-        //Update the connections between the local window
+        //Update6DoF the connections between the local window
         // 更新融合帧局部的连接关系
         mpMergeMatchedKF->UpdateCovisGraph();
 
@@ -1819,7 +1663,7 @@ namespace ORB_SLAM3 {
         SearchAndFuse(vCorrectedSim3, vpCheckFuseMapPoint);
         //std::cout << "[Merge]: fuse points finished" << std::endl;
 
-        // Update connectivity
+        // Update6DoF connectivity
         // Step 6 因为融合导致地图点变化。需要更新关键帧中图的连接关系
         // 更新当前关键帧共视窗口内所有关键帧的连接
         for (KeyFrame *pKFi : spLocalWindowKFs) {
@@ -1854,60 +1698,58 @@ namespace ORB_SLAM3 {
 
         // Step 8 在当前帧整个剩下的地图中（局部窗口外，认为没那么紧急处理）对位姿和地图点进行矫正传播
 
-        //Update the non critical area from the current map to the merged map
+        //Update6DoF the non critical area from the current map to the merged map
         // 把前面优位姿优化的结果传递到地图中其他的关键帧
         vector<KeyFrame *> vpCurrentMapKFs = pCurrentMap->GetAllKeyFrames();
         vector<MapPoint *> vpCurrentMapMPs = pCurrentMap->GetAllMapPoints();
 
-        if (vpCurrentMapKFs.size() == 0) {
 
-        } else {
-            mpLocalMapper->RequestPause();
-            // Wait until Local Mapping has effectively stopped
-            while (!mpLocalMapper->CheckPaused()) {
-                usleep(5000);
+        mpLocalMapper->RequestPause();
+        // Wait until Local Mapping has effectively stopped
+        while (!mpLocalMapper->CheckPaused()) {
+            usleep(5000);
+        }
+
+        // Optimize graph (and update the loop position for each element form the begining to the end)
+        // Step 8.2 本质图优化
+        // 固定 : 所有融合帧共视窗口内的关键帧 + 所有当前关键帧共视窗口内的关键帧
+        // 优化:  当前关键帧所在地图里的所有关键帧(除了当前关键帧共视窗口内的关键帧) + 当前地图里的所有地图点
+        Optimizer::OptimizeEssentialGraph(mpCurrentKF, vpMergeConnectedKFs, vpLocalCurrentWindowKFs,
+                                          vpCurrentMapKFs, vpCurrentMapMPs);
+
+
+        {
+            // Get Merge Map Mutex
+            unique_lock<mutex> currentLock(
+                    pCurrentMap->mMutexMapUpdate); // We update the current map with the Merge information
+            unique_lock<mutex> mergeLock(
+                    pMergeMap->mMutexMapUpdate); // We remove the Kfs and MPs in the merged area from the old map
+
+            //std::cout << "Merge outside KFs: " << vpCurrentMapKFs.ParameterSize() << std::endl;
+            // 确保融合后信息被更新
+            for (KeyFrame *pKFi : vpCurrentMapKFs) {
+                if (!pKFi || pKFi->isBad() || pKFi->GetMap() != pCurrentMap) {
+                    continue;
+                }
+                //std::cout << "KF id: " << pKFi->mnId << std::endl;
+
+                // Make sure connections are updated
+                // 当前关键帧所在地图更新为融合地图，并建立关联。并从当前地图中删掉
+                pKFi->UpdateMap(pMergeMap);
+                pMergeMap->AddKeyFrame(pKFi);
+                pCurrentMap->EraseKeyFrame(pKFi);
             }
 
-            // Optimize graph (and update the loop position for each element form the begining to the end)
-            // Step 8.2 本质图优化
-            // 固定 : 所有融合帧共视窗口内的关键帧 + 所有当前关键帧共视窗口内的关键帧
-            // 优化:  当前关键帧所在地图里的所有关键帧(除了当前关键帧共视窗口内的关键帧) + 当前地图里的所有地图点
-            Optimizer::OptimizeEssentialGraph(mpCurrentKF, vpMergeConnectedKFs, vpLocalCurrentWindowKFs,
-                                              vpCurrentMapKFs, vpCurrentMapMPs);
+            for (MapPoint *pMPi : vpCurrentMapMPs) {
+                if (!pMPi || pMPi->isBad())
+                    continue;
 
-
-            {
-                // Get Merge Map Mutex
-                unique_lock<mutex> currentLock(
-                        pCurrentMap->mMutexMapUpdate); // We update the current map with the Merge information
-                unique_lock<mutex> mergeLock(
-                        pMergeMap->mMutexMapUpdate); // We remove the Kfs and MPs in the merged area from the old map
-
-                //std::cout << "Merge outside KFs: " << vpCurrentMapKFs.ParameterSize() << std::endl;
-                // 确保融合后信息被更新
-                for (KeyFrame *pKFi : vpCurrentMapKFs) {
-                    if (!pKFi || pKFi->isBad() || pKFi->GetMap() != pCurrentMap) {
-                        continue;
-                    }
-                    //std::cout << "KF id: " << pKFi->mnId << std::endl;
-
-                    // Make sure connections are updated
-                    // 当前关键帧所在地图更新为融合地图，并建立关联。并从当前地图中删掉
-                    pKFi->UpdateMap(pMergeMap);
-                    pMergeMap->AddKeyFrame(pKFi);
-                    pCurrentMap->EraseKeyFrame(pKFi);
-                }
-
-                for (MapPoint *pMPi : vpCurrentMapMPs) {
-                    if (!pMPi || pMPi->isBad())
-                        continue;
-
-                    pMPi->UpdateMap(pMergeMap);
-                    pMergeMap->AddMapPoint(pMPi);
-                    pCurrentMap->EraseMapPoint(pMPi);
-                }
+                pMPi->UpdateMap(pMergeMap);
+                pMergeMap->AddMapPoint(pMPi);
+                pCurrentMap->EraseMapPoint(pMPi);
             }
         }
+
 
 
         // Essential graph 优化后可以重新开始局部建图了
@@ -2114,7 +1956,7 @@ namespace ORB_SLAM3 {
         /*if(!good)
         cout << "BAD ESSENTIAL GRAPH!!" << endl;*/
 
-        //cout << "Update essential graph" << endl;
+        //cout << "Update6DoF essential graph" << endl;
         // mpCurrentKF->UpdateCovisGraph(); // to put at false mbFirstConnection
         // Step 6 融合新旧地图的生成树
         pMergeMap->GetOriginKF()->SetFirstConnection(false);
@@ -2140,7 +1982,7 @@ namespace ORB_SLAM3 {
     if(!good)
         cout << "BAD ESSENTIAL GRAPH 1!!" << endl;*/
 
-        //cout << "Update relationship between KFs" << endl;
+        //cout << "Update6DoF relationship between KFs" << endl;
         vector<MapPoint *> vpCheckFuseMapPoint; // MapPoint vector from current map to allow to fuse duplicated points with the old map (merge)
         vector<KeyFrame *> vpCurrentConnectedKFs;
 
@@ -2464,32 +2306,17 @@ namespace ORB_SLAM3 {
  */
     void LoopClosing::RunGlobalBundleAdjustment(Map *pActiveMap, unsigned long nLoopKF) {
         Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
-
-        // imu 初始化成功才返回true，只要一阶段成功就为true
         const bool bImuInit = pActiveMap->GetImuInitialized();
-
         if (!bImuInit)
             Optimizer::GlobalBundleAdjustemntWithoutImu(pActiveMap, 10, &mbStopGBA, nLoopKF, false);
         else {
-            // 仅有一个地图且内部关键帧<200，并且IMU完成了第一阶段初始化后才会进行下面
             Optimizer::GlobalBundleAdjustemetWithImu(pActiveMap, 7, false, nLoopKF, &mbStopGBA);
         }
 
         // 记录GBA已经迭代次数,用来检查全局BA过程是否是因为意外结束的
         int idx = mnFullBAIdx;
-        // Optimizer::GlobalBundleAdjustemntWithoutImu(mpMap,10,&mbStopGBA,nLoopKF,false);
-
-        // Update all MapPoints and KeyFrames
-        // Local Mapping was active during BA, that means that there might be new keyframes
-        // not included in the Global BA and they are not consistent with the updated map.
-        // We need to propagate the correction through the spanning tree
         {
             unique_lock<mutex> lock(mMutexGBA);
-            if (idx != mnFullBAIdx)
-                return;
-
-            if (!bImuInit && pActiveMap->GetImuInitialized())
-                return;
 
             if (!mbStopGBA) {
                 Verbose::PrintMess("Global Bundle Adjustment finished", Verbose::VERBOSITY_NORMAL);
@@ -2504,7 +2331,7 @@ namespace ORB_SLAM3 {
 
                 // Get Map Mutex
                 unique_lock<mutex> lock(pActiveMap->mMutexMapUpdate);
-                // cout << "LC: Update Map Mutex adquired" << endl;
+                // cout << "LC: Update6DoF Map Mutex adquired" << endl;
 
                 //pActiveMap->PrintEssentialGraph();
                 // Correct keyframes starting at map first keyframe
@@ -2515,11 +2342,7 @@ namespace ORB_SLAM3 {
                 while (!lpKFtoCheck.empty()) {
                     KeyFrame *pKF = lpKFtoCheck.front();
                     const set<KeyFrame *> sChilds = pKF->GetChilds();
-                    //cout << "---Updating KF " << pKF->mnId << " with " << sChilds.ParameterSize() << " childs" << endl;
-                    //cout << " KF mnBAGlobalForKF: " << pKF->mnBAGlobalForKF << endl;
                     Sophus::SE3f Twc = pKF->GetPoseInverse();
-                    //cout << "Twc: " << Twc << endl;
-                    //cout << "GBA: Correct KeyFrames" << endl;
                     // 广度优先搜索
                     for (set<KeyFrame *>::const_iterator sit = sChilds.begin(); sit != sChilds.end(); sit++) {
                         KeyFrame *pChild = *sit;
@@ -2552,13 +2375,13 @@ namespace ORB_SLAM3 {
                         lpKFtoCheck.emplace_back(pChild);
                     }
 
-                    //cout << "-------Update pose" << endl;
+                    //cout << "-------Update6DoF pose" << endl;
                     pKF->mTcwBefGBA = pKF->GetPose();
                     //cout << "pKF->mTcwBefGBA: " << pKF->mTcwBefGBA << endl;
                     pKF->SetPose(pKF->mTcwGBA);
 
                     if (pKF->bImu) {
-                        //cout << "-------Update inertial values" << endl;
+                        //cout << "-------Update6DoF inertial values" << endl;
                         //if (pKF->mVwbGBA.empty())
                         //    Verbose::PrintMess("pKF->mVwbGBA is empty", Verbose::VERBOSITY_NORMAL);
 
@@ -2588,7 +2411,7 @@ namespace ORB_SLAM3 {
                         pMP->SetWorldPos(pMP->mPosGBA);
                     } else  // 如故这个地图点并没有直接参与到全局BA优化的过程中,那么就使用器参考关键帧的新位姿来优化自己的位姿
                     {
-                        // Update according to the correction of its reference keyframe
+                        // Update6DoF according to the correction of its reference keyframe
                         // 说明这个关键帧，在前面的过程中也没有因为“当前关键帧”得到全局BA优化
                         //? 可是,为什么会出现这种情况呢? 难道是因为这个地图点的参考关键帧设置成为了bad?
                         KeyFrame *pRefKF = pMP->GetReferenceKeyFrame();
