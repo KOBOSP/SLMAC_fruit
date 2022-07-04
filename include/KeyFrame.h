@@ -194,7 +194,7 @@ public:
     // Pose functions
     void SetPose(const Sophus::SE3f &Tcw);
     void SetRtkTrans(Eigen::Matrix<float, 3, 1> trw);
-    Eigen::Matrix<float, 3, 1> GetRtkTrans();
+    Eigen::Matrix<float, 3, 1> GetRtkTransF();
     void SetVelocity(const Eigen::Vector3f &Vw_);
 
     Sophus::SE3f GetPose();

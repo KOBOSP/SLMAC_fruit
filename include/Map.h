@@ -146,8 +146,8 @@ namespace ORB_SLAM3 {
 
         bool GetRtkInitialized();
 
-        void SetSim3RtkToLocal(Eigen::Matrix<float, 4, 4> Sim3lr, Eigen::Matrix3f Rlr, Eigen::Vector3f tlr, float slr);
-        void GetSim3RtkToLocal(Eigen::Matrix<float, 4, 4> &Sim3lr, Eigen::Matrix3f &Rlr, Eigen::Vector3f &tlr, float &slr);
+        void SetSim3FRtkToLocal(Eigen::Matrix<float, 4, 4> Sim3lr, Eigen::Matrix3f Rlr, Eigen::Vector3f tlr, float slr);
+        void GetSim3FRtkToLocal(Eigen::Matrix<float, 4, 4> &Sim3lr, Eigen::Matrix3f &Rlr, Eigen::Vector3f &tlr, float &slr);
 
         void SetImuIniertialBA1();
 

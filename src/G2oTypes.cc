@@ -716,6 +716,12 @@ namespace ORB_SLAM3 {
         _jacobianOplusXi.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
     }
 
+//    void EdgePriorKFRtk::linearizeOplus() {
+//        // Jacobian wrt bias
+//        _jacobianOplusXi.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
+//    }
+
+
 // SO3 FUNCTIONS
     Eigen::Matrix3d ExpSO3(const Eigen::Vector3d &w) {
         return ExpSO3(w[0], w[1], w[2]);

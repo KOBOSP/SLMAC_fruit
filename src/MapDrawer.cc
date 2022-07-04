@@ -223,15 +223,15 @@ namespace ORB_SLAM3 {
             Eigen::Matrix3f Rlr;
             Eigen::Vector3f tlr;
             float slr;
-            pActiveMap->GetSim3RtkToLocal(Sim3lrNow, Rlr, tlr, slr);
+            pActiveMap->GetSim3FRtkToLocal(Sim3lrNow, Rlr, tlr, slr);
             for (size_t i = 0; i < vpKFs.size(); i++) {
                 KeyFrame *pKFi = vpKFs[i];
-                Eigen::Vector3f Ow = slr * Rlr * pKFi->GetRtkTrans() + tlr;
-//                Eigen::Vector3d Ow = pKFi->GetRtkTrans().cast<double>();
+                Eigen::Vector3f Ow = slr * Rlr * pKFi->GetRtkTransF() + tlr;
+//                Eigen::Vector3d Ow = pKFi->GetRtkTransF().cast<double>();
                 KeyFrame *pNext = pKFi->mNextKF;
                 if (pNext) {
-                    Eigen::Vector3f Owp = slr * Rlr * pNext->GetRtkTrans() + tlr;
-//                    Eigen::Vector3d Owp = pNext->GetRtkTrans().cast<double>();
+                    Eigen::Vector3f Owp = slr * Rlr * pNext->GetRtkTransF() + tlr;
+//                    Eigen::Vector3d Owp = pNext->GetRtkTransF().cast<double>();
                     glVertex3f(Ow(0), Ow(1), Ow(2));
                     glVertex3f(Owp(0), Owp(1), Owp(2));
                 }

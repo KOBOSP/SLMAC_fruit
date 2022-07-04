@@ -1032,21 +1032,18 @@ namespace ORB_SLAM3 {
     public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        EdgePriorKFRtk(const Eigen::Vector3d &trwOri_) : trwOri(trwOri_) {}
+        EdgePriorKFRtk(const Eigen::Vector3d &twrOri_) : twrOri(twrOri_) {}
 
         virtual bool read(std::istream &is) { return false; }
 
         virtual bool write(std::ostream &os) const { return false; }
 
         void computeError() {
-            const VertexPose6DoF *Vt = static_cast<const VertexPose6DoF *>(_vertices[0]);
-            Sophus::SE3<double> Tcw(Vt->estimate().Rcw[0], Vt->estimate().tcw[0]);
-            _error = trwOri - Tcw.inverse().translation();
+            const VertexPose6DoF *VP = static_cast<const VertexPose6DoF *>(_vertices[0]);
+            _error = VP->estimate().Rcw[0] * twrOri + VP->estimate().tcw[0];
         }
 
-        virtual void linearizeOplus();
-
-        const Eigen::Vector3d trwOri;
+        const Eigen::Vector3d twrOri;
     };
 
 /** 

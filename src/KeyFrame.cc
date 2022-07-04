@@ -126,7 +126,7 @@ namespace ORB_SLAM3 {
         mtrw = trw;
     }
 
-    Eigen::Matrix<float, 3, 1> KeyFrame::GetRtkTrans() {
+    Eigen::Matrix<float, 3, 1> KeyFrame::GetRtkTransF() {
         unique_lock<mutex> lock(mMutexPose);
         return mtrw;
     }

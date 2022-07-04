@@ -123,7 +123,7 @@ namespace ORB_SLAM3 {
         return mbRtkInitialized;
     }
 
-    void Map::GetSim3RtkToLocal(Eigen::Matrix<float, 4, 4> &Sim3lr, Eigen::Matrix3f &Rlr, Eigen::Vector3f &tlr, float &slr) {
+    void Map::GetSim3FRtkToLocal(Eigen::Matrix<float, 4, 4> &Sim3lr, Eigen::Matrix3f &Rlr, Eigen::Vector3f &tlr, float &slr) {
         unique_lock<mutex> lock(mMutexRtkUpdate);
         Rlr = mRlr;
         tlr = mtlr;
@@ -131,7 +131,7 @@ namespace ORB_SLAM3 {
         Sim3lr = mSim3lr;
     }
 
-    void Map::SetSim3RtkToLocal(Eigen::Matrix<float, 4, 4> Sim3lr, Eigen::Matrix3f Rlr, Eigen::Vector3f tlr, float slr) {
+    void Map::SetSim3FRtkToLocal(Eigen::Matrix<float, 4, 4> Sim3lr, Eigen::Matrix3f Rlr, Eigen::Vector3f tlr, float slr) {
         unique_lock<mutex> lock(mMutexRtkUpdate);
         mRlr = Rlr;
         mtlr = tlr;

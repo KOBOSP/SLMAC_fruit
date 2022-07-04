@@ -244,9 +244,9 @@ namespace ORB_SLAM3 {
         Eigen::Matrix4f T12i, TBestOri12i;
         bool bFixScale = false;
         if (mpLastMap->GetRtkInitialized()) {
-            mpLastMap->GetSim3RtkToLocal(TBestOri12i, RBestOri12i, tBestOri12i, sBestOri12i);
+            mpLastMap->GetSim3FRtkToLocal(TBestOri12i, RBestOri12i, tBestOri12i, sBestOri12i);
             for (size_t i = 0; i < vpKFs.size(); i++) {
-                fBestOriDist += (sBestOri12i * RBestOri12i * vpKFs[i]->GetRtkTrans() + tBestOri12i -
+                fBestOriDist += (sBestOri12i * RBestOri12i * vpKFs[i]->GetRtkTransF() + tBestOri12i -
                                  vpKFs[i]->GetCameraCenter()).norm();
             }
             fBestOriDist /= vpKFs.size();
@@ -258,7 +258,7 @@ namespace ORB_SLAM3 {
         Eigen::Matrix<float, 3, Eigen::Dynamic> TKFRtk(3, vpKFs.size());
         for (size_t i = 0; i < vpKFs.size(); ++i) {
             TKFLocal.col(i) = vpKFs[i]->GetCameraCenter();
-            TKFRtk.col(i) = vpKFs[i]->GetRtkTrans();
+            TKFRtk.col(i) = vpKFs[i]->GetRtkTransF();
         }
         T12i = Eigen::umeyama(TKFRtk, TKFLocal, true);
         Converter::tosRt(T12i, s12i, R12i, t12i);
@@ -268,13 +268,13 @@ namespace ORB_SLAM3 {
 
         fRtkToLocalDist = 0;
         for (size_t i = 0; i < vpKFs.size(); i++) {
-            fRtkToLocalDist += (s12i * R12i * vpKFs[i]->GetRtkTrans() + t12i - vpKFs[i]->GetCameraCenter()).norm();
+            fRtkToLocalDist += (s12i * R12i * vpKFs[i]->GetRtkTransF() + t12i - vpKFs[i]->GetCameraCenter()).norm();
         }
         fRtkToLocalDist /= vpKFs.size();
 
         if (fRtkToLocalDist < 5 && fRtkToLocalDist < fBestOriDist) {
             mpLastMap->SetRtkInitialized();
-            mpLastMap->SetSim3RtkToLocal(T12i, R12i, t12i, s12i);
+            mpLastMap->SetSim3FRtkToLocal(T12i, R12i, t12i, s12i);
             cout << "NowDist: OriDist: sBest: " << fRtkToLocalDist << " " << fBestOriDist << " " << s12i
                  << endl;
         }
