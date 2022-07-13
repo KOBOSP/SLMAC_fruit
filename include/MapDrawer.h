@@ -20,11 +20,11 @@
 #ifndef MAPDRAWER_H
 #define MAPDRAWER_H
 
-#include"Atlas.h"
-#include"MapPoint.h"
-#include"KeyFrame.h"
+#include "Atlas.h"
+#include "MapPoint.h"
+#include "KeyFrame.h"
 #include "Settings.h"
-#include<pangolin/pangolin.h>
+#include <pangolin/pangolin.h>
 
 #include<mutex>
 

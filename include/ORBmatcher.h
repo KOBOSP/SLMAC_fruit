@@ -40,7 +40,7 @@ namespace ORB_SLAM3
         ORBmatcher(float nnratio=0.6, bool checkOri=true);
 
         // Computes the Hamming distance between two ORB descriptors
-        static int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
+        static int GetDescriptorDistance(const cv::Mat &a, const cv::Mat &b);
 
         // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
         // Used to track the local map (Tracking)
@@ -56,11 +56,7 @@ namespace ORB_SLAM3
 
         // ProjectMono MapPoints using a Similarity Transformation and search matches.
         // Used in loop detection (Loop Closing)
-        int SearchKFAndMPsByProjectionInLC(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, std::vector<MapPoint*> &vpMatched, int th, float ratioHamming= 1.0);
-
-        // ProjectMono MapPoints using a Similarity Transformation and search matches.
-        // Used in Place Recognition (Loop Closing and Merging)
-        int SearchMPsAndKFsByProjectionInLC(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs, std::vector<MapPoint*> &vpMatchedMP, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming= 1.0);
+        int SearchKFAndMPsByProjectionInLC(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpCandidMPs, std::vector<MapPoint*> &vpMatchedMPs, int th, float ratioHamming= 1.0);
 
         // Search matches between MapPoints in a KeyFrame and ORB in a Frame.
         // Brute force constrained to ORB that belong to the same vocabulary node (at a certain level)
@@ -68,17 +64,10 @@ namespace ORB_SLAM3
         int SearchKFAndFByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
         int SearchKFsByBoWInLoopClosing(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
 
-        // Matching for the Map Initialization (only used in the monocular case)
-        int SearchForInitialization(Frame &F1, Frame &F2, std::vector<cv::Point2f> &vbPrevMatched, std::vector<int> &vnMatches12, int windowSize=10);
 
         // Matching to triangulate new MapPoints. Check Epipolar Constraint.
         int SearchKFsByTriangulation(KeyFrame *pKF1, KeyFrame* pKF2,
                                      std::vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse = false);
-
-        // Search matches between MapPoints seen in KF1 and KF2 transforming by a Sim3 [s12*R12|t12]
-        // In the stereo and RGB-D case, s12=1
-        // int SearchBySim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint *> &vpMatches12, const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th);
-        int SearchBySim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint *> &vpMatches12, const Sophus::Sim3f &S12, const float th);
 
         // ProjectMono MapPoints into KeyFrame and search for duplicated MapPoints.
         int SearchKFAndMapPointsByProjection(KeyFrame* pKF, const vector<MapPoint *> &vpMapPoints, const float th=3.0, const bool bRight = false);

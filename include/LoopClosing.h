@@ -93,15 +93,15 @@ protected:
 
     //Methods to implement the new place recognition algorithm
     bool DetectCommonRegionsExist();
-    bool DetectAndRefineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches,
+    bool DetectAndRefineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pCandidKF, g2o::Sim3 &gScw, int &nNumProjMatches,
                                        std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
     bool DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCandKFs, KeyFrame* &pMatchedKF, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw,
                                     int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
-    bool VerifyCommonRegionsFromCovisKF(KeyFrame* pCurrentKF, KeyFrame* pMatchedKF, g2o::Sim3 &gScw, int &nNumProjMatches,
+    bool VerifyCommonRegionsFromCovisKF(KeyFrame* pCurrentKF, KeyFrame* pCandidKF, g2o::Sim3 &gScw, int &nNumProjMatches,
                                         std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
-    int FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatchedKFw, g2o::Sim3 &g2oScw,
-                                set<MapPoint*> &spMatchedMPinOrigin, vector<MapPoint*> &vpMapPoints,
-                                vector<MapPoint*> &vpMatchedMapPoints);
+    int FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pCandidKFw, g2o::Sim3 &g2oScw,
+                                vector<MapPoint*> &vpCandidMPs,
+                                vector<MapPoint*> &vpMatchedMPs);
 
 
     void SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, vector<MapPoint*> &vpMapPoints);

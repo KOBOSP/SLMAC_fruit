@@ -267,7 +267,7 @@ namespace ORB_SLAM3 {
     }
     void Atlas::SetRtkInitialized() {
         unique_lock<mutex> lock(mMutexAtlas);
-        mpCurrentMap->SetRtkInitialized();
+        mpCurrentMap->SetRtkInitialized(true);
     }
 
     bool Atlas::isRtkInitialized() {

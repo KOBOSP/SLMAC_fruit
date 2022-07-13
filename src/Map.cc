@@ -112,9 +112,9 @@ namespace ORB_SLAM3 {
         return mbImuInitialized;
     }
 
-    void Map::SetRtkInitialized() {
+    void Map::SetRtkInitialized(bool bInited) {
         unique_lock<mutex> lock(mMutexRtkUpdate);
-        mbRtkInitialized = true;
+        mbRtkInitialized = bInited;
 
     }
 

@@ -731,7 +731,7 @@ namespace ORB_SLAM3 {
                 if (XR >= minX && XR <= maxX) {
                     // 计算匹配点il和待匹配点ic的相似度dist
                     const cv::Mat &dR = mDescriptorsRight.row(iR);
-                    const int dist = ORBmatcher::DescriptorDistance(dL, dR);
+                    const int dist = ORBmatcher::GetDescriptorDistance(dL, dR);
 
                     // 统计最小相似度及其对应的列坐标(x)
                     if (dist < bestDist) {

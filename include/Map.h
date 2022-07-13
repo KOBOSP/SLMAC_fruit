@@ -142,7 +142,7 @@ namespace ORB_SLAM3 {
 
         bool GetImuInitialized();
 
-        void SetRtkInitialized();
+        void SetRtkInitialized(bool bInited);
 
         bool GetRtkInitialized();
 

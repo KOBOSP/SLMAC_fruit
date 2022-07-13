@@ -387,7 +387,7 @@ namespace ORB_SLAM3 {
             // 和自己的距离当然是0
             Distances[i][i] = 0;
             for (size_t j = i + 1; j < N; j++) {
-                int distij = ORBmatcher::DescriptorDistance(vDescriptors[i], vDescriptors[j]);
+                int distij = ORBmatcher::GetDescriptorDistance(vDescriptors[i], vDescriptors[j]);
                 Distances[i][j] = distij;
                 Distances[j][i] = distij;
             }
@@ -480,16 +480,18 @@ namespace ORB_SLAM3 {
             KeyFrame *pKF = mit->first;
             tuple<int, int> indexes = mit->second;
             int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
+            Eigen::Vector3f Owi;
+            Eigen::Vector3f normali;
 
             if (leftIndex != -1) {
-                Eigen::Vector3f Owi = pKF->GetCameraCenter();
-                Eigen::Vector3f normali = Pos - Owi;
+                Owi = pKF->GetCameraCenter();
+                normali = Pos - Owi;
                 normal = normal + normali / normali.norm();
                 n++;
             }
             if (rightIndex != -1) {
-                Eigen::Vector3f Owi = pKF->GetRightCameraCenter();
-                Eigen::Vector3f normali = Pos - Owi;
+                Owi = pKF->GetRightCameraCenter();
+                normali = Pos - Owi;
                 normal = normal + normali / normali.norm();
                 n++;
             }
@@ -559,14 +561,11 @@ namespace ORB_SLAM3 {
             // ratio = mfMaxDistance/currentDist = ref_dist/cur_dist
             ratio = mfMaxDistance / currentDist;
         }
-
-        // 同时取log线性化
         int nScale = ceil(log(ratio) / pKF->mfLogScaleFactor);
         if (nScale < 0)
             nScale = 0;
         else if (nScale >= pKF->mnScaleLevels)
             nScale = pKF->mnScaleLevels - 1;
-
         return nScale;
     }
 

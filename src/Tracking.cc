@@ -537,7 +537,7 @@ namespace ORB_SLAM3 {
             bool bOK = false;
             mnTrackMethod = 0;
             // State OK
-            if (mState == OK) {
+            if (mState == OK || mState == RECENTLY_LOST) {
                 // Local Mapping might have changed some MapPoints tracked in last frame
                 CheckReplacedInLastFrame();
 
@@ -560,24 +560,16 @@ namespace ORB_SLAM3 {
                             bOK = TrackWithMotionModel();
                         }
                     } else if (mnTrackMethod == 0) {
-                        mnTrackMethod = 1;
+                        mnTrackMethod = 1;//IMU
                     }
                     if (!bOK) {
                         bOK = TrackReferenceKeyFrame();  // 根据恒速模型失败了，只能根据参考关键帧来跟踪
                     } else if (mnTrackMethod == 0) {
-                        mnTrackMethod = 2;
+                        mnTrackMethod = 2;//Motion
                     }
                 }
                 if (bOK && mnTrackMethod == 0) {
-                    mnTrackMethod = 3;
-                }
-            } else if (mState == RECENTLY_LOST) {
-                if (pCurrentMap->GetImuInitialized() &&
-                    mCurFrame.mdTimestamp < mnFrameIdRecLost + mnFrameNumDurRecLost) {
-                    bOK = TrackWithIMU();
-                    if (bOK) {
-                        mnTrackMethod = 1;
-                    }
+                    mnTrackMethod = 3;//RefKF
                 }
             } else if (mState == LOST) {
                 if (mCurFrame.mdTimestamp < mnFrameIdLost + mnFrameNumDurLost) {

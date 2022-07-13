@@ -3,7 +3,7 @@
 #mkdir build
 #cd build
 #cmake .. -DCMAKE_BUILD_TYPE=Release
-#make -j
+#make -j8
 #cd ../../../ORB3_Vd1
 #
 #
@@ -13,7 +13,7 @@
 #mkdir build
 #cd build
 #cmake .. -DCMAKE_BUILD_TYPE=Release
-#make -j
+#make -j8
 #cd ../../../ORB3_Vd1
 #
 #
@@ -23,10 +23,18 @@
 #mkdir build
 #cd build
 #cmake .. -DCMAKE_BUILD_TYPE=Release
-#make -j
+#make -j8
 #cd ../../../ORB3_Vd1
-#
-#
+
+#echo "Configuring and building Thirdparty/Pangolin ..."
+#cd ./../ORB3Thirdparty/Pangolin
+#mkdir build
+#cd build
+#cmake .. -DCMAKE_BUILD_TYPE=Release
+#make -j8
+#cd ../../../ORB3_Vd1
+
+
 #echo "Uncompress vocabulary ..."
 #cd ./../ORB3Vocabulary
 #tar -xf ORBvoc.txt.tar.gz
@@ -37,5 +45,5 @@ echo "Configuring and building ORB_SLAM3 ..."
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j7
+make -j8
 

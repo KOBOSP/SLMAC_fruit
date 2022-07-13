@@ -108,7 +108,7 @@ Viewer.MapWidth: 1024.0
 Viewer.MapHeight: 768.0
 Viewer.ColorNum: 30
 
-LoopClosing.OpenLoop: 1
+LoopClosing.ActivateLC: 1
 System.thFarPoints: 100.0
 LocalMapping.StrongCovisTh: 15
 LocalMapping.WeakCovisTh: 3

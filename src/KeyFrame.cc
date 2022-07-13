@@ -790,13 +790,11 @@ namespace ORB_SLAM3 {
                     const cv::KeyPoint &kpUn = mvKPsUn[vCell[j]];
                     const float distx = kpUn.pt.x - x;
                     const float disty = kpUn.pt.y - y;
-
                     if (fabs(distx) < r && fabs(disty) < r)
                         vIndices.emplace_back(vCell[j]);
                 }
             }
         }
-
         return vIndices;
     }
 

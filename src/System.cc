@@ -94,7 +94,7 @@ namespace ORB_SLAM3 {
                                  mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSettings, sSeqName);
         mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, mSettings);
         mptLocalMapping = new thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
-        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSettings->mbOpenLoop, mSettings);
+        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSettings->mbActivateLC, mSettings);
         mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
         mpTracker->SetLocalMapper(mpLocalMapper);
@@ -113,7 +113,8 @@ namespace ORB_SLAM3 {
             mpViewer->mbFrameBoth = true;
         }
         // Fix verbosity
-        Verbose::SetTh(Verbose::VERBOSITY_QUIET);
+//        Verbose::SetTh(Verbose::VERBOSITY_QUIET);
+        Verbose::SetTh(Verbose::VERBOSITY_DEBUG);
     }
 
     Sophus::SE3f System::CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, Eigen::Matrix<float, 3, 1> trw, const double &dTimestamp,

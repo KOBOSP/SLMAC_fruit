@@ -74,7 +74,7 @@ public:
 
 
     // if bFixScale is true, optimize SE3 (stereo,rgbd), Sim3 otherwise (mono) (NEW)
-    static int OptimizeKFsSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint *> &vpMatches1,
+    static int OptimizeKFsSim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint *> &vpKF1IdxToKF2MP,
                                g2o::Sim3 &g2oS12, const float th2, const bool bFixScale,
                                Eigen::Matrix<double,7,7> &mAcumHessian, const bool bAllPoints=false);
 
