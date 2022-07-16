@@ -883,9 +883,7 @@ namespace ORB_SLAM3 {
                 nFused++;
             } else
                 count_thcheck++;
-
         }
-
         return nFused;
     }
 

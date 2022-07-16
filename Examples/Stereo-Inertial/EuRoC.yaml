@@ -109,6 +109,13 @@ Viewer.MapHeight: 768.0
 Viewer.ColorNum: 30
 
 LoopClosing.ActivateLC: 1
+LoopClosing.ThOriProjMatches: 20
+LoopClosing.ThBoWMatches: 20
+LoopClosing.ThIterInliers: 15
+LoopClosing.ThOptInliers: 30
+LoopClosing.ThIterProjMatches: 50
+LoopClosing.ThOptProjMatches: 70
+
 System.thFarPoints: 100.0
 LocalMapping.StrongCovisTh: 15
 LocalMapping.WeakCovisTh: 3

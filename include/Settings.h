@@ -52,7 +52,7 @@ namespace ORB_SLAM3 {
         /*
          * Constructor from file
          */
-        Settings(const std::string &configFile, const int& sensor);
+        Settings(const std::string &configFile, const int &sensor);
 
         /*
          * Ostream operator overloading to dump settings to the terminal
@@ -60,37 +60,46 @@ namespace ORB_SLAM3 {
         friend std::ostream &operator<<(std::ostream &output, const Settings &s);
 
 
-        cv::Mat GetCamera1DistoCoef() {return cv::Mat(mvfPinHoleDistorsion1.size(), 1, CV_32F, mvfPinHoleDistorsion1.data());}
-        cv::Mat GetCamera2DistoCoef() {return cv::Mat(mvfPinHoleDistorsion2.size(), 1, CV_32F, mvfPinHoleDistorsion1.data());}
+        cv::Mat GetCamera1DistoCoef() {
+            return cv::Mat(mvfPinHoleDistorsion1.size(), 1, CV_32F, mvfPinHoleDistorsion1.data());
+        }
+
+        cv::Mat GetCamera2DistoCoef() {
+            return cv::Mat(mvfPinHoleDistorsion2.size(), 1, CV_32F, mvfPinHoleDistorsion1.data());
+        }
 
 
         template<typename T>
-        T ReadParameter(cv::FileStorage& fSettings, const std::string& name, bool& found, const bool required = true){
+        T ReadParameter(cv::FileStorage &fSettings, const std::string &name, bool &found, const bool required = true) {
             cv::FileNode node = fSettings[name];
-            if(node.empty()){
-                if(required){
+            if (node.empty()) {
+                if (required) {
                     std::cerr << name << " required parameter does not exist, aborting..." << std::endl;
                     exit(-1);
-                }
-                else{
+                } else {
                     std::cerr << name << " optional parameter does not exist..." << std::endl;
                     found = false;
                     return T();
                 }
 
-            }
-            else{
+            } else {
                 found = true;
                 return (T) node;
             }
         }
 
-        void ReadCamera(cv::FileStorage& fSettings);
-        void ReadImageInfo(cv::FileStorage& fSettings);
-        void ReadIMU(cv::FileStorage& fSettings);
-        void ReadORB(cv::FileStorage& fSettings);
-        void ReadViewer(cv::FileStorage& fSettings);
-        void ReadSystem(cv::FileStorage& fSettings);
+        void ReadCamera(cv::FileStorage &fSettings);
+
+        void ReadImageInfo(cv::FileStorage &fSettings);
+
+        void ReadIMU(cv::FileStorage &fSettings);
+
+        void ReadORB(cv::FileStorage &fSettings);
+
+        void ReadViewer(cv::FileStorage &fSettings);
+
+        void ReadSystem(cv::FileStorage &fSettings);
+
         void PrecomputeRectificationMaps();
 
         int mSensor;
@@ -158,6 +167,7 @@ namespace ORB_SLAM3 {
         bool mbActivateLC;
         float mfCullKFRedundantTh;
         int mnWeakCovisTh, mnStrongCovisTh, mnSingleMaxCullKFsNum;
+        int mnThOriProjMatches, mnThBoWMatches, mnThIterInliers, mnThOptInliers, mnThIterProjMatches, mnThOptProjMatches;
         float mfThTimeRescueLost;
     };
 };

@@ -50,8 +50,12 @@ namespace ORB_SLAM3 {
             mbActiveLC(bActiveLC) {
         // 连续性阈值
         mnCovisibilityConsistencyTh = settings->mnWeakCovisTh;
-        mnNumCorrection = 0;
-        mnCorrectionGBA = 0;
+        mnThOriProjMatches = settings->mnThOriProjMatches;
+        mnThBoWMatches = settings->mnThBoWMatches;
+        mnThIterInliers = settings->mnThIterInliers;
+        mnThOptInliers = settings->mnThOptInliers;
+        mnThIterProjMatches = settings->mnThIterProjMatches;
+        mnThOptProjMatches = settings->mnThOptProjMatches;
     }
 
     void LoopClosing::SetTracker(Tracking *pTracker) {
@@ -139,11 +143,6 @@ namespace ORB_SLAM3 {
                             MergeLocalWithImu();
                             Verbose::PrintMess("Merge finished!", Verbose::VERBOSITY_QUIET);
                         }
-                        // 记录时间戳
-                        vdPR_CurrentTime.emplace_back(mpCurrentKF->mdTimestamp);
-                        vdPR_MatchedTime.emplace_back(mpMergeMatchedKF->mdTimestamp);
-                        // 标记Place recognition结果为地图融合
-                        vnPR_TypeRecogn.emplace_back(1);
 
                         // CheckRequestReset all variables
                         // 重置所有融合相关变量
@@ -172,9 +171,6 @@ namespace ORB_SLAM3 {
                     if (mbLoopDetected) {
                         // 标记时间戳
                         bool bGoodLoop = true;
-                        vdPR_CurrentTime.emplace_back(mpCurrentKF->mdTimestamp);
-                        vdPR_MatchedTime.emplace_back(mpLoopMatchedKF->mdTimestamp);
-                        vnPR_TypeRecogn.emplace_back(0);
                         Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);
                         // 更新 mg2oLoopScw
                         mg2oLoopScw = mg2oLoopSlw; //*mvg2oSim3LoopTcw[nCurrentIndex];
@@ -206,7 +202,6 @@ namespace ORB_SLAM3 {
                             mvpLoopMapPoints = mvpLoopMPs;
                             // 开启回环矫正
                             CorrectLoop();
-                            mnNumCorrection += 1;
                         }
                         // CheckRequestReset all variables
                         mpLoopLastCurrentKF->SetCanErase();
@@ -465,43 +460,39 @@ namespace ORB_SLAM3 {
  * @param[in] pCurrentKF 当前关键帧
  * @param[in] pCandidKF 候选帧
  * @param[out] gScw 世界坐标系在验证帧下的Sim3
- * @param[out] nNumProjMatches 记录匹配点的数量
+ * @param[out] nNumOriProjMatches 记录匹配点的数量
  * @param[out] vpMPs 候选帧窗口内所有的地图点
  * @param[out] vpMatchedMPs 候选帧窗口内所有被匹配到的点
  * @return true 时序几何验证成功
  * @return false 时序几何验证失败
  */
     bool LoopClosing::DetectAndRefineSim3FromLastKF(KeyFrame *pCurrentKF, KeyFrame *pCandidKF, g2o::Sim3 &gScw,
-                                                    int &nNumProjMatches, std::vector<MapPoint *> &vpMPs,
+                                                    int &nNumOriProjMatches, std::vector<MapPoint *> &vpMPs,
                                                     std::vector<MapPoint *> &vpMatchedMPs) {
         set<MapPoint *> spAlreadyMatchedMPs;
-        nNumProjMatches = FindMatchesByProjection(pCurrentKF, pCandidKF, gScw, vpMPs, vpMatchedMPs);
-
-        int nThProjMatches = 30;
-        int nThProjOptMatches = 50;
-        int nThProjMatchesRep = 100;
+        nNumOriProjMatches = FindMatchesByProjection(pCurrentKF, pCandidKF, gScw, vpMPs, vpMatchedMPs);
 
         // 2.点数如果不符合返回false
-        if (nNumProjMatches >= nThProjMatches) {
-            Verbose::PrintMess("Sim3 reffine: There are " + to_string(nNumProjMatches) + " initial matches ",
+        if (nNumOriProjMatches >= mnThOriProjMatches) {
+            Verbose::PrintMess("Sim3 reffine: There are " + to_string(nNumOriProjMatches) + " initial matches ",
                                Verbose::VERBOSITY_DEBUG);
             Sophus::SE3d mTwm = pCandidKF->GetPoseInverse().cast<double>();
             g2o::Sim3 gSwm(mTwm.unit_quaternion(), mTwm.translation(), 1.0);
             g2o::Sim3 gScm = gScw * gSwm;
             Eigen::Matrix<double, 7, 7> mHessian7x7;
-            int numOptMatches = Optimizer::OptimizeKFsSim3(mpCurrentKF, pCandidKF, vpMatchedMPs, gScm, 10, mbFixScale,
+            int numOptInliers = Optimizer::OptimizeKFsSim3(mpCurrentKF, pCandidKF, vpMatchedMPs, gScm, 10, mbFixScale,
                                                            mHessian7x7, true);
 
             Verbose::PrintMess(
-                    "Sim3 reffine: There are " + to_string(numOptMatches) + " matches after of the optimization ",
+                    "Sim3 reffine: There are " + to_string(numOptInliers) + " matches after of the optimization ",
                     Verbose::VERBOSITY_DEBUG);
-            if (numOptMatches > nThProjOptMatches) {
+            if (numOptInliers > mnThOptInliers) {
                 g2o::Sim3 gScw_estimation((gScm * (gSwm.inverse())).rotation(), (gScm * (gSwm.inverse())).translation(),
                                           (gScm * (gSwm.inverse())).scale());
                 vector<MapPoint *> vpMatchedMP;
                 vpMatchedMP.resize(mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
-                nNumProjMatches = FindMatchesByProjection(pCurrentKF, pCandidKF, gScw_estimation, vpMPs, vpMatchedMPs);
-                if (nNumProjMatches >= nThProjMatchesRep) {
+                nNumOriProjMatches = FindMatchesByProjection(pCurrentKF, pCandidKF, gScw_estimation, vpMPs, vpMatchedMPs);
+                if (nNumOriProjMatches >= mnThOptProjMatches) {
                     gScw = gScw_estimation;
                     return true;
                 }
@@ -531,12 +522,6 @@ namespace ORB_SLAM3 {
     bool LoopClosing::DetectCommonRegionsFromBoW(
             std::vector<KeyFrame *> &vpBowCandKFs, KeyFrame *&pMatchedKF2, KeyFrame *&pLastCurrentKF, g2o::Sim3 &g2oScw,
             int &nNumCoincidences, std::vector<MapPoint *> &vpMPs, std::vector<MapPoint *> &vpMatchedMPs) {
-        // 一些后面会使用的阀值
-        int nThBoWMatches = 20; // 最低bow匹配特征点数
-        int nThBoWInliers = 15; // RANSAC最低的匹配点数
-        int nThSim3Inliers = 20; // sim3 最低内点数
-        int nThProjMatches = 50; // 通过投影得到的匹配点数量最低阀值
-        int nThProjOptMatches = 80; // 通过更小的半径,更严的距离搜索到的匹配点数量
 
         // 1. 获取当前帧的共视帧(在共同区域检测中应该避免当前关键帧的共视关键帧中)
         set<KeyFrame *> spCurKFConnectedKFs = mpCurrentKF->GetConnectedKeyFrames();
@@ -639,13 +624,13 @@ namespace ORB_SLAM3 {
 
             // 当窗口内的帧不是当前关键帧的相邻帧且匹配点足够多时
             // 3. 利用RANSAC寻找候选关键帧窗口与当前关键帧的相对位姿T_cm的初始值(可能是Sim3)
-            // nThBoWMatches = 20; // 最低bow匹配特征点数
-            if (numBoWMatches < nThBoWMatches) {
+            // mnThBoWMatches = 20; // 最低bow匹配特征点数
+            if (numBoWMatches < mnThBoWMatches) {
                 continue;
             }
             Sim3Solver solver = Sim3Solver(mpCurrentKF, pMostBoWMatchesKF, vpMatchedPoints, mbFixScale,
                                            vpKeyFrameMatchedMP);
-            solver.SetRansacParameters(0.99, nThBoWInliers, 300); // at least 15 inliers
+            solver.SetRansacParameters(0.99, mnThIterInliers, 300); // at least 15 inliers
 
             bool bNoMore = false;
             vector<bool> vbInliers;
@@ -662,7 +647,7 @@ namespace ORB_SLAM3 {
                 continue;
             }
 
-            Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among " + to_string(nThBoWInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
+            Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among " + to_string(mnThIterInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
             // Match by reprojection
             vpCandCovKFi.clear();
             // 拿到窗口内匹配最多的帧的最佳10个共视帧和它自己组成的窗口
@@ -690,44 +675,44 @@ namespace ORB_SLAM3 {
 
 
             // 拿到solver 估计的 Scm初始值, 为后续的非线性优化做准备, 在这里 c 表示当前关键帧, m 表示回环/融合候选帧
-            g2o::Sim3 gScm(solver.GetEstimatedRotation().cast<double>(),
-                           solver.GetEstimatedTranslation().cast<double>(),
-                           (double) solver.GetEstimatedScale());
+            g2o::Sim3 gScmIter(solver.GetEstimatedRotation().cast<double>(),
+                               solver.GetEstimatedTranslation().cast<double>(),
+                               (double) solver.GetEstimatedScale());
             // 候选关键帧在其世界坐标系下的坐标
-            g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
-                           pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
+            g2o::Sim3 gSmwIter(pMostBoWMatchesKF->GetRotation().cast<double>(),
+                               pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
             // 利用初始的Scm估计确定世界坐标系在当前相机中的位姿
-            g2o::Sim3 gScw = gScm * gSmw; // Similarity matrix of current from the world position
+            g2o::Sim3 gScwIter = gScmIter * gSmwIter; // Similarity matrix of current from the world position
             // 准备用来SearchByProjection的位姿信息
-            Sophus::Sim3f mScw = Converter::toSophus(gScw);
+            Sophus::Sim3f mScwIter = Converter::toSophus(gScwIter);
 
             // 记录最后searchByProjection的结果
             vector<MapPoint *> vpMatchedMP;
             vpMatchedMP.resize(mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
             // 3.3.1 重新利用之前计算的mScw信息, 通过投影寻找更多的匹配点
-            int numProjMatches = matcherByProjection.SearchKFAndMPsByProjectionInLC(mpCurrentKF, mScw,
-                                                                                     vpMapPoints,
-                                                                                     vpMatchedMP,
-                                                                                     8, 1.5);
-            //cout <<"BoW: " << numProjMatches << " matches between " << vpMapPoints.ParameterSize() << " points with coarse Sim3" << endl;
+            int numIterProjMatches = matcherByProjection.SearchKFAndMPsByProjectionInLC(mpCurrentKF, mScwIter,
+                                                                                        vpMapPoints,
+                                                                                        vpMatchedMP,
+                                                                                        8, 1.5);
+            //cout <<"BoW: " << numIterProjMatches << " matches between " << vpMapPoints.ParameterSize() << " points with coarse Sim3" << endl;
 
-            // 如果拿到了足够多的匹配点, nThProjMatches = 50
-            if (numProjMatches >= nThProjMatches) {
+            // 如果拿到了足够多的匹配点, mnThIterProjMatches = 50
+            if (numIterProjMatches >= mnThIterProjMatches) {
                 // Optimize Sim3 transformation with every matches
                 Eigen::Matrix<double, 7, 7> mHessian7x7;
 
                 bool bFixedScale = mbFixScale;
-                // 3.3.2 利用搜索到的更多的匹配点用Sim3优化投影误差得到的更好的 gScm
+                // 3.3.2 利用搜索到的更多的匹配点用Sim3优化投影误差得到的更好的 gScmIter
                 // pKFi是候选关键帧
-                int numOptMatches = Optimizer::OptimizeKFsSim3(mpCurrentKF, pKFi, vpMatchedMP, gScm, 10,
+                int numOptInliers = Optimizer::OptimizeKFsSim3(mpCurrentKF, pKFi, vpMatchedMP, gScmIter, 10,
                                                                mbFixScale, mHessian7x7, true);
 
                 // 3.3.3 如果内点足够多,用更小的半径搜索匹配点,并且再次进行优化(p.s.这里与论文不符,并没有再次优化)
-                if (numOptMatches >= nThSim3Inliers) {
+                if (numOptInliers >= mnThOptInliers) {
                     // 前面已经声明了这些变量了,无需再次声明
                     g2o::Sim3 gSmw(pMostBoWMatchesKF->GetRotation().cast<double>(),
                                    pMostBoWMatchesKF->GetTranslation().cast<double>(), 1.0);
-                    g2o::Sim3 gScw = gScm * gSmw; // Similarity matrix of current from the world position
+                    g2o::Sim3 gScw = gScmIter * gSmw; // Similarity matrix of current from the world position
                     Sophus::Sim3f mScw = Converter::toSophus(gScw);
 
                     vector<MapPoint *> vpMatchedMP;
@@ -735,14 +720,14 @@ namespace ORB_SLAM3 {
                                        static_cast<MapPoint *>(NULL));
                     // 3.3.4 重新利用之前计算的mScw信息, 通过更小的半径和更严格的距离的投影寻找匹配点
                     // 5 : 半径的增益系数(对比之前下降了)---> 更小的半径, 1.0 , hamming distance 的阀值增益系数---> 允许更小的距离
-                    int numProjOptMatches = matcherByProjection.SearchKFAndMPsByProjectionInLC(mpCurrentKF,
+                    int numOptProjMatches = matcherByProjection.SearchKFAndMPsByProjectionInLC(mpCurrentKF,
                                                                                                mScw,
                                                                                                vpMapPoints,
                                                                                                vpMatchedMP, 5,
                                                                                                1.0);
 
                     // 当新的投影得到的内点数量大于nProjOptMatches=80时
-                    if (numProjOptMatches >= nThProjOptMatches) {
+                    if (numOptProjMatches >= mnThOptProjMatches) {
                         // 4. 用当前关键帧的相邻关键来验证前面得到的Tam(共视几何校验)
                         // 统计验证成功的关键帧数量
                         int nNumKFs = 0;
@@ -782,8 +767,8 @@ namespace ORB_SLAM3 {
                         }
 
                         // 记录第二次searchByProjection得到最多匹配点的关键帧的各种信息,最后作为回环帧/融合帧
-                        if (nBestMatchesReproj < numProjOptMatches) {
-                            nBestMatchesReproj = numProjOptMatches; // 投影匹配的数量
+                        if (nBestMatchesReproj < numOptProjMatches) {
+                            nBestMatchesReproj = numOptProjMatches; // 投影匹配的数量
                             nBestNumCoindicendes = nNumKFs; // 成功验证的帧数
                             pBestMatchedKF = pMostBoWMatchesKF; // 记录候选帧窗口内与当前关键帧相似度最高的帧
                             g2oBestScw = gScw; // 记录最优的位姿(这个位姿是由Tam推到出来的 : Taw = Tam * Tmw,这里a表示c)
@@ -1154,7 +1139,6 @@ namespace ORB_SLAM3 {
             mbRunningGBA = true;
             mbFinishedGBA = false;
             mbStopGBA = false;
-            mnCorrectionGBA = mnNumCorrection;
             mpThreadGBA = new thread(&LoopClosing::RunGlobalBundleAdjustment, this, pLoopMap, mpCurrentKF->mnId);
         }
         // Loop closed. CancelPause Local Mapping.
@@ -2268,8 +2252,7 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> lock(mMutexGBA);
 
             if (!mbStopGBA) {
-                Verbose::PrintMess("Global Bundle Adjustment finished", Verbose::VERBOSITY_NORMAL);
-                Verbose::PrintMess("Updating map ...", Verbose::VERBOSITY_NORMAL);
+                Verbose::PrintMess("Global Bundle Adjustment finished, Updating map ...", Verbose::VERBOSITY_NORMAL);
 
                 mpLocalMapper->RequestPause();
                 // Wait until Local Mapping has effectively stopped

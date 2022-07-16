@@ -259,6 +259,13 @@ namespace ORB_SLAM3 {
         mnSingleMaxCullKFsNum = ReadParameter<int>(fSettings, "LocalMapping.SingleMaxCullKFsNum", found);
         mnWeakCovisTh = ReadParameter<int>(fSettings, "LocalMapping.WeakCovisTh", found);
         mfThTimeRescueLost = ReadParameter<float>(fSettings, "Tracking.ThTimeRescueLost", found);
+
+        mnThOriProjMatches = ReadParameter<int>(fSettings, "LoopClosing.ThOriProjMatches", found);
+        mnThBoWMatches = ReadParameter<int>(fSettings, "LoopClosing.ThBoWMatches", found);
+        mnThIterInliers = ReadParameter<int>(fSettings, "LoopClosing.ThIterInliers", found);
+        mnThOptInliers = ReadParameter<int>(fSettings, "LoopClosing.ThOptInliers", found);
+        mnThIterProjMatches = ReadParameter<int>(fSettings, "LoopClosing.ThIterProjMatches", found);
+        mnThOptProjMatches = ReadParameter<int>(fSettings, "LoopClosing.ThOptProjMatches", found);
     }
 
     void Settings::PrecomputeRectificationMaps() {

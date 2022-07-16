@@ -93,7 +93,7 @@ protected:
 
     //Methods to implement the new place recognition algorithm
     bool DetectCommonRegionsExist();
-    bool DetectAndRefineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pCandidKF, g2o::Sim3 &gScw, int &nNumProjMatches,
+    bool DetectAndRefineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pCandidKF, g2o::Sim3 &gScw, int &nNumOriProjMatches,
                                        std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
     bool DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCandKFs, KeyFrame* &pMatchedKF, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw,
                                     int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
@@ -186,16 +186,15 @@ protected:
     bool mbFixScale;
     bool mnFullBAIdx;
 
-    vector<double> vdPR_CurrentTime;
-    vector<double> vdPR_MatchedTime;
-    vector<int> vnPR_TypeRecogn;
-
-    //DEBUG
-    int mnNumCorrection;
-    int mnCorrectionGBA;
     // To (de)activate LC
-    bool mbActiveLC = true;
+    bool mbActiveLC;
 
+    int mnThOriProjMatches;
+    int mnThBoWMatches;
+    int mnThIterInliers;
+    int mnThOptInliers;
+    int mnThIterProjMatches;
+    int mnThOptProjMatches;
 };
 
 } //namespace ORB_SLAM
