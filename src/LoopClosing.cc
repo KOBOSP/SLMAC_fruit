@@ -65,6 +65,9 @@ namespace ORB_SLAM3 {
     void LoopClosing::SetLocalMapper(LocalMapping *pLocalMapper) {
         mpLocalMapper = pLocalMapper;
     }
+    void LoopClosing::SetViewer(Viewer *pViewer) {
+        mpViewer = pViewer;
+    }
 
 /**
  * @brief 回环线程主函数
@@ -437,14 +440,18 @@ namespace ORB_SLAM3 {
 
         // Check the BoW candidates if the geometric candidate list is not empty
         if (!bLoopDetectedInKF && !vpLoopBowCand.empty()) {
-            mbLoopDetected = DetectCommonRegionsFromBoW(vpLoopBowCand, mpLoopMatchedKF, mpLoopLastCurrentKF,
-                                                        mg2oLoopSlw, mnLoopNumCoincidences, mvpLoopMPs,
-                                                        mvpLoopMatchedMPs);
+            mbLoopDetected = DetectCommonRegionsByBoWSearchAndProjectVerify(vpLoopBowCand, mpLoopMatchedKF,
+                                                                            mpLoopLastCurrentKF,
+                                                                            mg2oLoopSlw, mnLoopNumCoincidences,
+                                                                            mvpLoopMPs,
+                                                                            mvpLoopMatchedMPs);
         }
         if (!bMergeDetectedInKF && !vpMergeBowCand.empty()) {
-            mbMergeDetected = DetectCommonRegionsFromBoW(vpMergeBowCand, mpMergeMatchedKF, mpMergeLastCurrentKF,
-                                                         mg2oMergeSlw, mnMergeNumCoincidences, mvpMergeMPs,
-                                                         mvpMergeMatchedMPs);
+            mbMergeDetected = DetectCommonRegionsByBoWSearchAndProjectVerify(vpMergeBowCand, mpMergeMatchedKF,
+                                                                             mpMergeLastCurrentKF,
+                                                                             mg2oMergeSlw, mnMergeNumCoincidences,
+                                                                             mvpMergeMPs,
+                                                                             mvpMergeMatchedMPs);
         }
         mpKeyFrameDB->add(mpCurrentKF);
         if (mbMergeDetected || mbLoopDetected) {
@@ -519,7 +526,7 @@ namespace ORB_SLAM3 {
  * @return true 检测到一个合格的共同区域
  * @return false 没检测到一个合格的共同区域
  */
-    bool LoopClosing::DetectCommonRegionsFromBoW(
+    bool LoopClosing::DetectCommonRegionsByBoWSearchAndProjectVerify(
             std::vector<KeyFrame *> &vpBowCandKFs, KeyFrame *&pMatchedKF2, KeyFrame *&pLastCurrentKF, g2o::Sim3 &g2oScw,
             int &nNumCoincidences, std::vector<MapPoint *> &vpMPs, std::vector<MapPoint *> &vpMatchedMPs) {
 
@@ -595,7 +602,8 @@ namespace ORB_SLAM3 {
             for (int j = 0; j < vpCandCovKFi.size(); ++j) {
                 if (!vpCandCovKFi[j] || vpCandCovKFi[j]->isBad())
                     continue;
-                int num = matcherByBoW.SearchKFsByBoWInLoopClosing(mpCurrentKF, vpCandCovKFi[j], vvpMatchedMPs[j]);
+                int num = matcherByBoW.SearchMatchKFAndKFByBoW(mpCurrentKF, vpCandCovKFi[j],
+                                                               vvpMatchedMPs[j]);
                 if (num > nMostBoWNumMatches) {
                     nMostBoWNumMatches = num;
                 }
@@ -690,10 +698,10 @@ namespace ORB_SLAM3 {
             vector<MapPoint *> vpMatchedMP;
             vpMatchedMP.resize(mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
             // 3.3.1 重新利用之前计算的mScw信息, 通过投影寻找更多的匹配点
-            int numIterProjMatches = matcherByProjection.SearchKFAndMPsByProjectionInLC(mpCurrentKF, mScwIter,
-                                                                                        vpMapPoints,
-                                                                                        vpMatchedMP,
-                                                                                        8, 1.5);
+            int numIterProjMatches = matcherByProjection.SearchMatchKFAndMPsByProject(mpCurrentKF, mScwIter,
+                                                                                      vpMapPoints,
+                                                                                      vpMatchedMP,
+                                                                                      8, 1.5);
             //cout <<"BoW: " << numIterProjMatches << " matches between " << vpMapPoints.ParameterSize() << " points with coarse Sim3" << endl;
 
             // 如果拿到了足够多的匹配点, mnThIterProjMatches = 50
@@ -720,11 +728,11 @@ namespace ORB_SLAM3 {
                                        static_cast<MapPoint *>(NULL));
                     // 3.3.4 重新利用之前计算的mScw信息, 通过更小的半径和更严格的距离的投影寻找匹配点
                     // 5 : 半径的增益系数(对比之前下降了)---> 更小的半径, 1.0 , hamming distance 的阀值增益系数---> 允许更小的距离
-                    int numOptProjMatches = matcherByProjection.SearchKFAndMPsByProjectionInLC(mpCurrentKF,
-                                                                                               mScw,
-                                                                                               vpMapPoints,
-                                                                                               vpMatchedMP, 5,
-                                                                                               1.0);
+                    int numOptProjMatches = matcherByProjection.SearchMatchKFAndMPsByProject(mpCurrentKF,
+                                                                                             mScw,
+                                                                                             vpMapPoints,
+                                                                                             vpMatchedMP, 5,
+                                                                                             1.0);
 
                     // 当新的投影得到的内点数量大于nProjOptMatches=80时
                     if (numOptProjMatches >= mnThOptProjMatches) {
@@ -889,8 +897,8 @@ namespace ORB_SLAM3 {
         Sophus::Sim3f mScw = Converter::toSophus(g2oScw);
         ORBmatcher matcher(0.9, true);
         vpMatchedMPs.resize(pCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
-        int nMatchedMPs = matcher.SearchKFAndMPsByProjectionInLC(pCurrentKF, mScw, vpCandidMPs, vpMatchedMPs, 3,
-                                                                 1.5);
+        int nMatchedMPs = matcher.SearchMatchKFAndMPsByProject(pCurrentKF, mScw, vpCandidMPs, vpMatchedMPs, 3,
+                                                               1.5);
         return nMatchedMPs;
     }
 
@@ -1078,12 +1086,12 @@ namespace ORB_SLAM3 {
 
         // ProjectMono MapPoints observed in the neighborhood of the loop keyframe
         // into the current keyframe and neighbors using corrected poses.
-        // SearchKFAndMapPointsByProjection duplications.
+        // SearchReplaceKFAndMPsByProject duplications.
         // Step 5. 将闭环相连关键帧组mvpLoopMapPoints 投影到当前关键帧组中，进行匹配，融合，新增或替换当前关键帧组中KF的地图点
         // 因为 闭环相连关键帧组mvpLoopMapPoints 在地图中时间比较久经历了多次优化，认为是准确的
         // 而当前关键帧组中的关键帧的地图点是最近新计算的，可能有累积误差
         // CorrectedSim3：存放矫正后当前关键帧的共视关键帧，及其世界坐标系下Sim3 变换
-        SearchAndFuse(CorrectedSim3, mvpLoopMapPoints);
+        FuseBetweenKFs(CorrectedSim3, mvpLoopMapPoints);
         // After the MapPoint fusion, new links in the covisibility graph will appear attaching mbFrameBoth sides of the loop
         // Step 6. 更新当前关键帧之间的共视相连关系，得到因闭环时MapPoints融合而新得到的连接关系
         // LoopConnections：存储因为闭环地图点调整而新生成的连接关系
@@ -1590,10 +1598,10 @@ namespace ORB_SLAM3 {
 
         // ProjectMono MapPoints observed in the neighborhood of the merge keyframe
         // into the current keyframe and neighbors using corrected poses.
-        // SearchKFAndMapPointsByProjection duplications.
+        // SearchReplaceKFAndMPsByProject duplications.
         //std::cout << "[Merge]: start fuse points" << std::endl;
         // Step 5 把融合关键帧的共视窗口里的地图点投到当前关键帧的共视窗口里,把重复的点融合掉(以旧换新)
-        SearchAndFuse(vCorrectedSim3, vpCheckFuseMapPoint);
+        FuseBetweenKFs(vCorrectedSim3, vpCheckFuseMapPoint);
         //std::cout << "[Merge]: fuse points finished" << std::endl;
 
         // Update6DoF connectivity
@@ -1963,10 +1971,10 @@ namespace ORB_SLAM3 {
     if(!good)
         cout << "BAD ESSENTIAL GRAPH 2!!" << endl;*/
 
-        //cout << "start SearchAndFuse" << endl;
+        //cout << "start FuseBetweenKFAndMPs" << endl;
         // Step 7 把融合关键帧的共视窗口里的地图点投到当前关键帧的共视窗口里，把重复的点融合掉（以旧换新）
-        SearchAndFuse(vpCurrentConnectedKFs, vpCheckFuseMapPoint);
-        //cout << "end SearchAndFuse" << endl;
+        FuseBetweenKFAndMPs(vpCurrentConnectedKFs, vpCheckFuseMapPoint);
+        //cout << "end FuseBetweenKFAndMPs" << endl;
 
         //cout << "MergeMap init ID: " << pMergeMap->GetInitKFid() << "       CurrMap init ID: " << pCurrentMap->GetInitKFId() << endl;
 
@@ -2029,51 +2037,11 @@ namespace ORB_SLAM3 {
     }
 
 /**
- * @brief 1.0版本新的调试函数，暂时跳过
- */
-    void LoopClosing::CheckObservations(set<KeyFrame *> &spKFsMap1, set<KeyFrame *> &spKFsMap2) {
-        cout << "----------------------" << endl;
-        for (KeyFrame *pKFi1: spKFsMap1) {
-            map<KeyFrame *, int> mMatchedMP;
-            set<MapPoint *> spMPs = pKFi1->GetMapPoints();
-
-            for (MapPoint *pMPij: spMPs) {
-                if (!pMPij || pMPij->isBad()) {
-                    continue;
-                }
-
-                map<KeyFrame *, tuple<int, int >> mMPijObs = pMPij->GetObsKFAndLRIdx();
-                for (KeyFrame *pKFi2: spKFsMap2) {
-                    if (mMPijObs.find(pKFi2) != mMPijObs.end()) {
-                        if (mMatchedMP.find(pKFi2) != mMatchedMP.end()) {
-                            mMatchedMP[pKFi2] = mMatchedMP[pKFi2] + 1;
-                        } else {
-                            mMatchedMP[pKFi2] = 1;
-                        }
-                    }
-                }
-
-            }
-
-            if (mMatchedMP.size() == 0) {
-                cout << "CHECK-OBS: KF " << pKFi1->mnId << " has not any matched MP with the other map" << endl;
-            } else {
-                cout << "CHECK-OBS: KF " << pKFi1->mnId << " has matched MP with " << mMatchedMP.size()
-                     << " KF from the other map" << endl;
-                for (pair<KeyFrame *, int> matchedKF: mMatchedMP) {
-                    cout << "   -KF: " << matchedKF.first->mnId << ", Number of matches: " << matchedKF.second << endl;
-                }
-            }
-        }
-        cout << "----------------------" << endl;
-    }
-
-/**
  * @brief 查找对应MP与融合
  * @param CorrectedPosesMap 关键帧及对应的pose
  * @param vpMapPoints 待融合地图的融合帧及其5个共视关键帧对应的mp（1000个以内）（注意此时所有kf与mp全部移至当前地图，这里的待融合地图的说法只为区分，因为还没有融合）
  */
-    void LoopClosing::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, vector<MapPoint *> &vpMapPoints) {
+    void LoopClosing::FuseBetweenKFs(const KeyFrameAndPose &CorrectedPosesMap, vector<MapPoint *> &vpMapPoints) {
         ORBmatcher matcher(0.8);
 
         int total_replaces = 0;
@@ -2103,7 +2071,7 @@ namespace ORB_SLAM3 {
             const int nLP = vpMapPoints.size();
             for (int i = 0; i < nLP; i++) {
                 // vpReplacePoints如果存在新点，则替换成老点，这里注意如果老点已经在新点对应的kf中
-                // 也就是之前某次matcher.SearchKFAndMapPointsByProjection 把老点放入到新的关键帧中，下次遍历时，如果老点已经在被代替点的对应的某一个关键帧内
+                // 也就是之前某次matcher.SearchReplaceKFAndMPsByProject 把老点放入到新的关键帧中，下次遍历时，如果老点已经在被代替点的对应的某一个关键帧内
                 MapPoint *pRep = vpReplacePoints[i];
                 if (pRep) {
 
@@ -2125,7 +2093,7 @@ namespace ORB_SLAM3 {
  * @param vConectedKFs 当前地图的当前关键帧及5个共视关键帧
  * @param vpMapPoints 待融合地图的融合帧及其5个共视关键帧对应的mp（1000个以内）（注意此时所有kf与mp全部移至当前地图，这里的待融合地图的说法只为区分，因为还没有融合）
  */
-    void LoopClosing::SearchAndFuse(const vector<KeyFrame *> &vConectedKFs, vector<MapPoint *> &vpMapPoints) {
+    void LoopClosing::FuseBetweenKFAndMPs(const vector<KeyFrame *> &vConectedKFs, vector<MapPoint *> &vpMapPoints) {
         ORBmatcher matcher(0.8);
 
         int total_replaces = 0;

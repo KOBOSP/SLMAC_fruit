@@ -252,14 +252,15 @@ namespace ORB_SLAM3 {
         bool found;
         msLoadFrom = ReadParameter<string>(fSettings, "System.LoadAtlasFromFile", found, false);
         msSaveTo = ReadParameter<string>(fSettings, "System.SaveAtlasToFile", found, false);
-        mfThFarPoints = ReadParameter<float>(fSettings, "System.thFarPoints", found);
-        mbActivateLC = ReadParameter<int>(fSettings, "LoopClosing.ActivateLC", found);
+        mfThFarPoints = ReadParameter<float>(fSettings, "Tracking.thFarPoints", found);
+        mfThTimeRescueLost = ReadParameter<float>(fSettings, "Tracking.ThTimeRescueLost", found);
+
         mfCullKFRedundantTh = ReadParameter<float>(fSettings, "LocalMapping.CullKFRedundantTh", found);
         mnStrongCovisTh = ReadParameter<int>(fSettings, "LocalMapping.StrongCovisTh", found);
         mnSingleMaxCullKFsNum = ReadParameter<int>(fSettings, "LocalMapping.SingleMaxCullKFsNum", found);
         mnWeakCovisTh = ReadParameter<int>(fSettings, "LocalMapping.WeakCovisTh", found);
-        mfThTimeRescueLost = ReadParameter<float>(fSettings, "Tracking.ThTimeRescueLost", found);
 
+        mbActivateLC = ReadParameter<int>(fSettings, "LoopClosing.ActivateLC", found);
         mnThOriProjMatches = ReadParameter<int>(fSettings, "LoopClosing.ThOriProjMatches", found);
         mnThBoWMatches = ReadParameter<int>(fSettings, "LoopClosing.ThBoWMatches", found);
         mnThIterInliers = ReadParameter<int>(fSettings, "LoopClosing.ThIterInliers", found);

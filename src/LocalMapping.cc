@@ -58,8 +58,11 @@ namespace ORB_SLAM3 {
          */
         mbBadImu = false;
         mTimeFirstToCur = 0.f;
-        mbFarPoints = true;
         mfThFarPoints = settings->mfThFarPoints;
+        mbFarPoints = false;
+        if (mfThFarPoints > 0 && mfThFarPoints < 1000) {
+            mbFarPoints = true;
+        }
         mfCullKFRedundantTh = settings->mfCullKFRedundantTh;
         mnWeakCovisTh = settings->mnWeakCovisTh;
         mnStrongCovisTh = settings->mnStrongCovisTh;
@@ -436,7 +439,7 @@ namespace ORB_SLAM3 {
                            mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2();
 
             // 通过极线约束的方式找到匹配点（且该点还没有成为MP，注意非单目已经生成的MP这里直接跳过不做匹配，所以最后并不会覆盖掉特征点对应的MP）
-            matcher.SearchKFsByTriangulation(mpCurrentKeyFrame, pKF2, vMatchedIndices, false, bCoarse);
+            matcher.SearchKFAndKFByTriangulation(mpCurrentKeyFrame, pKF2, vMatchedIndices, false, bCoarse);
 
             // 取出与mpCurrentKeyFrame共视关键帧的内外参信息
             Sophus::SE3<float> sophTcw2 = pKF2->GetPose();
@@ -746,7 +749,7 @@ namespace ORB_SLAM3 {
             // 1.如果地图点能匹配关键帧的特征点，并且该点有对应的地图点，那么选择观测数目多的替换两个地图点
             // 2.如果地图点能匹配关键帧的特征点，并且该点没有对应的地图点，那么为该点添加该投影地图点
             // 注意这个时候对地图点融合的操作是立即生效的
-            matcher.SearchKFAndMapPointsByProjection(pKFi, vpMapPointsInKF);
+            matcher.SearchReplaceKFAndMPsByProject(pKFi, vpMapPointsInKF);
         }
 
 
@@ -785,7 +788,7 @@ namespace ORB_SLAM3 {
 
         // Step 4.2：进行地图点投影融合,和正向融合操作是完全相同的
         // 不同的是正向操作是"每个关键帧和当前关键帧的地图点进行融合",而这里的是"当前关键帧和所有邻接关键帧的地图点进行融合"
-        matcher.SearchKFAndMapPointsByProjection(mpCurrentKeyFrame, vpProjectMPs);
+        matcher.SearchReplaceKFAndMPsByProject(mpCurrentKeyFrame, vpProjectMPs);
 
 
         // Update6DoF points

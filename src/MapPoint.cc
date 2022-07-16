@@ -31,7 +31,7 @@ namespace ORB_SLAM3 {
  */
     MapPoint::MapPoint() :
             mnFirstKFid(0), mnFirstFrame(0), nTimesObs(0), mnTrackReferenceForFrame(0),
-            mnLastFrameSeen(0), mnBAFlagInLocalMapping(0), mnFuseFlagInLocalMapping(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
+            mnLastFrameSeen(0), mnBAFlagInLocalMapping(0), mnFuseFlagInLocalMapping(0), mnCorrectedByKF(0),
             mnCorrectedReference(0), mnBAGlobalForKF(0), mnVisible(1), mnFound(1), mbBad(false),
             mpReplaced(static_cast<MapPoint *>(NULL)) {
         mpReplaced = static_cast<MapPoint *>(NULL);
@@ -42,13 +42,11 @@ namespace ORB_SLAM3 {
  */
     MapPoint::MapPoint(const Eigen::Vector3f &Pos, KeyFrame *pRefKF, Map *pMap) :
             mnFirstKFid(pRefKF->mnId), mnFirstFrame(pRefKF->mnFrameId), nTimesObs(0), mnTrackReferenceForFrame(0),
-            mnLastFrameSeen(0), mnBAFlagInLocalMapping(0), mnFuseFlagInLocalMapping(0), mnLoopPointForKF(0), mnCorrectedByKF(0),
+            mnLastFrameSeen(0), mnBAFlagInLocalMapping(0), mnFuseFlagInLocalMapping(0), mnCorrectedByKF(0),
             mnCorrectedReference(0), mnBAGlobalForKF(0), mpRefKF(pRefKF), mnVisible(1), mnFound(1), mbBad(false),
-            mpReplaced(static_cast<MapPoint *>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap),
-            mnOriginMapId(pMap->GetId()) {
+            mpReplaced(static_cast<MapPoint *>(NULL)), mfMinDistance(0), mfMaxDistance(0), mpMap(pMap){
         SetWorldPos(Pos);
         mNormalVector.setZero();
-        mbTrackInRightView = false;
         mbTrackInLeftView = false;
 
         // MapPoints can be created from Tracking and Local Mapping. This mutex avoid conflicts with id.

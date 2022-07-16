@@ -55,8 +55,8 @@ public:
     LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale, const bool bActiveLC, Settings *settings);
 
     void SetTracker(Tracking* pTracker);
-
     void SetLocalMapper(LocalMapping* pLocalMapper);
+    void SetViewer(Viewer *pViewer);
 
     // Main function
     void Run();
@@ -82,7 +82,6 @@ public:
 
     bool CheckFinished();
 
-    Viewer* mpViewer;
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -95,8 +94,8 @@ protected:
     bool DetectCommonRegionsExist();
     bool DetectAndRefineSim3FromLastKF(KeyFrame* pCurrentKF, KeyFrame* pCandidKF, g2o::Sim3 &gScw, int &nNumOriProjMatches,
                                        std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
-    bool DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCandKFs, KeyFrame* &pMatchedKF, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw,
-                                    int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
+    bool DetectCommonRegionsByBoWSearchAndProjectVerify(std::vector<KeyFrame*> &vpBowCandKFs, KeyFrame* &pMatchedKF2, KeyFrame* &pLastCurrentKF, g2o::Sim3 &g2oScw,
+                                                        int &nNumCoincidences, std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
     bool VerifyCommonRegionsFromCovisKF(KeyFrame* pCurrentKF, KeyFrame* pCandidKF, g2o::Sim3 &gScw, int &nNumProjMatches,
                                         std::vector<MapPoint*> &vpMPs, std::vector<MapPoint*> &vpMatchedMPs);
     int FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pCandidKFw, g2o::Sim3 &g2oScw,
@@ -104,15 +103,14 @@ protected:
                                 vector<MapPoint*> &vpMatchedMPs);
 
 
-    void SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, vector<MapPoint*> &vpMapPoints);
-    void SearchAndFuse(const vector<KeyFrame*> &vConectedKFs, vector<MapPoint*> &vpMapPoints);
+    void FuseBetweenKFs(const KeyFrameAndPose &CorrectedPosesMap, vector<MapPoint*> &vpMapPoints);
+    void FuseBetweenKFAndMPs(const vector<KeyFrame*> &vConectedKFs, vector<MapPoint*> &vpMapPoints);
 
     void CorrectLoop();
 
     void MergeLocalWithoutImu();
     void MergeLocalWithImu();
 
-    void CheckObservations(set<KeyFrame*> &spKFsMap1, set<KeyFrame*> &spKFsMap2);
 
     void ResetIfRequested();
     bool mbResetRequested;
@@ -127,15 +125,13 @@ protected:
     std::mutex mMutexFinish;
 
     Atlas* mpAtlas;
-    Tracking* mpTracker;
-
     KeyFrameDatabase* mpKeyFrameDB;
     ORBVocabulary* mpORBVocabulary;
-
+    Tracking* mpTracker;
     LocalMapping *mpLocalMapper;
+    Viewer* mpViewer;
 
     std::list<KeyFrame*> mlpLoopKeyFrameQueue;
-
     std::mutex mMutexLoopQueue;
 
     // Loop detector parameters

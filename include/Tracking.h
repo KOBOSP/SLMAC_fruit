@@ -159,7 +159,7 @@ protected:
     void UpdateLocalKeyFrames();
 
     bool TrackLocalMap();
-    void MatchLocalPointsToCurFrame();
+    int MatchLocalMPsToCurFrame();
 
     bool NeedNewKeyFrame();
     void CreateNewKeyFrame();

@@ -170,12 +170,10 @@ public:
     float mTrackProjX;
     float mTrackProjY;
     float mTrackDepth;
-    float mTrackDepthR;
     float mTrackProjXR;
-    float mTrackProjYR;
-    bool mbTrackInLeftView, mbTrackInRightView;
-    int mnTrackScaleLevel, mnTrackScaleLevelR;
-    float mTrackViewCos, mTrackViewCosR;
+    bool mbTrackInLeftView;
+    int mnTrackScaleLevel;
+    float mTrackViewCos;
     long unsigned int mnTrackReferenceForFrame;
     long unsigned int mnLastFrameSeen;
 
@@ -184,7 +182,6 @@ public:
     long unsigned int mnFuseFlagInLocalMapping;
 
     // Variables used by loop closing
-    long unsigned int mnLoopPointForKF;
     long unsigned int mnCorrectedByKF;
     long unsigned int mnCorrectedReference;    
     Eigen::Vector3f mPosGBA;
@@ -195,18 +192,9 @@ public:
     Eigen::Vector3f mPosMerge;
     Eigen::Vector3f mNormalVectorMerge;
 
-
-    // Fopr inverse depth optimization
-    double mInvDepth;
-    double mInitU;
-    double mInitV;
-    KeyFrame* mpHostKF;
-
     static std::mutex mGlobalMutex;
 
-    unsigned int mnOriginMapId;
-
-protected:    
+protected:
 
      // Position in absolute coordinates
      Eigen::Vector3f mWorldPos;

@@ -94,7 +94,8 @@ namespace ORB_SLAM3 {
                                  mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSettings, sSeqName);
         mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, mSettings);
         mptLocalMapping = new thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
-        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSettings->mbActivateLC, mSettings);
+        mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSettings->mbActivateLC,
+                                       mSettings);
         mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
         mpTracker->SetLocalMapper(mpLocalMapper);
@@ -109,7 +110,7 @@ namespace ORB_SLAM3 {
             mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, sSettingFile, mSettings);
             mptViewer = new thread(&Viewer::Run, mpViewer);
             mpTracker->SetViewer(mpViewer);
-            mpLoopCloser->mpViewer = mpViewer;
+            mpLoopCloser->SetViewer(mpViewer);
             mpViewer->mbFrameBoth = true;
         }
         // Fix verbosity
@@ -117,7 +118,8 @@ namespace ORB_SLAM3 {
         Verbose::SetTh(Verbose::VERBOSITY_DEBUG);
     }
 
-    Sophus::SE3f System::CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, Eigen::Matrix<float, 3, 1> trw, const double &dTimestamp,
+    Sophus::SE3f System::CalibAndTrack(const cv::Mat &ImgLeft, const cv::Mat &ImgRight, Eigen::Matrix<float, 3, 1> trw,
+                                       const double &dTimestamp,
                                        const vector<IMU::Point> &vImuMeas) {
         // Check mode change
         {
@@ -147,7 +149,7 @@ namespace ORB_SLAM3 {
             } else if (mbResetActiveMap) {
                 mpTracker->ResetActiveMap();
                 mbResetActiveMap = false;
-            } else if(mbRequestShutDown){
+            } else if (mbRequestShutDown) {
                 ShutDownSystem();
                 mbShutDowned = true;
                 return Sophus::SE3<float>();
@@ -175,13 +177,13 @@ namespace ORB_SLAM3 {
                 cvtColor(ImgLeftToTrack, ImgLeftToTrack, cv::COLOR_RGB2GRAY);
                 cvtColor(ImgRightToTrack, ImgRightToTrack, cv::COLOR_RGB2GRAY);
             }
-        }else if (mImgLeftToViewer.channels() == 4) {
+        } else if (mImgLeftToViewer.channels() == 4) {
             if (mbRGB) {
                 cvtColor(ImgLeftToTrack, ImgLeftToTrack, cv::COLOR_RGBA2GRAY);
                 cvtColor(ImgRightToTrack, ImgRightToTrack, cv::COLOR_RGBA2GRAY);
             }
         }
-        for (size_t nImu = 0; nImu < vImuMeas.size(); nImu++){
+        for (size_t nImu = 0; nImu < vImuMeas.size(); nImu++) {
             mpTracker->GrabImuData(vImuMeas[nImu]);
         }
         // std::cout << "start GrabImageStereo" << std::endl;
@@ -233,19 +235,18 @@ namespace ORB_SLAM3 {
     }
 
 
-
     void System::ShutDownSystem() {
         mpLocalMapper->RequestFinish();
         mpLoopCloser->RequestFinish();
         // Wait until all thread have effectively stopped
         while (!mpLocalMapper->CheckFinished() || !mpLoopCloser->CheckFinished() || mpLoopCloser->CheckRunningGBA()) {
-            if(!mpLocalMapper->CheckFinished()){
+            if (!mpLocalMapper->CheckFinished()) {
                 cout << "mpLocalMapping is not finished" << endl;
             }
-            if(!mpLoopCloser->CheckFinished()){
+            if (!mpLoopCloser->CheckFinished()) {
                 cout << "mpLoopCloser is not finished" << endl;
             }
-            if(mpLoopCloser->CheckRunningGBA()){
+            if (mpLoopCloser->CheckRunningGBA()) {
                 cout << "mpLoopCloser is running GBA" << endl;
             }
             usleep(5000);
@@ -253,7 +254,7 @@ namespace ORB_SLAM3 {
 
         if (mpViewer) {
             mpViewer->RequestFinish();
-            while (!mpViewer->CheckFinished()){
+            while (!mpViewer->CheckFinished()) {
                 usleep(5000);
             }
         }
@@ -279,7 +280,7 @@ namespace ORB_SLAM3 {
         int numMaxKFs = 0;
         Map *pBiggerMap;
         std::cout << "There are " << std::to_string(vpMaps.size()) << " maps in the atlas" << std::endl;
-        for (Map *pMap :vpMaps) {
+        for (Map *pMap: vpMaps) {
             std::cout << "  Map " << std::to_string(pMap->GetId()) << " has "
                       << std::to_string(pMap->GetKeyFramesNumInMap()) << " KFs" << std::endl;
             if (pMap->GetKeyFramesNumInMap() > numMaxKFs) {
@@ -345,8 +346,9 @@ namespace ORB_SLAM3 {
             Sophus::SE3f Twb = (pKF->mImuCalib.mTbc * (*lit) * Trw).inverse();
             Eigen::Quaternionf q = Twb.unit_quaternion();
             Eigen::Vector3f twb = Twb.translation();
-            fFPose << setprecision(6) << 1e9 * (*lFT) << " " << setprecision(9) << twb(0) << " " << twb(1) << " " << twb(2)
-              << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
+            fFPose << setprecision(6) << 1e9 * (*lFT) << " " << setprecision(9) << twb(0) << " " << twb(1) << " "
+                   << twb(2)
+                   << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
         }
         fFPose.close();
         cout << endl << "Done" << endl;
@@ -359,7 +361,7 @@ namespace ORB_SLAM3 {
         vector<Map *> vpMaps = mpAtlas->GetAllMaps();
         Map *pBiggerMap;
         int numMaxKFs = 0;
-        for (Map *pMap :vpMaps) {
+        for (Map *pMap: vpMaps) {
             if (pMap && pMap->GetKeyFramesNumInMap() > numMaxKFs) {
                 numMaxKFs = pMap->GetKeyFramesNumInMap();
                 pBiggerMap = pMap;
@@ -391,8 +393,8 @@ namespace ORB_SLAM3 {
             Eigen::Quaternionf q = Twb.unit_quaternion();
             Eigen::Vector3f twb = Twb.translation();
             fKFPose << setprecision(6) << 1e9 * pKF->mdTimestamp << " " << setprecision(9)
-              << twb(0) << " " << twb(1) << " " << twb(2) << " "
-              << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
+                    << twb(0) << " " << twb(1) << " " << twb(2) << " "
+                    << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << endl;
         }
         fKFPose.close();
         cout << endl << "Done" << endl;

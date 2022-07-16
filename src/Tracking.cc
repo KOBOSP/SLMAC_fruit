@@ -77,7 +77,7 @@ namespace ORB_SLAM3 {
         // 遍历下地图中的相机，然后打印出来了
         vector<GeometricCamera *> vpCams = mpAtlas->GetAllCameras();
         std::cout << "There are " << vpCams.size() << " cameras in the atlas" << std::endl;
-        for (GeometricCamera *pCam : vpCams) {
+        for (GeometricCamera *pCam: vpCams) {
             std::cout << "Camera " << pCam->GetId();
             if (pCam->GetType() == GeometricCamera::CAM_PINHOLE) {
                 std::cout << " is pinhole" << std::endl;
@@ -202,13 +202,14 @@ namespace ORB_SLAM3 {
  * @param sFileName 文件名字，貌似调试用的
  */
     Sophus::SE3f
-    Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, Eigen::Matrix<float, 3, 1> trw, const double &dTimestamp) {
+    Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, Eigen::Matrix<float, 3, 1> trw,
+                              const double &dTimestamp) {
         std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
         mCurFrame = Frame(imRectLeft, imRectRight, trw, dTimestamp, mpORBextractorLeft, mpORBextractorRight,
                           mpORBVocabulary, mCvK, mfBaselineFocal, mfThDepth, mpCamera, &mLastFrame,
                           *mpImuCalib);
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-        mdExtraFps=1.0/std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+        mdExtraFps = 1.0 / std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
 
         if (bStepByStep) {
             std::cout << "Tracking: Waiting to the next step" << std::endl;
@@ -220,7 +221,7 @@ namespace ORB_SLAM3 {
         t1 = std::chrono::steady_clock::now();
         Track();
         t2 = std::chrono::steady_clock::now();
-        mdTrackFps=1.0/std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+        mdTrackFps = 1.0 / std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
         return mCurFrame.GetPose();
     }
 
@@ -613,8 +614,8 @@ namespace ORB_SLAM3 {
                     mnFrameIdLost = mCurFrame.mnId;
                     cout << "State OK to LOST" << endl;
                 }
-            } else if(mState == RECENTLY_LOST){
-                if((mCurFrame.mnId > (mnFrameIdRecLost + mnFrameNumDurLost))){
+            } else if (mState == RECENTLY_LOST) {
+                if ((mCurFrame.mnId > (mnFrameIdRecLost + mnFrameNumDurLost))) {
                     mState = LOST;
                     mnFrameIdLost = mCurFrame.mnId;
                     cout << "State RECENTLY_LOST to LOST" << endl;
@@ -872,7 +873,7 @@ namespace ORB_SLAM3 {
         vector<MapPoint *> vpMapPointMatches;
 
         // Step 2：通过词袋BoW加速当前帧与参考帧之间的特征点匹配
-        int nmatches = matcher.SearchKFAndFByBoW(mpReferenceKF, mCurFrame, vpMapPointMatches);
+        int nmatches = matcher.SearchMatchFrameAndKFByBoW(mpReferenceKF, mCurFrame, vpMapPointMatches);
 
         // 匹配数目小于15，认为跟踪失败
         if (nmatches < 15) {
@@ -901,7 +902,6 @@ namespace ORB_SLAM3 {
                     MapPoint *pMP = mCurFrame.mvpMPs[i];
                     mCurFrame.mvpMPs[i] = static_cast<MapPoint *>(NULL);
                     mCurFrame.mvbOutlier[i] = false;
-                    pMP->mbTrackInRightView = false;
                     pMP->mbTrackInLeftView = false;
                     pMP->mnLastFrameSeen = mCurFrame.mnId;
                     nmatches--;
@@ -953,7 +953,7 @@ namespace ORB_SLAM3 {
         int th = 15;
 
         // Step 3：用上一帧地图点进行投影匹配，如果匹配点不够，则扩大搜索半径再来一次
-        int nmatches = matcher.SearchFrameAndFrameByProjection(mCurFrame, mLastFrame, th, false);
+        int nmatches = matcher.SearchFrameAndFrameByProject(mCurFrame, mLastFrame, th, false);
 
         // If few matches, uses a wider window search
         // 如果匹配点太少，则扩大搜索半径再来一次
@@ -961,7 +961,7 @@ namespace ORB_SLAM3 {
             Verbose::PrintMess("Not enough matches, wider window search!!", Verbose::VERBOSITY_NORMAL);
             fill(mCurFrame.mvpMPs.begin(), mCurFrame.mvpMPs.end(), static_cast<MapPoint *>(NULL));
 
-            nmatches = matcher.SearchFrameAndFrameByProjection(mCurFrame, mLastFrame, 2 * th, false);
+            nmatches = matcher.SearchFrameAndFrameByProject(mCurFrame, mLastFrame, 2 * th, false);
             Verbose::PrintMess("Matches with wider search: " + to_string(nmatches), Verbose::VERBOSITY_NORMAL);
         }
 
@@ -986,7 +986,6 @@ namespace ORB_SLAM3 {
 
                     mCurFrame.mvpMPs[i] = static_cast<MapPoint *>(NULL);
                     mCurFrame.mvbOutlier[i] = false;
-                    pMP->mbTrackInRightView = false;
                     pMP->mnLastFrameSeen = mCurFrame.mnId;
                     nmatches--;
                 } else if (mCurFrame.mvpMPs[i]->GetObsTimes() > 0)
@@ -1021,19 +1020,18 @@ namespace ORB_SLAM3 {
         // Step 1：更新局部关键帧 mvpLocalKeyFrames 和局部地图点 mvpLocalMapPoints
         UpdateKFsAndMPsInLocal();
         // Step 2：筛选局部地图中新增的在视野范围内的地图点，投影到当前帧搜索匹配，得到更多的匹配关系
-        MatchLocalPointsToCurFrame();
+        MatchLocalMPsToCurFrame();
 
 
         // 在这个函数之前，在 Relocalization、TrackReferenceKeyFrame、TrackWithMotionModel 中都有位姿优化
         // Step 3：前面新增了更多的匹配关系，BA优化得到更准确的位姿
         int inliers;
         // IMU未初始化，仅优化位姿||初始化，重定位，重新开启一个地图都会使mnLastRelocFrameId变化
-        if (!mpAtlas->GetImuInitialized() || mCurFrame.mnId <= mnFrameIdLastReloc + mnFrameNumDurRefLoc){
+        if (!mpAtlas->GetImuInitialized() || mCurFrame.mnId <= mnFrameIdLastReloc + mnFrameNumDurRefLoc) {
 //            Verbose::PrintMess("TLM: PoseOptimization ", Verbose::VERBOSITY_DEBUG);
             Optimizer::PoseOptimization(&mCurFrame);
-        }
-        else {
-            if (!mbMapUpdated){//mbMapUpdated变化见Tracking::TrackWithIMU()
+        } else {
+            if (!mbMapUpdated) {//mbMapUpdated变化见Tracking::TrackWithIMU()
 //                Verbose::PrintMess("TLM: PoseInertialOptimizationLastFrame ", Verbose::VERBOSITY_DEBUG);
                 // 使用上一普通帧以及当前帧的视觉信息和IMU信息联合优化当前帧位姿、速度和IMU零偏
                 inliers = Optimizer::PoseInertialOptimizationLastFrame(&mCurFrame);
@@ -1076,7 +1074,7 @@ namespace ORB_SLAM3 {
         // 单目IMU模式下做完初始化至少成功跟踪15个才算成功，没做初始化需要50个
         if (mnLMInFMatchNum < 15) {
             return false;
-        } else{
+        } else {
             return true;
         }
     }
@@ -1332,7 +1330,7 @@ namespace ORB_SLAM3 {
  * @brief 用局部地图点进行投影匹配，得到更多的匹配关系
  * 注意：局部地图点中已经是当前帧地图点的不需要再投影，只需要将此外的并且在视野范围内的点和当前帧进行投影匹配
  */
-    void Tracking::MatchLocalPointsToCurFrame() {
+    int Tracking::MatchLocalMPsToCurFrame() {
         // Do not search map points already matched, all happened in initial Frame.
         // Step 1：遍历当前帧的地图点，标记这些地图点不参与之后的投影搜索匹配
         for (vector<MapPoint *>::iterator vit = mCurFrame.mvpMPs.begin(), vend = mCurFrame.mvpMPs.end();
@@ -1348,7 +1346,6 @@ namespace ORB_SLAM3 {
                     pMP->mnLastFrameSeen = mCurFrame.mnId;
                     // 标记该点在后面搜索匹配时不被投影，因为已经有匹配了
                     pMP->mbTrackInLeftView = false;
-                    pMP->mbTrackInRightView = false;
                 }
             }
         }
@@ -1383,31 +1380,33 @@ namespace ORB_SLAM3 {
 
         // Step 3：如果需要进行投影匹配的点的数目大于0，就进行投影匹配，增加更多的匹配关系
         if (nToMatch < 5) {
-            return;
+            return nToMatch;
         }
         ORBmatcher matcher(0.8);
-        int th = 1;
+        int nThProjRad = 1;
         if (mpAtlas->GetImuInitialized()) {
             if (mpAtlas->GetCurrentMap()->GetImuIniertialBA2()) {
-                th = 2;
+                nThProjRad = 2;
             } else {
-                th = 6;  // 0.4版本这里是3
+                nThProjRad = 6;  // 0.4版本这里是3
             }
         } else if (!mpAtlas->GetImuInitialized()) {
-            th = 10;
+            nThProjRad = 10;
         }
         // If the camera has been relocalised recently, perform a coarser search
         // 如果不久前进行过重定位，那么进行一个更加宽泛的搜索，阈值需要增大
         if (mCurFrame.mnId < mnFrameIdLastReloc + mnFrameNumDurRefLoc) {
-            th = 5;
+            nThProjRad = 5;
         }
         if (mState == LOST || mState == RECENTLY_LOST) {
-            th = 15; // 15
+            nThProjRad = 15;
         }
         // 投影匹配得到更多的匹配关系
-        int matches = matcher.SearchFrameAndMPsByProjection(mCurFrame, mvpLocalMapPoints, th,
-                                                            mpLocalMapping->mbFarPoints,
-                                                            mpLocalMapping->mfThFarPoints);
+        int matches = matcher.SearchReplaceFrameAndMPsByProject(mCurFrame, mvpLocalMapPoints, nThProjRad,
+                                                                mpLocalMapping->mbFarPoints,
+                                                                mpLocalMapping->mfThFarPoints);
+        cout << mvpLocalMapPoints.size() << " " << nToMatch << " " << matches << endl;
+        return matches;
     }
 
 /**
@@ -1681,7 +1680,7 @@ namespace ORB_SLAM3 {
                 vbDiscarded[i] = true;
             else {
                 // 当前帧和候选关键帧用BoW进行快速匹配，匹配结果记录在vvpMapPointMatches，nmatches表示匹配的数目
-                int nmatches = matcher.SearchKFAndFByBoW(pKF, mCurFrame, vvpMapPointMatches[i]);
+                int nmatches = matcher.SearchMatchFrameAndKFByBoW(pKF, mCurFrame, vvpMapPointMatches[i]);
                 // 如果和当前帧的匹配数小于15,那么只能放弃这个关键帧
                 if (nmatches < 15) {
                     vbDiscarded[i] = true;
@@ -1779,8 +1778,8 @@ namespace ORB_SLAM3 {
                     // 前面的匹配关系是用词袋匹配过程得到的
                     if (nGood < 50) {
                         // 通过投影的方式将关键帧中未匹配的地图点投影到当前帧中, 生成新的匹配
-                        int nadditional = matcher2.SearchByProjection(mCurFrame, vpCandidateKFs[i], sFound, 10,
-                                                                      100);
+                        int nadditional = matcher2.SearchFrameAndKFByProject(mCurFrame, vpCandidateKFs[i], sFound, 10,
+                                                                             100);
 
                         // 如果通过投影过程新增了比较多的匹配特征点对
                         if (nadditional + nGood >= 50) {
@@ -1798,8 +1797,9 @@ namespace ORB_SLAM3 {
                                 for (int ip = 0; ip < mCurFrame.mnKPsLeftNum; ip++)
                                     if (mCurFrame.mvpMPs[ip])
                                         sFound.insert(mCurFrame.mvpMPs[ip]);
-                                nadditional = matcher2.SearchByProjection(mCurFrame, vpCandidateKFs[i], sFound, 3,
-                                                                          64);
+                                nadditional = matcher2.SearchFrameAndKFByProject(mCurFrame, vpCandidateKFs[i], sFound,
+                                                                                 3,
+                                                                                 64);
 
                                 // Final optimization
                                 // 如果成功挽救回来，匹配数目达到要求，最后BA优化一下
@@ -1939,7 +1939,7 @@ namespace ORB_SLAM3 {
         // lbLost.reserve(mlbLost.ParameterSize());
         unsigned int index = mnFirstFrameId;
         cout << "mnFirstFrameId = " << mnFirstFrameId << endl;
-        for (Map *pMap : mpAtlas->GetAllMaps()) {
+        for (Map *pMap: mpAtlas->GetAllMaps()) {
             if (pMap->GetKeyFramesNumInMap() > 0) {
                 if (index > pMap->GetLowerKFID())
                     index = pMap->GetLowerKFID();
