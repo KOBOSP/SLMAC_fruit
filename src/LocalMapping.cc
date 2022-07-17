@@ -397,25 +397,14 @@ namespace ORB_SLAM3 {
         const float &cy1 = mpCurrentKeyFrame->cy;
         const float &invfx1 = mpCurrentKeyFrame->invfx;
         const float &invfy1 = mpCurrentKeyFrame->invfy;
-
         // 用于后面的点深度的验证;这里的1.5是经验值
         const float ratioFactor = 1.5f * mpCurrentKeyFrame->mfScaleFactor;
-
-        // 以下是统计点数用的，没啥作用
-        int countStereo = 0;
-        int countStereoGoodProj = 0;
-        int countStereoAttempt = 0;
-        int totalStereoPts = 0;
         // Search matches with epipolar restriction and triangulate
-
-        // Step 2：遍历相邻关键帧vpNeighKFs
         for (size_t i = 0; i < vpNeighKFs.size(); i++) {
             // 下面的过程会比较耗费时间,因此如果有新的关键帧需要处理的话,就先去处理新的关键帧吧
             if (i > 0 && HaveNewKeyFrames())
                 return;
-
             KeyFrame *pKF2 = vpNeighKFs[i];
-
             GeometricCamera *pCamera1 = mpCurrentKeyFrame->mpCamera, *pCamera2 = pKF2->mpCamera;
 
             // Check first that baseline is not too short
@@ -433,13 +422,13 @@ namespace ORB_SLAM3 {
 
             // Search matches that fullfil epipolar constraint
             // Step 4：通过BoW对两关键帧的未匹配的特征点快速匹配，用极线约束抑制离群点，生成新的匹配点对
-            vector<pair<size_t, size_t> > vMatchedIndices;
+            vector<pair<size_t, size_t> > vMatchIdxPair;
             // 当惯性模式下，并且经过三次初始化，且为刚丢失状态
             bool bCoarse = mbHaveImu && mpTracker->mState == Tracking::RECENTLY_LOST &&
                            mpCurrentKeyFrame->GetMap()->GetImuIniertialBA2();
 
-            // 通过极线约束的方式找到匹配点（且该点还没有成为MP，注意非单目已经生成的MP这里直接跳过不做匹配，所以最后并不会覆盖掉特征点对应的MP）
-            matcher.SearchKFAndKFByTriangulation(mpCurrentKeyFrame, pKF2, vMatchedIndices, false, bCoarse);
+            // 通过极线约束的方式找到匹配点（且该点还没有成为MP，注意非单目已经生成的MP这里做匹配，所以最后会覆盖掉特征点对应的MP）
+            matcher.SearchKFAndKFByTriangulation(mpCurrentKeyFrame, pKF2, vMatchIdxPair, false, bCoarse);
 
             // 取出与mpCurrentKeyFrame共视关键帧的内外参信息
             Sophus::SE3<float> sophTcw2 = pKF2->GetPose();
@@ -457,29 +446,17 @@ namespace ORB_SLAM3 {
 
             // Triangulate each match
             // Step 5：对每对匹配通过三角化生成3D点,和 Triangulate函数差不多
-            const int nmatches = vMatchedIndices.size();
-            for (int ikp = 0; ikp < nmatches; ikp++) {
-                // 5.0
-                // 当前匹配对在当前关键帧中的索引
-                const int &idx1 = vMatchedIndices[ikp].first;
-                // 当前匹配对在邻接关键帧中的索引
-                const int &idx2 = vMatchedIndices[ikp].second;
-
-
-                // 5.1
-                // 当前匹配在当前关键帧中的特征点
+            const int nMatches = vMatchIdxPair.size();
+            for (int ikp = 0; ikp < nMatches; ikp++) {
+                const int &idx1 = vMatchIdxPair[ikp].first;
+                const int &idx2 = vMatchIdxPair[ikp].second;
+                float kp1_ur = mpCurrentKeyFrame->mvfXInRight[idx1];
+                float kp2_ur = pKF2->mvfXInRight[idx2];
                 const cv::KeyPoint &kp1 = mpCurrentKeyFrame->mvKPsUn[idx1];
-                // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
-                const float kp1_ur = mpCurrentKeyFrame->mvfXInRight[idx1];
-                bool bStereo1 = (kp1_ur >= 0);
-
-                // 5.2
-                // 当前匹配在邻接关键帧中的特征点
                 const cv::KeyPoint &kp2 = pKF2->mvKPsUn[idx2];
-                // mvuRight中存放着双目的深度值，如果不是双目，其值将为-1
-                // mvuRight中存放着极限校准后双目特征点在右目对应的像素横坐标，如果不是基线校准的双目或者没有找到匹配点，其值将为-1（或者rgbd）
-                const float kp2_ur = pKF2->mvfXInRight[idx2];
-                bool bStereo2 = (kp2_ur >= 0);
+                bool bHaveStereoMatch1 = (kp1_ur >= 0);
+                bool bHaveStereoMatch2 = (kp2_ur >= 0);
+
 
                 // Check parallax between rays
                 // Step 5.4：利用匹配点反投影得到视差角
@@ -498,92 +475,62 @@ namespace ORB_SLAM3 {
                 float cosParallaxStereo2 = cosParallaxStereo;
 
                 // Step 5.5：对于双目，利用双目得到视差角；单目相机没有特殊操作
-                if (bStereo1)
-                    // 传感器是双目相机,并且当前的关键帧的这个点有对应的深度
-                    // 假设是平行的双目相机，计算出两个相机观察这个点的时候的视差角;
-                    // ? 感觉直接使用向量夹角的方式计算会准确一些啊（双目的时候），那么为什么不直接使用那个呢？
-                    // 回答：因为双目深度值、基线是更可靠的，比特征匹配再三角化出来的稳
+                // 传感器是双目相机,并且当前的关键帧的这个点有对应的深度
+                // 假设是平行的双目相机，计算出两个相机观察这个点的时候的视差角;
+                // ? 感觉直接使用向量夹角的方式计算会准确一些啊（双目的时候），那么为什么不直接使用那个呢？
+                // 回答：因为双目深度值、基线是更可靠的，比特征匹配再三角化出来的稳
+                if (bHaveStereoMatch1){
                     cosParallaxStereo1 = cos(
                             2 * atan2(mpCurrentKeyFrame->mfBaseline / 2, mpCurrentKeyFrame->mvfMPDepth[idx1]));
-                else if (bStereo2)
-                    //传感器是双目相机,并且邻接的关键帧的这个点有对应的深度，和上面一样操作
-                    cosParallaxStereo2 = cos(2 * atan2(pKF2->mfBaseline / 2, pKF2->mvfMPDepth[idx2]));
-
-                // 统计用的
-                if (bStereo1 || bStereo2) {
-                    totalStereoPts++;
                 }
-
+                if (bHaveStereoMatch2){
+                    cosParallaxStereo2 = cos(2 * atan2(pKF2->mfBaseline / 2, pKF2->mvfMPDepth[idx2]));
+                }
                 // 得到双目观测的视差角
                 cosParallaxStereo = min(cosParallaxStereo1, cosParallaxStereo2);
-
-                // Step 5.6：三角化恢复3D点
                 Eigen::Vector3f x3D;
-
                 bool goodProj = false;
-                bool bPointStereo = false;
-                // cosParallaxRays>0 && (bStereo1 || bStereo2 || cosParallaxRays<0.9998)表明视线角正常
+                // cosParallaxRays>0 && (bHaveStereoMatch1 || bHaveStereoMatch2 || cosParallaxRays<0.9998)表明视线角正常
                 // cosParallaxRays<cosParallaxStereo表明前后帧视线角比双目视线角大，所以用前后帧三角化而来，反之使用双目的，如果没有双目则跳过
                 // 视差角度小时用三角法恢复3D点，视差角大时（离相机近）用双目恢复3D点（双目以及深度有效）
-                if (cosParallaxRays < cosParallaxStereo && cosParallaxRays > 0 && (bStereo1 || bStereo2 ||
+                if (cosParallaxRays < cosParallaxStereo && cosParallaxRays > 0 && (bHaveStereoMatch1 || bHaveStereoMatch2 ||
                                                                                    (cosParallaxRays < 0.9996 &&
                                                                                     mbHaveImu) ||
                                                                                    (cosParallaxRays < 0.9998 &&
                                                                                     !mbHaveImu))) {
-                    // 三角化，包装成了函数
                     goodProj = GeometricTools::Triangulate(xn1, xn2, eigTcw1, eigTcw2, x3D);
-                    if (!goodProj)
-                        continue;
-                } else if (bStereo1 && cosParallaxStereo1 < cosParallaxStereo2) {
-                    countStereoAttempt++;
-                    bPointStereo = true;
-                    // 如果是双目，用视差角更大的那个双目信息来恢复，直接用已知3D点反投影了
+                } else if (bHaveStereoMatch1 && cosParallaxStereo1 < cosParallaxStereo2) {
                     goodProj = mpCurrentKeyFrame->UnprojectStereo(idx1, x3D);
-                } else if (bStereo2 && cosParallaxStereo2 < cosParallaxStereo1) {
-                    countStereoAttempt++;
-                    bPointStereo = true;
-                    // 如果是双目，用视差角更大的那个双目信息来恢复，直接用已知3D点反投影了
+                } else if (bHaveStereoMatch2 && cosParallaxStereo2 < cosParallaxStereo1) {
                     goodProj = pKF2->UnprojectStereo(idx2, x3D);
                 } else {
                     continue; //No stereo and very low parallax
                 }
 
-                // 成功三角化
-                if (goodProj && bPointStereo)
-                    countStereoGoodProj++;
-
                 if (!goodProj)
                     continue;
 
                 //Check triangulation in front of cameras
-                // Step 5.7：检测生成的3D点是否在相机前方,不在的话就放弃这个点
                 float z1 = Rcw1.row(2).dot(x3D) + tcw1(2);
                 if (z1 <= 0)
                     continue;
-
                 float z2 = Rcw2.row(2).dot(x3D) + tcw2(2);
                 if (z2 <= 0)
                     continue;
 
                 //Check reprojection error in first keyframe
-                // Step 5.7：计算3D点在当前关键帧下的重投影误差
                 const float &sigmaSquare1 = mpCurrentKeyFrame->mvfLevelSigma2[kp1.octave];
                 const float x1 = Rcw1.row(0).dot(x3D) + tcw1(0);
                 const float y1 = Rcw1.row(1).dot(x3D) + tcw1(1);
                 const float invz1 = 1.0 / z1;
-
-                if (!bStereo1) {
-                    // 单目情况下
+                if (!bHaveStereoMatch1) {
                     cv::Point2f uv1 = pCamera1->ProjectMPToKP(cv::Point3f(x1, y1, z1));
                     float errX1 = uv1.x - kp1.pt.x;
                     float errY1 = uv1.y - kp1.pt.y;
-
                     // 假设测量有一个像素的偏差，2自由度卡方检验阈值是5.991
                     if ((errX1 * errX1 + errY1 * errY1) > 5.991 * sigmaSquare1)
                         continue;
-
                 } else {
-                    // 双目情况
                     float u1 = fx1 * x1 * invz1 + cx1;
                     // 根据视差公式计算假想的右目坐标
                     float u1_r = u1 - mpCurrentKeyFrame->mfBaselineFocal * invz1;
@@ -596,13 +543,11 @@ namespace ORB_SLAM3 {
                         continue;
                 }
 
-                //Check reprojection error in second keyframe
-                // 计算3D点在另一个关键帧下的重投影误差，操作同上
                 const float sigmaSquare2 = pKF2->mvfLevelSigma2[kp2.octave];
                 const float x2 = Rcw2.row(0).dot(x3D) + tcw2(0);
                 const float y2 = Rcw2.row(1).dot(x3D) + tcw2(1);
                 const float invz2 = 1.0 / z2;
-                if (!bStereo2) {
+                if (!bHaveStereoMatch2) {
                     cv::Point2f uv2 = pCamera2->ProjectMPToKP(cv::Point3f(x2, y2, z2));
                     float errX2 = uv2.x - kp2.pt.x;
                     float errY2 = uv2.y - kp2.pt.y;
@@ -619,54 +564,31 @@ namespace ORB_SLAM3 {
                         continue;
                 }
 
-                //Check scale consistency
-                // Step 5.8：检查尺度连续性
-
-                // 世界坐标系下，3D点与相机间的向量，方向由相机指向3D点
                 Eigen::Vector3f normal1 = x3D - Ow1;
                 float dist1 = normal1.norm();
-
                 Eigen::Vector3f normal2 = x3D - Ow2;
                 float dist2 = normal2.norm();
-
-                if (dist1 == 0 || dist2 == 0)
+                if (dist1 <= 0 || dist2 <= 0)
                     continue;
-
                 if (mbFarPoints && (dist1 >= mfThFarPoints || dist2 >= mfThFarPoints)) // MODIFICATION
                     continue;
                 // ratioDist是不考虑金字塔尺度下的距离比例
                 const float ratioDist = dist2 / dist1;
-                // 金字塔尺度因子的比例
                 const float ratioOctave =
                         mpCurrentKeyFrame->mvScaleFactors[kp1.octave] / pKF2->mvScaleFactors[kp2.octave];
-
                 // 距离的比例和图像金字塔的比例不应该差太多，否则就跳过
                 if (ratioDist * ratioFactor < ratioOctave || ratioDist > ratioOctave * ratioFactor)
                     continue;
 
-                // Triangulation is succesfull
-                // Step 6：三角化生成3D点成功，构造成MapPoint
-                MapPoint *pMP = new MapPoint(x3D, mpCurrentKeyFrame, mpAtlas->GetCurrentMap());
-                if (bPointStereo)
-                    countStereo++;
 
-                // Step 6.1：为该MapPoint添加属性：
-                // a.观测到该MapPoint的关键帧
+                MapPoint *pMP = new MapPoint(x3D, mpCurrentKeyFrame, mpAtlas->GetCurrentMap());
                 pMP->AddObsKFAndLRIdx(mpCurrentKeyFrame, idx1);
                 pMP->AddObsKFAndLRIdx(pKF2, idx2);
-
                 mpCurrentKeyFrame->AddMapPoint(pMP, idx1);
                 pKF2->AddMapPoint(pMP, idx2);
-
-                // mBiasOri.该MapPoint的描述子
                 pMP->ComputeDistinctiveDescriptors();
-
-                // c.该MapPoint的平均观测方向和深度范围
                 pMP->UpdateNormalAndDepth();
-
                 mpAtlas->AddMapPoint(pMP);
-                // Step 7：将新产生的点放入检测队列
-                // 这些MapPoints都会经过MapPointCulling函数的检验
                 mlpRecentAddedMapPoints.emplace_back(pMP);
             }
         }
@@ -749,7 +671,7 @@ namespace ORB_SLAM3 {
             // 1.如果地图点能匹配关键帧的特征点，并且该点有对应的地图点，那么选择观测数目多的替换两个地图点
             // 2.如果地图点能匹配关键帧的特征点，并且该点没有对应的地图点，那么为该点添加该投影地图点
             // 注意这个时候对地图点融合的操作是立即生效的
-            matcher.SearchReplaceKFAndMPsByProject(pKFi, vpMapPointsInKF);
+            matcher.SearchReplaceKFAndMPsByProjectInLocalMap(pKFi, vpMapPointsInKF);
         }
 
 
@@ -788,7 +710,7 @@ namespace ORB_SLAM3 {
 
         // Step 4.2：进行地图点投影融合,和正向融合操作是完全相同的
         // 不同的是正向操作是"每个关键帧和当前关键帧的地图点进行融合",而这里的是"当前关键帧和所有邻接关键帧的地图点进行融合"
-        matcher.SearchReplaceKFAndMPsByProject(mpCurrentKeyFrame, vpProjectMPs);
+        matcher.SearchReplaceKFAndMPsByProjectInLocalMap(mpCurrentKeyFrame, vpProjectMPs);
 
 
         // Update6DoF points

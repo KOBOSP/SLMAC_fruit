@@ -194,8 +194,6 @@ int main(int argc, char **argv) {
     if (!SLAM.CheckShutDowned()) {
         SLAM.ShutDownSystem();
     }
-
-    // Save camera trajectory
     string sSaveFileName = string(argv[argc - 1]);
     const string FrameFile = "Frame" + sSaveFileName + ".txt";
     const string KeyFrameFile = "KeyFrame" + sSaveFileName + ".txt";

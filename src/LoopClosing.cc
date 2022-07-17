@@ -1086,7 +1086,7 @@ namespace ORB_SLAM3 {
 
         // ProjectMono MapPoints observed in the neighborhood of the loop keyframe
         // into the current keyframe and neighbors using corrected poses.
-        // SearchReplaceKFAndMPsByProject duplications.
+        // SearchReplaceKFAndMPsByProjectInLocalMap duplications.
         // Step 5. 将闭环相连关键帧组mvpLoopMapPoints 投影到当前关键帧组中，进行匹配，融合，新增或替换当前关键帧组中KF的地图点
         // 因为 闭环相连关键帧组mvpLoopMapPoints 在地图中时间比较久经历了多次优化，认为是准确的
         // 而当前关键帧组中的关键帧的地图点是最近新计算的，可能有累积误差
@@ -1598,7 +1598,7 @@ namespace ORB_SLAM3 {
 
         // ProjectMono MapPoints observed in the neighborhood of the merge keyframe
         // into the current keyframe and neighbors using corrected poses.
-        // SearchReplaceKFAndMPsByProject duplications.
+        // SearchReplaceKFAndMPsByProjectInLocalMap duplications.
         //std::cout << "[Merge]: start fuse points" << std::endl;
         // Step 5 把融合关键帧的共视窗口里的地图点投到当前关键帧的共视窗口里,把重复的点融合掉(以旧换新)
         FuseBetweenKFs(vCorrectedSim3, vpCheckFuseMapPoint);
@@ -2057,13 +2057,13 @@ namespace ORB_SLAM3 {
 
             g2o::Sim3 g2oScw = mit->second;
             Sophus::Sim3f Scw = Converter::toSophus(g2oScw);
-
+            Sophus::SE3f Tcw = Sophus::SE3f(Scw.rotationMatrix(), Scw.translation() / Scw.scale());
             vector<MapPoint *> vpReplacePoints(vpMapPoints.size(), static_cast<MapPoint *>(NULL));
 
             // 新点表示pKFi对应的点，老点表示pKFi对应的回环点
             // 将vpMapPoints投到pKF里面看看有没有匹配的MP，如果没有直接添加，如果有，暂时将老点放入至vpReplacePoints
             // vpReplacePoints下标表示第n个vpMapPoints，存放着新点，可以直接找到对应信息
-            int numFused = matcher.Fuse(pKFi, Scw, vpMapPoints, 4, vpReplacePoints);
+            int numFused = matcher.SearchReplaceKFAndMPsByProjectInGlobalMap(pKFi, Tcw, vpMapPoints, 4, vpReplacePoints);
 
             // Get Map Mutex
             unique_lock<mutex> lock(pMap->mMutexMapUpdate);
@@ -2071,18 +2071,14 @@ namespace ORB_SLAM3 {
             const int nLP = vpMapPoints.size();
             for (int i = 0; i < nLP; i++) {
                 // vpReplacePoints如果存在新点，则替换成老点，这里注意如果老点已经在新点对应的kf中
-                // 也就是之前某次matcher.SearchReplaceKFAndMPsByProject 把老点放入到新的关键帧中，下次遍历时，如果老点已经在被代替点的对应的某一个关键帧内
+                // 也就是之前某次matcher.SearchReplaceKFAndMPsByProjectInLocalMap 把老点放入到新的关键帧中，下次遍历时，如果老点已经在被代替点的对应的某一个关键帧内
                 MapPoint *pRep = vpReplacePoints[i];
                 if (pRep) {
-
-
                     num_replaces += 1;
-                    // 替换掉较新的
                     pRep->Replace(vpMapPoints[i]);
 
                 }
             }
-
             total_replaces += num_replaces;
         }
         //cout << "[FUSE]: " << total_replaces << " MPs had been fused" << endl;
@@ -2105,14 +2101,12 @@ namespace ORB_SLAM3 {
             KeyFrame *pKF = (*mit);
             Map *pMap = pKF->GetMap();
             Sophus::SE3f Tcw = pKF->GetPose();
-            Sophus::Sim3f Scw(Tcw.unit_quaternion(), Tcw.translation());
-            Scw.setScale(1.f);
             /*std::cout << "These should be zeros: " <<
             Scw.rotationMatrix() - Tcw.rotationMatrix() << std::endl <<
             Scw.translation() - Tcw.translation() << std::endl <<
             Scw.scale() - 1.f << std::endl;*/
             vector<MapPoint *> vpReplacePoints(vpMapPoints.size(), static_cast<MapPoint *>(NULL));
-            matcher.Fuse(pKF, Scw, vpMapPoints, 4, vpReplacePoints);
+            matcher.SearchReplaceKFAndMPsByProjectInGlobalMap(pKF, Tcw, vpMapPoints, 4, vpReplacePoints);
 
             // Get Map Mutex
             unique_lock<mutex> lock(pMap->mMutexMapUpdate);

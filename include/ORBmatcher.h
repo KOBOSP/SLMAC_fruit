@@ -43,25 +43,24 @@ namespace ORB_SLAM3
         static int GetDescriptorDistance(const cv::Mat &a, const cv::Mat &b);
 
 
-        // TrackWithMotionModel()
+        // TrackWithMotionModel()||invzc,uv,bForward,bestDist,GetObsTimes,er,mbCheckOrientation
         int SearchFrameAndFrameByProject(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono);
-        // TrackReferenceKeyFrame() and Relocalization()
+        // TrackReferenceKeyFrame() and Relocalization()||BestDist,secondDist,mbCheckOrientation
         int SearchMatchFrameAndKFByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMPMatches);
-        // Relocalization()
+        // Relocalization()||uv,Dist3D,bestDist,mbCheckOrientation
         int SearchFrameAndKFByProject(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
-        //MatchLocalMPsToCurFrame()
+        //MatchLocalMPsToCurFrame()||bFarPoints,bestDist,secondDist,GetObsTimes,er
         int SearchReplaceFrameAndMPsByProject(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float nThProjRad= 3, const bool bFarPoints = false, const float thFarPoints = 50.0f);
 
 
 
         // CreateNewMapPoints()
-        int SearchKFAndKFByTriangulation(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse = false);
+        int SearchKFAndKFByTriangulation(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<pair<size_t, size_t> > &vMatchedPairs, const bool bSkipExistStereoMP, const bool bCoarse = false);
 
         // FuseMapPointsInNeighbors()
-        int SearchReplaceKFAndMPsByProject(KeyFrame* pKF, const vector<MapPoint *> &vpMapPoints, const float th=3.0, const bool bRight = false);
+        int SearchReplaceKFAndMPsByProjectInLocalMap(KeyFrame* pKF, const vector<MapPoint *> &vpMapPoints, const float nThProjRad=3.0, const bool bRight = false);
         // FuseBetweenKFs() and FuseBetweenKFAndMPs()
-        int Fuse(KeyFrame* pKF, Sophus::Sim3f &Scw, const std::vector<MapPoint*> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint);
-
+        int SearchReplaceKFAndMPsByProjectInGlobalMap(KeyFrame* pKF, Sophus::SE3f &Tcw, const std::vector<MapPoint*> &vpCandidMPs, float nThProjRad, vector<MapPoint *> &vpReplacePoint);
         // DetectCommonRegionsByBoWSearchAndProjectVerify() and FindMatchesByProjection()
         int SearchMatchKFAndMPsByProject(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpCandidMPs, std::vector<MapPoint*> &vpMatchedMPs, int th, float ratioHamming= 1.0);
         // DetectCommonRegionsByBoWSearchAndProjectVerify()
