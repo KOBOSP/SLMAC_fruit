@@ -142,4 +142,3 @@ add_executable(stereo_inertial_euroc
         Examples/StereoImuOnEuroc/stereo_inertial_euroc.cc)
 target_link_libraries(stereo_inertial_euroc ${PROJECT_NAME})
 
-

@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/kobosp/SLMAC/ORB3_Vd1/Examples/ORB_SLAM3ROS/build/devel/setup.sh
