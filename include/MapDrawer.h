@@ -45,12 +45,10 @@ public:
     void DrawKeyFramesGraphs(const bool bDrawKF, const bool bDrawCovisGraph, const bool bDrawInertialGraph, const bool bDrawRtkGraph, const bool bDrawOptFixKF, const bool bHisoryMapKF);
     void DrawCurrentCamera(pangolin::OpenGlMatrix &Twc);
     void SetCurrentCameraPose(const Sophus::SE3f &Tcw);
-    void SetReferenceKeyFrame(KeyFrame *pKF);
     void GetCurrentOpenGLCameraMatrix(pangolin::OpenGlMatrix &M, pangolin::OpenGlMatrix &MOw);
 
 private:
 
-    bool ParseViewerParamFile(cv::FileStorage &fSettings);
 
     float mKeyFrameSize;
     float mKeyFrameLineWidth;

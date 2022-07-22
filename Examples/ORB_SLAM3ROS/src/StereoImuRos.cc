@@ -69,7 +69,7 @@ public:
 };
 
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) {//rosrun 功能包名xxx  0程序名字  1参数A  2参数B
     ros::init(argc, argv, "StereoImuRos");
     ros::NodeHandle n("~");
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
@@ -82,19 +82,18 @@ int main(int argc, char **argv) {
         return 1;
     }
     if (argc == 4) {
-        std::string sbEqual(argv[3]);
+        std::string sbEqual(argv[2]);
         if (sbEqual == "true")
             bEqual = true;
     }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::IMU_STEREO, true, std::string("StereoImuRos"));
-
     ImuGrabber imugb;
     GrabAndSync GrabSync(&SLAM, &imugb, bEqual);
 
     // Maximum delay, 5 seconds
-    ros::Subscriber sub_imu = n.subscribe("/mavros/imu/data", 400, &ImuGrabber::GrabImu, &imugb);
+    ros::Subscriber sub_imu = n.subscribe("/imu", 400, &ImuGrabber::GrabImu, &imugb);
     ros::Subscriber sub_img_left = n.subscribe("/camera/left/image_raw", 120, &GrabAndSync::GrabImageLeft, &GrabSync);
     ros::Subscriber sub_img_right = n.subscribe("/camera/right/image_raw", 120, &GrabAndSync::GrabImageRight, &GrabSync);
 
@@ -141,7 +140,7 @@ cv::Mat GrabAndSync::GetImageConvert(const sensor_msgs::ImageConstPtr &img_msg) 
 }
 
 void GrabAndSync::SyncWithImu() {
-    const double maxTimeDiff = 0.01;
+    const double maxTimeDiff = 0.06;
     while (true) {
         cv::Mat imLeft, imRight;
         double tImLeft = 0, tImRight = 0;
@@ -164,7 +163,7 @@ void GrabAndSync::SyncWithImu() {
             this->mBufMutexLeft.unlock();
 
             if ((tImLeft - tImRight) > maxTimeDiff || (tImRight - tImLeft) > maxTimeDiff) {
-                 std::cout << "big time difference" << std::endl;
+                 std::cout << "big time difference: "<< (tImLeft - tImRight) << std::endl;
                 continue;
             }
             if (tImLeft > mpImuGb->mqImuBuf.back()->header.stamp.toSec())
@@ -207,10 +206,12 @@ void GrabAndSync::SyncWithImu() {
             std::chrono::milliseconds tSleep(1);
             std::this_thread::sleep_for(tSleep);
         }
-        if (!mpSLAM->CheckShutDowned()) {
-            mpSLAM->ShutDownSystem();
+        if (mpSLAM->CheckShutDowned()) {
+            break;
         }
     }
+    mpSLAM->SaveFrameTrajectoryEuRoC();
+    mpSLAM->SaveKeyFrameTrajectoryEuRoC();
 }
 
 void ImuGrabber::GrabImu(const sensor_msgs::ImuConstPtr &imu_msg) {

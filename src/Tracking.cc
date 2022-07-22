@@ -64,7 +64,7 @@ namespace ORB_SLAM3 {
  */
     Tracking::Tracking(System *pSys, ORBVocabulary *pVoc, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer,
                        Atlas *pAtlas, KeyFrameDatabase *pKFDB, const string &strSettingPath, const int sensor,
-                       Settings *settings, const string &_nameSeq)
+                       Settings *settings)
             : mState(NO_IMAGES_YET), mSensor(sensor), mTrackedFrame(0), mbDoNext(false),
               mbOnlyTracking(false), mbMapUpdated(false), mpORBVocabulary(pVoc), mpKeyFrameDB(pKFDB),
               mpSystem(pSys), mpViewer(NULL), bStepByStep(false),
@@ -1405,7 +1405,6 @@ namespace ORB_SLAM3 {
         int matches = matcher.SearchReplaceFrameAndMPsByProject(mCurFrame, mvpLocalMapPoints, nThProjRad,
                                                                 mpLocalMapping->mbFarPoints,
                                                                 mpLocalMapping->mfThFarPoints);
-        cout << mvpLocalMapPoints.size() << " " << nToMatch << " " << matches << endl;
         return matches;
     }
 

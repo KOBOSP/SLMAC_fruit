@@ -51,12 +51,11 @@ namespace ORB_SLAM3 {
             mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbResetThread(false), mbResetActiveMap(false),
             mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDowned(false) {
         cout << "Input Sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
-
-        //Check settings file
         mSettings = new Settings(sSettingFile, mSensor);
         // 保存及加载地图的名字
         msLoadAtlasFromFile = mSettings->msLoadFrom;
         msSaveAtlasToFile = mSettings->msSaveTo;
+        msSaveFAndKFSeqName = sSeqName;
         mbRGB = mSettings->mbRGB;
         cout << (*mSettings) << endl;
 
@@ -91,7 +90,7 @@ namespace ORB_SLAM3 {
         mpMapDrawer = new MapDrawer(mpAtlas, sSettingFile, mSettings);
         cout << "Seq. Name: " << sSeqName << endl;
         mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
-                                 mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSettings, sSeqName);
+                                 mpAtlas, mpKeyFrameDatabase, sSettingFile, mSensor, mSettings);
         mpLocalMapper = new LocalMapping(this, mpAtlas, false, true, mSettings);
         mptLocalMapping = new thread(&ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
         mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, true, mSettings->mbActivateLC,
@@ -272,8 +271,9 @@ namespace ORB_SLAM3 {
     }
 
 
-    void System::SaveFrameTrajectoryEuRoC(const string &filename) {
+    void System::SaveFrameTrajectoryEuRoC() {
 
+        const string filename = "Frame" + msSaveFAndKFSeqName;
         cout << endl << "Saving Frame Trajectory to " << filename << " ..." << endl;
 
         vector<Map *> vpMaps = mpAtlas->GetAllMaps();
@@ -355,7 +355,8 @@ namespace ORB_SLAM3 {
     }
 
 
-    void System::SaveKeyFrameTrajectoryEuRoC(const string &filename) {
+    void System::SaveKeyFrameTrajectoryEuRoC() {
+        const string filename = "KF" + msSaveFAndKFSeqName;
         cout << endl << "Saving KeyFrame Trajectory to " << filename << " ..." << endl;
 
         vector<Map *> vpMaps = mpAtlas->GetAllMaps();

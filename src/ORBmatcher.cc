@@ -358,7 +358,6 @@ namespace ORB_SLAM3 {
                 nMatches++;
             }
         }
-        cout << nMatches << "*";
         return nMatches;
     }
 

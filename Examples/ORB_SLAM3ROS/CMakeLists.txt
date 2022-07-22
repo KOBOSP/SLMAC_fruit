@@ -33,6 +33,7 @@ LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/../../cmake_modules)
 
 # 要保证整个工程的opencv版本一致，包括dbow，源码以及ros相关的
 # 3 4 都可以正常运行
+set(OpenCV_DIR “/usr/local/share/OpenCV”)
 find_package(OpenCV 3.4.3)
 if (NOT OpenCV_FOUND)
     message(FATAL_ERROR "OpenCV > 3.4 not found.")
@@ -63,9 +64,11 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/../../../ORB3Thirdparty/Sophus
         ${EIGEN3_INCLUDE_DIR}
         ${catkin_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS}
 )
 set(LIBS
-        ${OpenCV_LIBS}
+        /usr/local/lib/libopencv_imgproc.so.3.4
+        /usr/local/lib/libopencv_core.so.3.4
         ${EIGEN3_LIBS}
         ${catkin_LIBRARIES}
         ${PROJECT_SOURCE_DIR}/../../../ORB3Thirdparty/DBoW2/lib/libDBoW2.so

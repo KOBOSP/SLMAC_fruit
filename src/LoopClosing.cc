@@ -248,13 +248,13 @@ namespace ORB_SLAM3 {
                                  vpKFs[i]->GetCameraCenter()).norm();
             }
             fBestOriDist /= vpKFs.size();
+            if (fBestOriDist > 1) {
+                mpLastMap->SetRtkInitialized(false);
+                cout << "RtkToLocal need to be update: OriDist: sBestOri12i: " << fBestOriDist << " " << sBestOri12i
+                     << endl;
+            }
         } else {
             fBestOriDist = 1e10;
-        }
-        if (fBestOriDist > 1) {
-            mpLastMap->SetRtkInitialized(false);
-            cout << "RtkToLocal need to be update: OriDist: sBestOri12i: " << fBestOriDist << " " << sBestOri12i
-                 << endl;
         }
 
         Eigen::Matrix<float, 3, Eigen::Dynamic> TKFLocal(3, vpKFs.size());

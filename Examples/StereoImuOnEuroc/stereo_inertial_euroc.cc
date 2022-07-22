@@ -36,7 +36,7 @@ LoadIMU(const string &sImuPath, vector<double> &vdImuTimestamp, vector<cv::Point
 
 void LoadRtk(const string &sRtkPath, vector<double> &vdRtkTimestamp, vector<cv::Point3f> &vtrw);
 
-//./Examples/Stereo-Inertial/stereo_inertial_euroc ./../ORB3Vocabulary/ORBvoc.txt ./Examples/Stereo-Inertial/EuRoC.yaml /media/kobosp/POCKET2/EuRoc/V1_03_difficult ./Examples/Stereo-Inertial/EuRoC_TimeStamps/V103.txt V103
+//./Examples/StereoImuOnEuroc/stereo_inertial_euroc ./../ORB3Vocabulary/ORBvoc.txt ./Examples/StereoImuOnEuroc/EuRoC.yaml /media/kobosp/POCKET2/EuRoc/V1_03_difficult ./Examples/StereoImuOnEuroc/EuRoC_TimeStamps/V103.txt V103
 ///home/kobosp/SLMAC/ORB3Vocabulary/ORBvoc.txt /home/kobosp/SLMAC/ORB3_Vd1/Examples/Stereo-Inertial/EuRoC.yaml /media/kobosp/POCKET2/EuRoc/MH_01_easy /home/kobosp/SLMAC/ORB3_Vd1/Examples/Stereo-Inertial/EuRoC_TimeStamps/MH01.txt MH01
 int main(int argc, char **argv) {
     if (argc != 6) {
@@ -194,11 +194,9 @@ int main(int argc, char **argv) {
     if (!SLAM.CheckShutDowned()) {
         SLAM.ShutDownSystem();
     }
-    string sSaveFileName = string(argv[argc - 1]);
-    const string FrameFile = "Frame" + sSaveFileName + ".txt";
-    const string KeyFrameFile = "KeyFrame" + sSaveFileName + ".txt";
-    SLAM.SaveFrameTrajectoryEuRoC(FrameFile);
-    SLAM.SaveKeyFrameTrajectoryEuRoC(KeyFrameFile);
+
+    SLAM.SaveFrameTrajectoryEuRoC();
+    SLAM.SaveKeyFrameTrajectoryEuRoC();
 
     return 0;
 }

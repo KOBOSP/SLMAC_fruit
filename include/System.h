@@ -133,8 +133,8 @@ public:
     bool CheckShutDowned();
 
 
-    void SaveFrameTrajectoryEuRoC(const string &filename);
-    void SaveKeyFrameTrajectoryEuRoC(const string &filename);
+    void SaveFrameTrajectoryEuRoC();
+    void SaveKeyFrameTrajectoryEuRoC();
 
 
 
@@ -236,10 +236,10 @@ private:
     //
     string msLoadAtlasFromFile;
     string msSaveAtlasToFile;
-
     string msVocabularyFilePath;
-
+    string msSaveFAndKFSeqName;
     Settings* mSettings;
+
 };
 
 }// namespace ORB_SLAM
