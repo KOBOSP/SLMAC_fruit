@@ -133,7 +133,6 @@ public:
     bool CheckShutDowned();
 
 
-    void SaveFrameTrajectoryEuRoC();
     void SaveKeyFrameTrajectoryEuRoC();
 
 

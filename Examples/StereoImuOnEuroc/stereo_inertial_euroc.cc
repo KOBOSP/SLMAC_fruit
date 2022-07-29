@@ -134,6 +134,7 @@ int main(int argc, char **argv) {
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::IMU_STEREO, true, argv[argc - 1]);
 
+    bool bReadToEnd = false;
     cv::Mat ImgLeft, ImgRight;
     Eigen::Matrix<float, 3, 1> ttrw;
     for (nSeqId = 0; nSeqId < nSeqNum; nSeqId++) {        // Seq loop
@@ -154,25 +155,37 @@ int main(int argc, char **argv) {
                      << string(vvsImageRightPath[nSeqId][ni]) << endl;
                 return 1;
             }
+
             double dImgTimestamp = vvdImgTimestamp[nSeqId][ni];
             // Load imu measurements from previous frame
             vImuIntervalSet.clear();
-            if (ni > 0) {
-                while (vvdImuTimestamp[nSeqId][nFirstImuInSeq[nSeqId]] < dImgTimestamp) {
-                    vImuIntervalSet.emplace_back(ORB_SLAM3::IMU::Point(vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].x,
-                                                                       vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].y,
-                                                                       vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].z,
-                                                                       vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].x,
-                                                                       vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].y,
-                                                                       vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].z,
-                                                                       vvdImuTimestamp[nSeqId][nFirstImuInSeq[nSeqId]]));
-                    nFirstImuInSeq[nSeqId]++;
+            while (vvdImuTimestamp[nSeqId][nFirstImuInSeq[nSeqId]] < dImgTimestamp) {
+                vImuIntervalSet.emplace_back(ORB_SLAM3::IMU::Point(vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].x,
+                                                                   vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].y,
+                                                                   vvAcc[nSeqId][nFirstImuInSeq[nSeqId]].z,
+                                                                   vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].x,
+                                                                   vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].y,
+                                                                   vvGyr[nSeqId][nFirstImuInSeq[nSeqId]].z,
+                                                                   vvdImuTimestamp[nSeqId][nFirstImuInSeq[nSeqId]]));
+                nFirstImuInSeq[nSeqId]++;
+                if (nFirstImuInSeq[nSeqId] == vvdImuTimestamp[nSeqId].size()) {
+                    bReadToEnd = true;
+                    break;
                 }
-                while (vvdRtkTimestamp[nSeqId][nFirstRtkInSeq[nSeqId]] < dImgTimestamp) {
-                    nFirstRtkInSeq[nSeqId]++;
-                }
-                ttrw << vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].x, vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].y, vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].z;
             }
+            while (vvdRtkTimestamp[nSeqId][nFirstRtkInSeq[nSeqId]] < dImgTimestamp) {
+                nFirstRtkInSeq[nSeqId]++;
+                if (nFirstRtkInSeq[nSeqId] == vvdRtkTimestamp[nSeqId].size()) {
+                    bReadToEnd = true;
+                    break;
+                }
+            }
+            if (bReadToEnd == true) {
+                break;
+            }
+            ttrw << vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].x,
+                    vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].y, vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].z;
+
             std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
             SLAM.CalibAndTrack(ImgLeft, ImgRight, ttrw, dImgTimestamp, vImuIntervalSet);
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -187,6 +200,7 @@ int main(int argc, char **argv) {
         }
         if (nSeqId < nSeqNum - 1) {
             cout << "Changing the dataset" << endl;
+            bReadToEnd = false;
             SLAM.ChangeDataset();
         }
     }
@@ -194,8 +208,6 @@ int main(int argc, char **argv) {
     if (!SLAM.CheckShutDowned()) {
         SLAM.ShutDownSystem();
     }
-
-    SLAM.SaveFrameTrajectoryEuRoC();
     SLAM.SaveKeyFrameTrajectoryEuRoC();
 
     return 0;
@@ -268,7 +280,7 @@ void LoadRtk(const string &sRtkPath, vector<double> &vdRtkTimestamp, vector<cv::
             continue;
         if (!sTmp.empty()) {
             string sValue;
-            size_t nCnt = 0;
+            size_t nCnt;
             double vData[16];
             int nPos = 0;
             while ((nCnt = sTmp.find(',')) != string::npos) {//Maximum value for size_t该值表示直到字符串结尾
