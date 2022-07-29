@@ -194,79 +194,79 @@ namespace ORB_SLAM3 {
         mTlr = Converter::toSophus(cvTlr);
         mfBaseline = mTlr.translation().norm();
         mfBaselineFocal = mfBaseline * mCalibration1->GetParameter(0);
-        mfThDepth = ReadParameter<float>(fSettings, "Stereo.ThDepth", found);
+        mfThDepth = ReadParameter<float>(fSettings, "Stereo.mfThDepth", found);
     }
 
     void Settings::ReadImageInfo(cv::FileStorage &fSettings) {
         bool found;
         //Read original and desired image dimensions
-        int nOriginalRows = ReadParameter<int>(fSettings, "Camera.height", found);
-        int nOriginalCols = ReadParameter<int>(fSettings, "Camera.width", found);
+        int nOriginalRows = ReadParameter<int>(fSettings, "Img.nOriginalRows", found);
+        int nOriginalCols = ReadParameter<int>(fSettings, "Img.nOriginalCols", found);
         mOriginalImSize.width = nOriginalCols;
         mOriginalImSize.height = nOriginalRows;
         mImgSize = mOriginalImSize;
-        mfImgFps = ReadParameter<int>(fSettings, "Camera.fps", found);
-        mbRGB = (bool) ReadParameter<int>(fSettings, "Camera.RGB", found);
+        mfImgFps = ReadParameter<int>(fSettings, "Img.mfImgFps", found);
+        mbRGB = (bool) ReadParameter<int>(fSettings, "Img.mbRGB", found);
     }
 
     void Settings::ReadIMU(cv::FileStorage &fSettings) {
         bool found;
-        mGyrNoise = ReadParameter<float>(fSettings, "IMU.NoiseGyro", found);
-        mAccNoise = ReadParameter<float>(fSettings, "IMU.NoiseAcc", found);
-        mGyrWalk = ReadParameter<float>(fSettings, "IMU.GyroWalk", found);
-        mAccWalk = ReadParameter<float>(fSettings, "IMU.AccWalk", found);
-        mImuFreq = ReadParameter<float>(fSettings, "IMU.Frequency", found);
         cv::Mat cvTbc = ReadParameter<cv::Mat>(fSettings, "IMU.T_b_c1", found);
         mTbc = Converter::toSophus(cvTbc);
-        mbInsertKFsWhenLost = (bool) ReadParameter<int>(fSettings, "IMU.InsertKFsWhenLost", found);
+        mGyrNoise = ReadParameter<float>(fSettings, "IMU.mGyrNoise", found);
+        mAccNoise = ReadParameter<float>(fSettings, "IMU.mAccNoise", found);
+        mGyrWalk = ReadParameter<float>(fSettings, "IMU.mGyrWalk", found);
+        mAccWalk = ReadParameter<float>(fSettings, "IMU.mAccWalk", found);
+        mImuFreq = ReadParameter<float>(fSettings, "IMU.mImuFreq", found);
+        mbInsertKFsWhenLost = (bool) ReadParameter<int>(fSettings, "IMU.mbInsertKFsWhenLost", found);
     }
 
     void Settings::ReadORB(cv::FileStorage &fSettings) {
         bool found;
-        mnFeatures = ReadParameter<int>(fSettings, "ORBextractor.nFeatures", found);
-        mfScaleFactor = ReadParameter<float>(fSettings, "ORBextractor.fScaleFactor", found);
-        mnLevels = ReadParameter<int>(fSettings, "ORBextractor.nLevels", found);
-        mnInitThFAST = ReadParameter<int>(fSettings, "ORBextractor.nIniThFAST", found);
-        mnMinThFAST = ReadParameter<int>(fSettings, "ORBextractor.nMinThFAST", found);
+        mnFeatures = ReadParameter<int>(fSettings, "ORB.mnFeatures", found);
+        mfScaleFactor = ReadParameter<float>(fSettings, "ORB.mfScaleFactor", found);
+        mnLevels = ReadParameter<int>(fSettings, "ORB.mnLevels", found);
+        mnInitThFAST = ReadParameter<int>(fSettings, "ORB.mnInitThFAST", found);
+        mnMinThFAST = ReadParameter<int>(fSettings, "ORB.mnMinThFAST", found);
     }
 
     void Settings::ReadViewer(cv::FileStorage &fSettings) {
         bool found;
-        mfKeyFrameSize = ReadParameter<float>(fSettings, "Viewer.KeyFrameSize", found);
-        mfKeyFrameLineWidth = ReadParameter<float>(fSettings, "Viewer.KeyFrameLineWidth", found);
-        mfGraphLineWidth = ReadParameter<float>(fSettings, "Viewer.GraphLineWidth", found);
-        mfPointSize = ReadParameter<float>(fSettings, "Viewer.PointSize", found);
-        mfCameraSize = ReadParameter<float>(fSettings, "Viewer.CameraSize", found);
-        mfCameraLineWidth = ReadParameter<float>(fSettings, "Viewer.CameraLineWidth", found);
-        mfViewPointX = ReadParameter<float>(fSettings, "Viewer.ViewpointX", found);
-        mfViewPointY = ReadParameter<float>(fSettings, "Viewer.ViewpointY", found);
-        mfViewPointZ = ReadParameter<float>(fSettings, "Viewer.ViewpointZ", found);
-        mfViewPointF = ReadParameter<float>(fSettings, "Viewer.ViewpointF", found);
-        mfImageFrameScale = ReadParameter<float>(fSettings, "Viewer.imageViewScale", found);
-        mfMapWidth = ReadParameter<float>(fSettings, "Viewer.MapWidth", found);
-        mfMapHeight = ReadParameter<float>(fSettings, "Viewer.MapHeight", found);
-        mnColorNum = ReadParameter<int>(fSettings, "Viewer.ColorNum", found);
+        mfKeyFrameSize = ReadParameter<float>(fSettings, "Viewer.mfKeyFrameSize", found);
+        mfKeyFrameLineWidth = ReadParameter<float>(fSettings, "Viewer.mfKeyFrameLineWidth", found);
+        mfGraphLineWidth = ReadParameter<float>(fSettings, "Viewer.mfGraphLineWidth", found);
+        mfPointSize = ReadParameter<float>(fSettings, "Viewer.mfPointSize", found);
+        mfCameraSize = ReadParameter<float>(fSettings, "Viewer.mfCameraSize", found);
+        mfCameraLineWidth = ReadParameter<float>(fSettings, "Viewer.mfCameraLineWidth", found);
+        mfViewPointX = ReadParameter<float>(fSettings, "Viewer.mfViewPointX", found);
+        mfViewPointY = ReadParameter<float>(fSettings, "Viewer.mfViewPointY", found);
+        mfViewPointZ = ReadParameter<float>(fSettings, "Viewer.mfViewPointZ", found);
+        mfViewPointF = ReadParameter<float>(fSettings, "Viewer.mfViewPointF", found);
+        mfImageFrameScale = ReadParameter<float>(fSettings, "Viewer.mfImageFrameScale", found);
+        mfMapWidth = ReadParameter<float>(fSettings, "Viewer.mfMapWidth", found);
+        mfMapHeight = ReadParameter<float>(fSettings, "Viewer.mfMapHeight", found);
+        mnColorNum = ReadParameter<int>(fSettings, "Viewer.mnColorNum", found);
     }
 
     void Settings::ReadSystem(cv::FileStorage &fSettings) {
         bool found;
-        msLoadFrom = ReadParameter<string>(fSettings, "System.LoadAtlasFromFile", found, false);
-        msSaveTo = ReadParameter<string>(fSettings, "System.SaveAtlasToFile", found, false);
-        mfThFarPoints = ReadParameter<float>(fSettings, "Tracking.thFarPoints", found);
-        mfThTimeRescueLost = ReadParameter<float>(fSettings, "Tracking.ThTimeRescueLost", found);
+        msLoadFrom = ReadParameter<string>(fSettings, "System.msLoadFrom", found, false);
+        msSaveTo = ReadParameter<string>(fSettings, "System.msSaveTo", found, false);
+        mfThFarPoints = ReadParameter<float>(fSettings, "Tracking.mfThFarPoints", found);
+        mfThTimeRescueLost = ReadParameter<float>(fSettings, "Tracking.mfThTimeRescueLost", found);
 
-        mfCullKFRedundantTh = ReadParameter<float>(fSettings, "LocalMapping.CullKFRedundantTh", found);
-        mnStrongCovisTh = ReadParameter<int>(fSettings, "LocalMapping.StrongCovisTh", found);
-        mnSingleMaxCullKFsNum = ReadParameter<int>(fSettings, "LocalMapping.SingleMaxCullKFsNum", found);
-        mnWeakCovisTh = ReadParameter<int>(fSettings, "LocalMapping.WeakCovisTh", found);
+        mnStrongCovisTh = ReadParameter<int>(fSettings, "LocalMapping.mnStrongCovisTh", found);
+        mnWeakCovisTh = ReadParameter<int>(fSettings, "LocalMapping.mnWeakCovisTh", found);
+        mfCullKFRedundantTh = ReadParameter<float>(fSettings, "LocalMapping.mfCullKFRedundantTh", found);
+        mnSingleMaxCullKFsNum = ReadParameter<int>(fSettings, "LocalMapping.mnSingleMaxCullKFsNum", found);
 
-        mbActivateLC = ReadParameter<int>(fSettings, "LoopClosing.ActivateLC", found);
-        mnThOriProjMatches = ReadParameter<int>(fSettings, "LoopClosing.ThOriProjMatches", found);
-        mnThBoWMatches = ReadParameter<int>(fSettings, "LoopClosing.ThBoWMatches", found);
-        mnThIterInliers = ReadParameter<int>(fSettings, "LoopClosing.ThIterInliers", found);
-        mnThOptInliers = ReadParameter<int>(fSettings, "LoopClosing.ThOptInliers", found);
-        mnThIterProjMatches = ReadParameter<int>(fSettings, "LoopClosing.ThIterProjMatches", found);
-        mnThOptProjMatches = ReadParameter<int>(fSettings, "LoopClosing.ThOptProjMatches", found);
+        mbActivateLC = ReadParameter<int>(fSettings, "LoopClosing.mbActivateLC", found);
+        mnThOriProjMatches = ReadParameter<int>(fSettings, "LoopClosing.mnThOriProjMatches", found);
+        mnThBoWMatches = ReadParameter<int>(fSettings, "LoopClosing.mnThBoWMatches", found);
+        mnThIterInliers = ReadParameter<int>(fSettings, "LoopClosing.mnThIterInliers", found);
+        mnThOptInliers = ReadParameter<int>(fSettings, "LoopClosing.mnThOptInliers", found);
+        mnThIterProjMatches = ReadParameter<int>(fSettings, "LoopClosing.mnThIterProjMatches", found);
+        mnThOptProjMatches = ReadParameter<int>(fSettings, "LoopClosing.mnThOptProjMatches", found);
     }
 
     void Settings::PrecomputeRectificationMaps() {

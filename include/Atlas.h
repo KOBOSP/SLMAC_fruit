@@ -80,7 +80,7 @@ public:
     Atlas(int initKFid); // When its initialization the first map is created
     ~Atlas();
 
-    void CreateNewMap();
+    void SaveAndCreateNewMap();
     void ChangeMap(Map* pMap);
 
     unsigned long int GetLastInitKFid();

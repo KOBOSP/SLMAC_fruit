@@ -31,7 +31,7 @@ namespace ORB_SLAM3 {
 
     Atlas::Atlas(int initKFid) : mnLastInitKFidMap(initKFid), mHasViewer(false) {
         mpCurrentMap = static_cast<Map *>(NULL);
-        CreateNewMap();
+        SaveAndCreateNewMap();
     }
 
     Atlas::~Atlas() {
@@ -52,7 +52,7 @@ namespace ORB_SLAM3 {
  * @brief 创建新地图，如果当前活跃地图有效，先存储当前地图为不活跃地图，然后新建地图；否则，可以直接新建地图。
  * 
  */
-    void Atlas::CreateNewMap() {
+    void Atlas::SaveAndCreateNewMap() {
         // 锁住地图集
         unique_lock<mutex> lock(mMutexAtlas);
         cout << "Creation of new map with id: " << Map::nNextId << endl;
@@ -232,7 +232,7 @@ namespace ORB_SLAM3 {
     Map *Atlas::GetCurrentMap() {
         unique_lock<mutex> lock(mMutexAtlas);
         if (!mpCurrentMap)
-            CreateNewMap();
+            SaveAndCreateNewMap();
         while (mpCurrentMap->IsBad())
             usleep(5000);
 

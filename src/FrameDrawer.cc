@@ -181,18 +181,18 @@ namespace ORB_SLAM3 {
         pTracker->mImgRightToViewer.copyTo(mImgRight);
 
 
-        if (pTracker->mLastProcessedState == Tracking::NOT_INITIALIZED) {
-            mvIniMatches = pTracker->mvIniMatches;
-        } else if (pTracker->mLastProcessedState == Tracking::OK) {
+        if (pTracker->mStateForViewer == Tracking::NOT_INITIALIZED) {
+            mvIniMatches = pTracker->mvIniMatchesForViewer;
+        } else if (pTracker->mStateForViewer == Tracking::OK) {
             mnTrackMethod = pTracker->mnTrackMethod;
             mvbOutlier = pTracker->mCurFrame.mvbOutlier;
             mvfCurXInRight = pTracker->mCurFrame.mvfXInRight;
         }
 
         mvCurKPsLeft = pTracker->mCurFrame.mvKPsLeft;
-        mvIniKPsLeft = pTracker->mInitialFrame.mvKPsLeft;
+        mvIniKPsLeft = pTracker->mInitFrame.mvKPsLeft;
 
-        mState = static_cast<int>(pTracker->mLastProcessedState);
+        mState = static_cast<int>(pTracker->mStateForViewer);
         mbOnlyTracking = pTracker->mbOnlyTracking;
         mnTrackFps = pTracker->mdTrackFps;
         mnExtraFps = pTracker->mdExtraFps;

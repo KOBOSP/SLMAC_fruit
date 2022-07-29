@@ -48,8 +48,12 @@ namespace ORB_SLAM3 {
  */
     System::System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor,
                    const bool bUseViewer, const string &sSeqName) :
-            mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbRequestResetActiveMap(false),
-            mbRequestOnlyTrackingMode(false), mbRequestSLAMMode(false), mbShutDowned(false) {
+            mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)),
+            mbRequestResetActiveMap(false),
+            mbRequestOnlyTrackingMode(false),
+            mbRequestSLAMMode(false),
+            mbRequestShutDown(false),
+            mbShutDowned(false) {
         cout << "Input Sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
         mSettings = new Settings(sSettingFile, mSensor);
         // 保存及加载地图的名字
@@ -77,7 +81,7 @@ namespace ORB_SLAM3 {
             mpAtlas = new Atlas(0);
         } else {
             cout << "Initialization of Atlas from file: " << msLoadAtlasFromFile << endl;
-            mpAtlas->CreateNewMap();
+            mpAtlas->SaveAndCreateNewMap();
         }
         KeyFrame::mnStrongCovisTh = mSettings->mnStrongCovisTh;
 
@@ -137,14 +141,17 @@ namespace ORB_SLAM3 {
         {
             unique_lock<mutex> lock(mMutexReset);
             if (mbRequestResetActiveMap) {
+                cout<<"mbRequestResetActiveMap"<<endl;
                 mpTracker->ResetActiveMap();
                 mbRequestResetActiveMap = false;
             } else if (mbRequestShutDown) {
+                cout<<"mbRequestShutDown"<<endl;
                 ShutDownSystem();
                 mbShutDowned = true;
                 return Sophus::SE3<float>();
             }
         }
+
         cv::Mat ImgLeftToTrack, ImgRightToTrack;
         if (mSettings && mSettings->mbNeedToRectify) {
             cv::Mat MXL = mSettings->Map1X;
@@ -176,9 +183,7 @@ namespace ORB_SLAM3 {
         for (size_t nImu = 0; nImu < vImuMeas.size(); nImu++) {
             mpTracker->GrabImuData(vImuMeas[nImu]);
         }
-
         Sophus::SE3f Tcw = mpTracker->GrabImageStereo(ImgLeftToTrack, ImgRightToTrack, trw, dTimestamp);
-
         return Tcw;
     }
 
@@ -192,7 +197,6 @@ namespace ORB_SLAM3 {
         unique_lock<mutex> lock(mMutexMode);
         mbRequestSLAMMode = true;
     }
-
 
 
     void System::RequestResetActiveMap() {
@@ -292,7 +296,7 @@ namespace ORB_SLAM3 {
         if (mpAtlas->GetCurrentMap()->GetKeyFramesNumInMap() < 12) {
             mpTracker->ResetActiveMap();
         } else {
-            mpTracker->CreateMapInAtlas();
+            mpTracker->SaveAndCreateMapInAtlas();
         }
     }
 } //namespace ORB_SLAM

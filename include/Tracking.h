@@ -65,10 +65,7 @@ public:
 
 
 
-    // Preprocess the input and call Track(). Extract features and performs stereo matching.
     Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, Eigen::Matrix<float, 3, 1> trw, const double &dTimestamp);
-
-
     void GrabImuData(const IMU::Point &ImuMeasure);
 
     void SetLocalMapper(LocalMapping* pLocalMapper);
@@ -78,7 +75,6 @@ public:
     bool GetStepByStep();
 
 
-    // Use this function if you have deactivated local mapping and you only want to localize the camera.
     void InformOnlyTracking(const bool &flag);
 
     void UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame);
@@ -87,9 +83,10 @@ public:
         return mpLastKeyFrame;
     }
 
-    void CreateMapInAtlas();
+    void SaveAndCreateMapInAtlas();
     int GetMatchNumInLM();
     float GetImageScale();
+    void ResetActiveMap(bool bLocMap = false);
 
 public:
 
@@ -105,39 +102,22 @@ public:
     };
 
     eTrackingState mState;
-    eTrackingState mLastProcessedState;
+    eTrackingState mStateForViewer;
     int mnTrackMethod;//0:Lost, 1:Imu, 2:Motion, 3:RefKF, 4:Reloc,
 
     int mSensor;
 
     Frame mCurFrame;
     Frame mLastFrame;
-    Frame mInitialFrame;
-
-
-    std::vector<int> mvIniMatches;
-
-    // Lists used to recover the full camera trajectory at the end of the execution.
-    // Basically we store the reference keyframe for each frame and its relative transformation
-    list<Sophus::SE3f> mlRelativeFramePoses;
-    list<KeyFrame*> mlpRefKFs;
-    list<double> mlTimestamp;
-    list<bool> mlbLost;
-
-    // frames with estimated pose
-    int mTrackedFrame;
+    Frame mInitFrame;
+    std::vector<int> mvIniMatchesForViewer;
     bool mbDoNext;
-    //Current matches in frame
     int mnLMInFMatchNum;
-
-    // True if local mapping is deactivated and we are performing only localization
     bool mbOnlyTracking;
     double mdTrackFps,mdExtraFps;
 
-    void ResetAllThread(bool bLocMap = false);
-    void ResetActiveMap(bool bLocMap = false);
-    vector<MapPoint*> GetLocalMapMPs();
-
+    cv::Mat mImgLeftToViewer;
+    cv::Mat mImgRightToViewer;
 protected:
 
     // Main tracking function. It is independent of the input sensor.
@@ -169,99 +149,62 @@ protected:
 
     // CheckRequestReset IMU biases and compute frame velocity
     void ResetFrameIMU();
+    void LoadParameter(Settings* settings);
 
-    bool mbMapUpdated;
 
-    // Imu preintegration from last frame
-    IMU::Preintegrated *mpImuPreintegratedFromLastKF;
-
-    // Queue of IMU measurements between frames
-    std::list<IMU::Point> mlQueueImuData;
-
-    // Vector of IMU measurements from previous to current frame (to be filled by PreintegrateIMU)
-    std::vector<IMU::Point> mvImuFromLastFrame;
-    std::mutex mMutexImuQueue;
-
-    // Imu calibration parameters
-    IMU::Calib *mpImuCalib;
-
-    // Last Bias Estimation (at keyframe creation)
-    IMU::Bias mLastBias;
-
-    //Other Thread Pointers
+    // System
     LocalMapping* mpLocalMapping;
     LoopClosing* mpLoopClosing;
-
-    //ORB
     ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
-
-    //BoW
     ORBVocabulary* mpORBVocabulary;
     KeyFrameDatabase* mpKeyFrameDB;
-
-    //Local Map
-    KeyFrame* mpReferenceKF;
-    std::vector<KeyFrame*> mvpLocalKeyFrames;
-    std::vector<MapPoint*> mvpLocalMapPoints;
-    
-    // System
     System* mpSystem;
-    
-    //Drawers
     Viewer* mpViewer;
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
-    bool bStepByStep;
-
-    //Atlas
     Atlas* mpAtlas;
+    GeometricCamera* mpCamera;
+
+
+    Sophus::SE3f mTcFrKF;
+    bool mbHaveCreatedMap;
+    std::vector<KeyFrame*> mvpLocalKeyFrames;
+    std::vector<MapPoint*> mvpLocalMapPoints;
+    KeyFrame* mpLastKeyFrame;
+    KeyFrame* mpReferenceKF;
+    unsigned int mnFrameIdLastReloc;
+    unsigned int mnFrameIdLastRecLost;
+    unsigned int mnFrameIdLastLost;
+
+
+    bool bStepByStep;
+    bool mbMapUpdated;
 
     //Calibration matrix
     cv::Mat mCvK;
-    Eigen::Matrix3f mEigenK;
     float mfBaselineFocal;
     float mImageScale;
-
-    float mImuFreq;
-    double mImuInterval;
-    bool mInsertKFsLost;
-
-    //New KeyFrame rules (according to fps)
     int mMinFrames;
     int mnMaxFrames;
     int mnFrameNumDurRefLoc;
     int mnFrameNumDurRecLost;
     int mnFrameNumDurLost;
-
-    // Threshold close/far points
-    // Points seen as close by the stereo/RGBD sensor are considered reliable
-    // and inserted from just one frame. Far points requiere a match in two keyframes.
     float mfThDepth;
 
+    std::mutex mMutexImuQueue;
+    float mImuFreq;
+    double mImuInterval;
+    bool mInsertKFsLost;
+    IMU::Preintegrated *mpImuPreintegratedFromLastKF;
+    std::list<IMU::Point> mlImuFromLastFrame;
+    std::vector<IMU::Point> mvImuFromLastFrame;//filled by PreintegrateIMU)
+    IMU::Calib *mpImuCalib;
+    IMU::Bias mLastBias;
 
 
-    //Last Frame, KeyFrame and Relocalisation Info
-    KeyFrame* mpLastKeyFrame;
-    unsigned int mnFrameIdLastReloc;
-    unsigned int mnFrameIdRecLost;
-    unsigned int mnFrameIdLost;
-
-    unsigned int mnFirstFrameId;
-    unsigned int mnInitialFrameId;
-    unsigned int mnLastInitFrameId;
-    unsigned int mnLastKeyFrameId;
-
-    bool mbCreatedMap;
-
-    //Motion Model
     bool mbVelocity{false};
     Sophus::SE3f mVelocity;
-    GeometricCamera* mpCamera;
-    void LoadParameter(Settings* settings);
 
-public:
-    cv::Mat mImgLeftToViewer;
-    cv::Mat mImgRightToViewer;
 };
 
 } //namespace ORB_SLAM

@@ -184,11 +184,12 @@ int main(int argc, char **argv) {
                 break;
             }
             ttrw << vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].x,
-                    vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].y, vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].z;
-
+                    vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].y,
+                    vvtrw[nSeqId][nFirstRtkInSeq[nSeqId]].z;
             std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
             SLAM.CalibAndTrack(ImgLeft, ImgRight, ttrw, dImgTimestamp, vImuIntervalSet);
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+
             double dTrackTimePass = std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
             vTimesTrack[ni] = dTrackTimePass;
             if (SLAM.CheckShutDowned()) {

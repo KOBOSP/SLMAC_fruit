@@ -922,7 +922,7 @@ namespace ORB_SLAM3 {
         // Save the id of the childrens KF
         mvBackupChildrensId.clear();
         mvBackupChildrensId.reserve(mspChildrens.size());
-        for (KeyFrame *pKFi : mspChildrens) {
+        for (KeyFrame *pKFi: mspChildrens) {
             if (spKF.find(pKFi) != spKF.end())
                 mvBackupChildrensId.emplace_back(pKFi->mnId);
         }
@@ -930,7 +930,7 @@ namespace ORB_SLAM3 {
         // Save the id of the loop edge KF
         mvBackupLoopEdgesId.clear();
         mvBackupLoopEdgesId.reserve(mspLoopEdges.size());
-        for (KeyFrame *pKFi : mspLoopEdges) {
+        for (KeyFrame *pKFi: mspLoopEdges) {
             if (spKF.find(pKFi) != spKF.end())
                 mvBackupLoopEdgesId.emplace_back(pKFi->mnId);
         }
@@ -938,7 +938,7 @@ namespace ORB_SLAM3 {
         // Save the id of the merge edge KF
         mvBackupMergeEdgesId.clear();
         mvBackupMergeEdgesId.reserve(mspMergeEdges.size());
-        for (KeyFrame *pKFi : mspMergeEdges) {
+        for (KeyFrame *pKFi: mspMergeEdges) {
             if (spKF.find(pKFi) != spKF.end())
                 mvBackupMergeEdgesId.emplace_back(pKFi->mnId);
         }
