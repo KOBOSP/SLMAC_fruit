@@ -134,7 +134,7 @@ public:
     bool mbOnlyTracking;
     double mdTrackFps,mdExtraFps;
 
-    void ResetThread(bool bLocMap = false);
+    void ResetAllThread(bool bLocMap = false);
     void ResetActiveMap(bool bLocMap = false);
     vector<MapPoint*> GetLocalMapMPs();
 
@@ -260,8 +260,8 @@ protected:
     void LoadParameter(Settings* settings);
 
 public:
-    cv::Mat mImgLeft;
-    cv::Mat mImgRight;
+    cv::Mat mImgLeftToViewer;
+    cv::Mat mImgRightToViewer;
 };
 
 } //namespace ORB_SLAM

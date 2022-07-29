@@ -117,14 +117,10 @@ public:
     // This resumes local mapping thread and performs SLAM again.
     void DeactivateLocalizationMode();
 
-    // Returns true if there have been a big map change (loop closure, global BA)
-    // since last call to this function
-    bool MapChanged();
 
     // CheckRequestReset the system (clear Atlas or the active map)
-    void ResetThread();
-    void ResetActiveMap();
-    void RequestShutDown();
+    void RequestResetActiveMap();
+    void RequestRequestShutDown();
 
     // All threads will be requested to finish.
     // It waits until all threads have finished.
@@ -132,107 +128,40 @@ public:
     void ShutDownSystem();
     bool CheckShutDowned();
 
-
     void SaveKeyFrameTrajectoryEuRoC();
-
-
-
-    // Save data used for initialization debug
-    void SaveDebugData(const int &iniIdx);
-
-
-
-    // TODO: Save/Load functions
-    // SaveMap(const string &filename);
-    // LoadMap(const string &filename);
-
-    // Information from most recent processed frame
-    // You can call this right after TrackMonocular (or stereo or RGBD)
-    int GetTrackingState();
-    std::vector<MapPoint*> GetTrackedMapPoints();
-    std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();
-
-    // For debugging
-    double GetTimeFromIMUInit();
-    bool isLost();
-    bool isFinished();
 
     void ChangeDataset();
 
-    float GetImageScale();
-    cv::Mat mImgLeftToViewer;
-    cv::Mat mImgRightToViewer;
-
 
 private:
-
-    void SaveAtlas(int type);
-    bool LoadAtlas(int type);
-
-    string CalculateCheckSum(string filename, int type);
-
-    // Input sensor
+    bool mbRGB;
+    std::mutex mMutexState;
     eSensor mSensor;
 
-    // ORB vocabulary used for place recognition and feature matching.
     ORBVocabulary* mpVocabulary;
-
-    // KeyFrame database for place recognition (relocalization and loop detection).
     KeyFrameDatabase* mpKeyFrameDatabase;
-
-    // Map structure that stores the pointers to all KeyFrames and MapPoints.
-    //Map* mpMap;
     Atlas* mpAtlas;
-
-    // Tracker. It receives a frame and computes the associated camera pose.
-    // It also decides when to insert a new keyframe, create some new MapPoints and
-    // performs relocalization if tracking fails.
     Tracking* mpTracker;
-
-    // Local Mapper. It manages the local map and performs local bundle adjustment.
     LocalMapping* mpLocalMapper;
-
-    // Loop Closer. It searches loops with every new keyframe. If there is a loop it performs
-    // a pose graph optimization and full bundle adjustment (in a new thread) afterwards.
     LoopClosing* mpLoopCloser;
-
-    // The viewer draws the map and the current camera pose. It uses Pangolin.
     Viewer* mpViewer;
-
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
-
-    // System threads: Local Mapping, Loop Closing, Viewer.
-    // The Tracking thread "lives" in the main execution thread that creates the System object.
     std::thread* mptLocalMapping;
     std::thread* mptLoopClosing;
     std::thread* mptViewer;
 
     // CheckRequestReset flag
     std::mutex mMutexReset;
-    bool mbResetThread;
-    bool mbResetActiveMap;
+    bool mbRequestResetActiveMap;
     bool mbRequestShutDown;
     bool mbShutDowned;
 
-
-
     // Change mode flags
     std::mutex mMutexMode;
-    bool mbActivateLocalizationMode;
-    bool mbDeactivateLocalizationMode;
+    bool mbRequestOnlyTrackingMode;
+    bool mbRequestSLAMMode;
 
-
-
-    // Tracking state
-    int mTrackingState;
-    bool mbRGB;
-
-    std::vector<MapPoint*> mTrackedMPs;
-    std::vector<cv::KeyPoint> mTrackedKPsUn;
-    std::mutex mMutexState;
-
-    //
     string msLoadAtlasFromFile;
     string msSaveAtlasToFile;
     string msVocabularyFilePath;

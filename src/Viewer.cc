@@ -65,7 +65,7 @@ namespace ORB_SLAM3 {
         pangolin::Var<bool> menuLocalizationMode("menu.Localization Mode", false, true);
         pangolin::Var<bool> menuStepByStep("menu.Step By Step", false, true);  // false, true
         pangolin::Var<bool> menuNextStep("menu.Next Step", false, false);
-        pangolin::Var<bool> menuReset("menu.CheckRequestReset", false, false);
+        pangolin::Var<bool> menuResetMap("menu.CheckRequestReset", false, false);
         pangolin::Var<bool> menuFinish("menu.Finish", false, false);
         // Define Camera Render Object (for view / scene browsing)
         pangolin::OpenGlRenderState MapView(
@@ -192,7 +192,7 @@ namespace ORB_SLAM3 {
 
             cv::waitKey(mfImgFreq);
 
-            if (menuReset) {
+            if (menuResetMap) {
                 menuShowRtkGraph = true;
                 menuShowCovisGraph = true;
                 menuShowImuGraph = true;
@@ -206,15 +206,15 @@ namespace ORB_SLAM3 {
                 bLocalizationMode = false;
                 bFollow = true;
                 menuFollowCamera = true;
-                mpSystem->ResetActiveMap();
-                menuReset = false;
+                mpSystem->RequestResetActiveMap();
+                menuResetMap = false;
             }
 
             if (menuFinish) {
                 if (bLocalizationMode)
                     mpSystem->DeactivateLocalizationMode();
                 // CheckRequestReset all threads
-                mpSystem->RequestShutDown();
+                mpSystem->RequestRequestShutDown();
                 menuFinish = false;
             }
             if (CheckRequestReset()) {

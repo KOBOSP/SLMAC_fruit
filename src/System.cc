@@ -48,8 +48,8 @@ namespace ORB_SLAM3 {
  */
     System::System(const string &sVocFile, const string &sSettingFile, const eSensor Sensor,
                    const bool bUseViewer, const string &sSeqName) :
-            mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbResetThread(false), mbResetActiveMap(false),
-            mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbShutDowned(false) {
+            mSensor(Sensor), mpViewer(static_cast<Viewer *>(NULL)), mbRequestResetActiveMap(false),
+            mbRequestOnlyTrackingMode(false), mbRequestSLAMMode(false), mbShutDowned(false) {
         cout << "Input Sensor was set to: Stereo-Inertial" << endl;       // 双目 + imu
         mSettings = new Settings(sSettingFile, mSensor);
         // 保存及加载地图的名字
@@ -77,11 +77,6 @@ namespace ORB_SLAM3 {
             mpAtlas = new Atlas(0);
         } else {
             cout << "Initialization of Atlas from file: " << msLoadAtlasFromFile << endl;
-            bool isRead = LoadAtlas(FileType::BINARY_FILE);
-            if (!isRead) {
-                cout << "Error to load the file, please try with other session file or vocabulary file" << endl;
-                exit(-1);
-            }
             mpAtlas->CreateNewMap();
         }
         KeyFrame::mnStrongCovisTh = mSettings->mnStrongCovisTh;
@@ -123,31 +118,27 @@ namespace ORB_SLAM3 {
         // Check mode change
         {
             unique_lock<mutex> lock(mMutexMode);
-            if (mbActivateLocalizationMode) {
+            if (mbRequestOnlyTrackingMode) {
                 mpLocalMapper->RequestPause();
                 // Wait until Local Mapping has effectively stopped
                 while (!mpLocalMapper->CheckPaused()) {
                     usleep(5000);
                 }
                 mpTracker->InformOnlyTracking(true);
-                mbActivateLocalizationMode = false;
+                mbRequestOnlyTrackingMode = false;
             }
-            if (mbDeactivateLocalizationMode) {
+            if (mbRequestSLAMMode) {
                 mpTracker->InformOnlyTracking(false);
                 mpLocalMapper->CancelPause();
-                mbDeactivateLocalizationMode = false;
+                mbRequestSLAMMode = false;
             }
         }
         // Check reset
         {
             unique_lock<mutex> lock(mMutexReset);
-            if (mbResetThread) {
-                mpTracker->ResetThread();
-                mbResetThread = false;
-                mbResetActiveMap = false;
-            } else if (mbResetActiveMap) {
+            if (mbRequestResetActiveMap) {
                 mpTracker->ResetActiveMap();
-                mbResetActiveMap = false;
+                mbRequestResetActiveMap = false;
             } else if (mbRequestShutDown) {
                 ShutDownSystem();
                 mbShutDowned = true;
@@ -169,14 +160,14 @@ namespace ORB_SLAM3 {
             ImgLeftToTrack = ImgLeft.clone();
             ImgRightToTrack = ImgRight.clone();
         }
-        ImgLeftToTrack.copyTo(mpTracker->mImgLeft);
-        ImgRightToTrack.copyTo(mpTracker->mImgRight);
-        if (mImgLeftToViewer.channels() == 3) {
+        ImgLeftToTrack.copyTo(mpTracker->mImgLeftToViewer);
+        ImgRightToTrack.copyTo(mpTracker->mImgRightToViewer);
+        if (ImgLeftToTrack.channels() == 3) {
             if (mbRGB) {
                 cvtColor(ImgLeftToTrack, ImgLeftToTrack, cv::COLOR_RGB2GRAY);
                 cvtColor(ImgRightToTrack, ImgRightToTrack, cv::COLOR_RGB2GRAY);
             }
-        } else if (mImgLeftToViewer.channels() == 4) {
+        } else if (ImgLeftToTrack.channels() == 4) {
             if (mbRGB) {
                 cvtColor(ImgLeftToTrack, ImgLeftToTrack, cv::COLOR_RGBA2GRAY);
                 cvtColor(ImgRightToTrack, ImgRightToTrack, cv::COLOR_RGBA2GRAY);
@@ -185,50 +176,31 @@ namespace ORB_SLAM3 {
         for (size_t nImu = 0; nImu < vImuMeas.size(); nImu++) {
             mpTracker->GrabImuData(vImuMeas[nImu]);
         }
-        // std::cout << "start GrabImageStereo" << std::endl;
+
         Sophus::SE3f Tcw = mpTracker->GrabImageStereo(ImgLeftToTrack, ImgRightToTrack, trw, dTimestamp);
-        // std::cout << "out grabber" << std::endl;
-        {
-            unique_lock<mutex> lock2(mMutexState);
-            mTrackingState = mpTracker->mState;
-            mTrackedMPs = mpTracker->mCurFrame.mvpMPs;
-            mTrackedKPsUn = mpTracker->mCurFrame.mvKPsUn;
-        }
+
         return Tcw;
     }
 
 
     void System::ActivateLocalizationMode() {
         unique_lock<mutex> lock(mMutexMode);
-        mbActivateLocalizationMode = true;
+        mbRequestOnlyTrackingMode = true;
     }
 
     void System::DeactivateLocalizationMode() {
         unique_lock<mutex> lock(mMutexMode);
-        mbDeactivateLocalizationMode = true;
+        mbRequestSLAMMode = true;
     }
 
-    bool System::MapChanged() {
-        static int n = 0;
-        int curn = mpAtlas->GetLastBigChangeIdx();
-        if (n < curn) {
-            n = curn;
-            return true;
-        } else
-            return false;
-    }
 
-    void System::ResetThread() {
+
+    void System::RequestResetActiveMap() {
         unique_lock<mutex> lock(mMutexReset);
-        mbResetThread = true;
+        mbRequestResetActiveMap = true;
     }
 
-    void System::ResetActiveMap() {
-        unique_lock<mutex> lock(mMutexReset);
-        mbResetActiveMap = true;
-    }
-
-    void System::RequestShutDown() {
+    void System::RequestRequestShutDown() {
         unique_lock<mutex> lock(mMutexReset);
         mbRequestShutDown = true;
     }
@@ -260,7 +232,6 @@ namespace ORB_SLAM3 {
 
         if (!msSaveAtlasToFile.empty()) {
             Verbose::PrintMess("Atlas saving to file " + msSaveAtlasToFile, Verbose::VERBOSITY_NORMAL);
-            SaveAtlas(FileType::BINARY_FILE);
         }
         cout << "System Finished" << endl;
     }
@@ -317,46 +288,6 @@ namespace ORB_SLAM3 {
         cout << endl << "Done" << endl;
     }
 
-
-    int System::GetTrackingState() {
-        unique_lock<mutex> lock(mMutexState);
-        return mTrackingState;
-    }
-
-    vector<MapPoint *> System::GetTrackedMapPoints() {
-        unique_lock<mutex> lock(mMutexState);
-        return mTrackedMPs;
-    }
-
-    vector<cv::KeyPoint> System::GetTrackedKeyPointsUn() {
-        unique_lock<mutex> lock(mMutexState);
-        return mTrackedKPsUn;
-    }
-
-    double System::GetTimeFromIMUInit() {
-        double aux = mpLocalMapper->GetCurrKFTime() - mpLocalMapper->mFirstTs;
-        if ((aux > 0.) && mpAtlas->GetImuInitialized())
-            return mpLocalMapper->GetCurrKFTime() - mpLocalMapper->mFirstTs;
-        else
-            return 0.f;
-    }
-
-    bool System::isLost() {
-        if (!mpAtlas->GetImuInitialized())
-            return false;
-        else {
-            if ((mpTracker->mState == Tracking::LOST)) //||(mpTracker->mState==Tracking::RECENTLY_LOST))
-                return true;
-            else
-                return false;
-        }
-    }
-
-
-    bool System::isFinished() {
-        return (GetTimeFromIMUInit() > 0.1);
-    }
-
     void System::ChangeDataset() {
         if (mpAtlas->GetCurrentMap()->GetKeyFramesNumInMap() < 12) {
             mpTracker->ResetActiveMap();
@@ -364,140 +295,5 @@ namespace ORB_SLAM3 {
             mpTracker->CreateMapInAtlas();
         }
     }
-
-    float System::GetImageScale() {
-        return mpTracker->GetImageScale();
-    }
-
-/**
- * @brief 保存地图
- * @param type 保存类型
- */
-    void System::SaveAtlas(int type) {
-        if (msSaveAtlasToFile.empty()) {
-            return;
-        }
-        // 1. 预保存想要保存的数据
-        mpAtlas->PreSave();
-        // 2. 确定文件名字
-        string pathSaveFileName = "./";
-        pathSaveFileName = pathSaveFileName.append(msSaveAtlasToFile);
-        pathSaveFileName = pathSaveFileName.append(".osa");
-
-        // 3. 保存词典的校验结果及名字
-        string strVocabularyChecksum = CalculateCheckSum(msVocabularyFilePath, TEXT_FILE);
-        std::size_t found = msVocabularyFilePath.find_last_of("/\\");
-        string strVocabularyName = msVocabularyFilePath.substr(found + 1);
-
-        if (type == TEXT_FILE) {
-            cout << "Starting to write the save text file " << endl;
-            std::remove(pathSaveFileName.c_str());
-            std::ofstream ofs(pathSaveFileName, std::ios::binary);
-            boost::archive::text_oarchive oa(ofs);
-
-            oa << strVocabularyName;
-            oa << strVocabularyChecksum;
-            oa << mpAtlas;
-            cout << "End to write the save text file" << endl;
-        } else if (type == BINARY_FILE) {
-            cout << "Starting to write the save binary file" << endl;
-            std::remove(pathSaveFileName.c_str());
-            std::ofstream ofs(pathSaveFileName, std::ios::binary);
-            boost::archive::binary_oarchive oa(ofs);
-            oa << strVocabularyName;
-            oa << strVocabularyChecksum;
-            oa << mpAtlas;
-            cout << "End to write save binary file" << endl;
-        }
-    }
-
-/**
- * @brief 加载地图
- * @param type 保存类型
- */
-    bool System::LoadAtlas(int type) {
-        // 1. 加载地图文件
-        string sFileVoc, sVocChecksum;
-        bool isRead = false;
-
-        string sPathLoadFileName = "./";
-        sPathLoadFileName = sPathLoadFileName.append(msLoadAtlasFromFile);
-        sPathLoadFileName = sPathLoadFileName.append(".osa");
-
-        if (type == TEXT_FILE) {
-            cout << "Starting to read the save text file " << endl;
-            std::ifstream ifs(sPathLoadFileName, std::ios::binary);
-            if (!ifs.good()) {
-                cout << "Load file not found" << endl;
-                return false;
-            }
-            boost::archive::text_iarchive ia(ifs);
-            ia >> sFileVoc;
-            ia >> sVocChecksum;
-            ia >> mpAtlas;
-            cout << "End to load the save text file " << endl;
-            isRead = true;
-        } else if (type == BINARY_FILE) // File binary
-        {
-            cout << "Starting to read the save binary file" << endl;
-            std::ifstream ifs(sPathLoadFileName, std::ios::binary);
-            if (!ifs.good()) {
-                cout << "Load file not found" << endl;
-                return false;
-            }
-            boost::archive::binary_iarchive ia(ifs);
-            ia >> sFileVoc;
-            ia >> sVocChecksum;
-            ia >> mpAtlas;
-            cout << "End to load the save binary file" << endl;
-            isRead = true;
-        }
-
-        // 2. 如果加载成功
-        if (isRead) {
-            //Check if the vocabulary is the same
-            string sInputVocabularyChecksum = CalculateCheckSum(msVocabularyFilePath, TEXT_FILE);
-            if (sInputVocabularyChecksum.compare(sVocChecksum) != 0) {
-                cout << "The vocabulary load isn'mTs the same which the load session was created " << endl;
-                cout << "-Vocabulary name: " << sFileVoc << endl;
-                return false; // Both are differents
-            }
-            mpAtlas->SetKeyFrameDababase(mpKeyFrameDatabase);
-            mpAtlas->SetORBVocabulary(mpVocabulary);
-            mpAtlas->PostLoad();
-            return true;
-        }
-        return false;
-    }
-
-// 校验词典文件，哈希出一个值，两个哈希值一样表示是同一文件
-    string System::CalculateCheckSum(string filename, int type) {
-        string checksum = "";
-        unsigned char c[MD5_DIGEST_LENGTH];
-        std::ios_base::openmode flags = std::ios::in;
-        if (type == BINARY_FILE) // Binary file
-            flags = std::ios::in | std::ios::binary;
-
-        ifstream f(filename.c_str(), flags);
-        if (!f.is_open()) {
-            cout << "[E] Unable to open the in file " << filename << " for Md5 hash." << endl;
-            return checksum;
-        }
-        MD5_CTX md5Context;
-        char buffer[1024];
-        MD5_Init(&md5Context);
-        while (int count = f.readsome(buffer, sizeof(buffer))) {
-            MD5_Update(&md5Context, buffer, count);
-        }
-        f.close();
-        MD5_Final(c, &md5Context);
-        for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-            char aux[10];
-            sprintf(aux, "%02x", c[i]);
-            checksum = checksum + aux;
-        }
-        return checksum;
-    }
-
 } //namespace ORB_SLAM
 

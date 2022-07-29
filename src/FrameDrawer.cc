@@ -177,10 +177,9 @@ namespace ORB_SLAM3 {
 
     void FrameDrawer::Update(Tracking *pTracker, bool bFrameBoth) {
         unique_lock<mutex> lock(mMutex);
-        pTracker->mImgLeft.copyTo(mImgLeft);
-        if (bFrameBoth) {
-            pTracker->mImgRight.copyTo(mImgRight);
-        }
+        pTracker->mImgLeftToViewer.copyTo(mImgLeft);
+        pTracker->mImgRightToViewer.copyTo(mImgRight);
+
 
         if (pTracker->mLastProcessedState == Tracking::NOT_INITIALIZED) {
             mvIniMatches = pTracker->mvIniMatches;

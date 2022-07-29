@@ -446,7 +446,7 @@ namespace ORB_SLAM3 {
         // Step 1 如局部建图里认为IMU有问题，重置当前活跃地图
         if (mpLocalMapping->mbBadImu) {
             cout << "TRACK: CheckRequestReset map because local mapper set the bad imu flag " << endl;
-            mpSystem->ResetActiveMap();
+            mpSystem->RequestResetActiveMap();
             return;
         }
         // 从Atlas中取出当前active的地图
@@ -474,7 +474,7 @@ namespace ORB_SLAM3 {
                     // IMU完成第3次初始化（在localmapping线程里）
                     if (!pCurrentMap->GetImuIniertialBA2()) {
                         // 如果当前子图中imu没有经过BA2，重置active地图，也就是之前的数据不要了
-                        mpSystem->ResetActiveMap();
+                        mpSystem->RequestResetActiveMap();
                     } else {
                         // 如果当前子图中imu进行了BA2，重新创建新的子图，保存当前地图
                         CreateMapInAtlas();
@@ -482,7 +482,7 @@ namespace ORB_SLAM3 {
                 } else {
                     // 如果当前子图中imu还没有初始化，重置active地图
                     cout << "Timestamp jump detected, before IMU initialization. Reseting..." << endl;
-                    mpSystem->ResetActiveMap();
+                    mpSystem->RequestResetActiveMap();
                 }
                 return;
             }
@@ -669,7 +669,7 @@ namespace ORB_SLAM3 {
             } else if (mState == LOST) {
                 if (mCurFrame.mnId > (mnFrameIdLost + mnFrameNumDurLost)) {
                     if (!pCurrentMap->GetImuInitialized() || pCurrentMap->GetKeyFramesNumInMap() <= mnMaxFrames / 3) {
-                        mpSystem->ResetActiveMap();
+                        mpSystem->RequestResetActiveMap();
                     } else {
                         CreateMapInAtlas();
                     }
@@ -1842,9 +1842,9 @@ namespace ORB_SLAM3 {
 /**
  * @brief 整个追踪线程执行复位操作
  */
-    void Tracking::ResetThread(bool bLocMap) {
+    void Tracking::ResetAllThread(bool bLocMap) {
         Verbose::PrintMess("System Reseting", Verbose::VERBOSITY_NORMAL);
-        // 基本上是挨个请求各个线程终止
+        // 基本上是挨个请求各个线程
         if (mpViewer) {
             mpViewer->RequestReset();
             while (!mpViewer->CheckReseted())
