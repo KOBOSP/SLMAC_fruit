@@ -473,10 +473,10 @@ namespace ORB_SLAM3 {
         return nMatches;
     }
 
-    int ORBmatcher::SearchKFAndKFByTriangulation(KeyFrame *pKF1, KeyFrame *pKF2,
-                                                 vector<pair<size_t, size_t> > &vMatchedPairs,
-                                                 const bool bSkipExistStereoMP,
-                                                 const bool bCoarse) {
+    int ORBmatcher::SearchMatchKFAndKFByTriangulation(KeyFrame *pKF1, KeyFrame *pKF2,
+                                                      vector<pair<size_t, size_t> > &vMatchedPairs,
+                                                      const bool bSkipExistStereoMP,
+                                                      const bool bCoarse) {
         const DBoW2::FeatureVector &vFeatVec1 = pKF1->mFeatVec;
         const DBoW2::FeatureVector &vFeatVec2 = pKF2->mFeatVec;
 
@@ -488,19 +488,13 @@ namespace ORB_SLAM3 {
         Eigen::Vector3f Cw = pKF1->GetCameraCenter();
         Eigen::Vector3f C2 = T2w * Cw;
 
-        Eigen::Vector2f ep = pKF2->mpCamera->ProjectMPToKP(C2);
-        Sophus::SE3f T12;
-        Sophus::SE3f Tll, Tlr, Trl, Trr;
-        Eigen::Matrix3f R12; // for fastest computation
-        Eigen::Vector3f t12; // for fastest computation
-
         GeometricCamera *pCamera1 = pKF1->mpCamera, *pCamera2 = pKF2->mpCamera;
-        T12 = T1w * Tw2;
-        R12 = T12.rotationMatrix();
-        t12 = T12.translation();
+        Eigen::Vector2f ep = pKF2->mpCamera->ProjectMPToKP(C2);
 
-        Eigen::Matrix3f Rll = Tll.rotationMatrix(), Rlr = Tlr.rotationMatrix(), Rrl = Trl.rotationMatrix(), Rrr = Trr.rotationMatrix();
-        Eigen::Vector3f tll = Tll.translation(), tlr = Tlr.translation(), trl = Trl.translation(), trr = Trr.translation();
+        Sophus::SE3f T12 = T1w * Tw2;
+        Eigen::Matrix3f R12 = T12.rotationMatrix();
+        Eigen::Vector3f  t12 = T12.translation();
+
         int nMatches = 0;
         // 记录匹配是否成功，避免重复匹配
         vector<int> vMatches12(pKF1->mnKPsLeftNum, -1);
@@ -508,7 +502,6 @@ namespace ORB_SLAM3 {
         vector<int> rotHist[HISTO_LENGTH];
         for (int i = 0; i < HISTO_LENGTH; i++)
             rotHist[i].reserve(500);
-
         const float factor = HISTO_LENGTH / 360.0f;
 
         // We perform the matching over ORB that belong to the same vocabulary node (at a certain level)

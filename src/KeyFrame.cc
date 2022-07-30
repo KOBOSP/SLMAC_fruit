@@ -32,7 +32,7 @@ namespace ORB_SLAM3 {
               mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAOptFlagInLM(0), mnBAFixFlagInLM(0),
               mnBALocalForMerge(0),
               mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnMergeQuery(0), mnMergeWords(0),
-              mnBAGlobalForKF(0),
+              mnLMGBAFlag(0),
               fx(0), fy(0), cx(0), cy(0), invfx(0), invfy(0), mnRecognitionFlagInLoopClosing(0),
               mnRecognitionCommonWords(0),
               mPlaceRecognitionScore(0),
@@ -45,7 +45,7 @@ namespace ORB_SLAM3 {
               mfLogScaleFactor(0), mvScaleFactors(0), mvfLevelSigma2(0), mvfInvLevelSigma2(0), mnMinX(0), mnMinY(0),
               mnMaxX(0),
               mnMaxY(0), mPrevKF(static_cast<KeyFrame *>(NULL)), mNextKF(static_cast<KeyFrame *>(NULL)),
-              mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
+              mbFirstConnection(true), mpParentKF(NULL), mbNotErase(false),
               mbToBeErased(false), mbBad(false), mHalfBaseline(0), mbHasVelocity(false) {
     }
 
@@ -56,7 +56,7 @@ namespace ORB_SLAM3 {
               mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
               mnTrackReferenceForFrame(0), mnFuseFlagInLocalMapping(0), mnBAOptFlagInLM(0), mnBAFixFlagInLM(0),
               mnBALocalForMerge(0),
-              mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnBAGlobalForKF(0),
+              mnLoopQuery(0), mnLoopWords(0), mnRelocQuery(0), mnRelocWords(0), mnLMGBAFlag(0),
               mnRecognitionFlagInLoopClosing(0), mnRecognitionCommonWords(0), mPlaceRecognitionScore(0),
               fx(F.fx), fy(F.fy), cx(F.cx), cy(F.cy), invfx(F.invfx), invfy(F.invfy),
               mfBaselineFocal(F.mfBaselineFocal), mfBaseline(F.mfBaseline), mfThDepth(F.mfThCloseFar),
@@ -67,7 +67,7 @@ namespace ORB_SLAM3 {
               mvfInvLevelSigma2(F.mvfInvLevelSigma2), mnMinX(F.mfMinX), mnMinY(F.mfMinY), mnMaxX(F.mfMaxX),
               mnMaxY(F.mfMaxY), mEigenK(F.mEigenK), mPrevKF(NULL), mNextKF(NULL), mpImuPreintegrated(F.mpImuFromPrevKF),
               mImuCalib(F.mImuCalib), mvpMapPoints(F.mvpMPs), mpKeyFrameDB(pKFDB),
-              mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL),
+              mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParentKF(NULL),
               mbNotErase(false),
               mbToBeErased(false), mbBad(false), mHalfBaseline(F.mfBaseline / 2), mpMap(pMap),
               mpCamera(F.mpCamera),
@@ -200,10 +200,10 @@ namespace ORB_SLAM3 {
             // std::map::count函数只可能返回0或1两种情况
 
             // count函数返回0，mConnectedKeyFrameWeights中没有pKF，之前没有连接
-            if (!mConnectedKeyFrameWeights.count(pKF))
-                mConnectedKeyFrameWeights[pKF] = weight;
-            else if (mConnectedKeyFrameWeights[pKF] != weight) // 之前连接的权重不一样，更新
-                mConnectedKeyFrameWeights[pKF] = weight;
+            if (!mConnectedKFAndWeights.count(pKF))
+                mConnectedKFAndWeights[pKF] = weight;
+            else if (mConnectedKFAndWeights[pKF] != weight) // 之前连接的权重不一样，更新
+                mConnectedKFAndWeights[pKF] = weight;
             else
                 return;
         }
@@ -220,9 +220,9 @@ namespace ORB_SLAM3 {
     void KeyFrame::UpdateBestCovisibles() {
         unique_lock<mutex> lock(mMutexConnections);
         vector<pair<int, KeyFrame *>> vPairs;
-        vPairs.reserve(mConnectedKeyFrameWeights.size());
+        vPairs.reserve(mConnectedKFAndWeights.size());
         // 取出所有连接的关键帧，mConnectedKeyFrameWeights的类型为std::map<KeyFrame*,int>，而vPairs变量将共视的3D点数放在前面，利于排序
-        for (map<KeyFrame *, int>::iterator mit = mConnectedKeyFrameWeights.begin(), mend = mConnectedKeyFrameWeights.end();
+        for (map<KeyFrame *, int>::iterator mit = mConnectedKFAndWeights.begin(), mend = mConnectedKFAndWeights.end();
              mit != mend; mit++)
             vPairs.emplace_back(make_pair(mit->second, mit->first));
 
@@ -241,7 +241,7 @@ namespace ORB_SLAM3 {
         }
 
         // 权重从大到小
-        mvpOrderedConnectedKeyFrames = vector<KeyFrame *>(lKFs.begin(), lKFs.end());
+        mvpOrderedConnectedKFs = vector<KeyFrame *>(lKFs.begin(), lKFs.end());
         mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
     }
 
@@ -249,8 +249,8 @@ namespace ORB_SLAM3 {
     set<KeyFrame *> KeyFrame::GetConnectedKeyFrames() {
         unique_lock<mutex> lock(mMutexConnections);
         set<KeyFrame *> s;
-        for (map<KeyFrame *, int>::iterator mit = mConnectedKeyFrameWeights.begin();
-             mit != mConnectedKeyFrameWeights.end(); mit++)
+        for (map<KeyFrame *, int>::iterator mit = mConnectedKFAndWeights.begin();
+             mit != mConnectedKFAndWeights.end(); mit++)
             s.insert(mit->first);
         return s;
     }
@@ -258,17 +258,17 @@ namespace ORB_SLAM3 {
 // 得到与该关键帧连接的关键帧(已按权值排序)
     vector<KeyFrame *> KeyFrame::GetVectorCovisibleKeyFrames() {
         unique_lock<mutex> lock(mMutexConnections);
-        return mvpOrderedConnectedKeyFrames;
+        return mvpOrderedConnectedKFs;
     }
 
 // 得到与该关键帧连接的前N个关键帧(已按权值排序)
     vector<KeyFrame *> KeyFrame::GetBestCovisibilityKeyFrames(const int &N) {
         unique_lock<mutex> lock(mMutexConnections);
         // 如果不够达到的数目就直接吧现在所有的关键帧都返回了
-        if ((int) mvpOrderedConnectedKeyFrames.size() < N)
-            return mvpOrderedConnectedKeyFrames;
+        if ((int) mvpOrderedConnectedKFs.size() < N)
+            return mvpOrderedConnectedKFs;
         else
-            return vector<KeyFrame *>(mvpOrderedConnectedKeyFrames.begin(), mvpOrderedConnectedKeyFrames.begin() + N);
+            return vector<KeyFrame *>(mvpOrderedConnectedKFs.begin(), mvpOrderedConnectedKFs.begin() + N);
     }
 
 // 得到与该关键帧连接的权重大于等于w的关键帧
@@ -276,7 +276,7 @@ namespace ORB_SLAM3 {
         unique_lock<mutex> lock(mMutexConnections);
 
         // 如果没有和当前关键帧连接的关键帧
-        if (mvpOrderedConnectedKeyFrames.empty()) {
+        if (mvpOrderedConnectedKFs.empty()) {
             return vector<KeyFrame *>();
         }
 
@@ -289,7 +289,7 @@ namespace ORB_SLAM3 {
             return vector<KeyFrame *>();
         } else {
             int n = it - mvOrderedWeights.begin();
-            return vector<KeyFrame *>(mvpOrderedConnectedKeyFrames.begin(), mvpOrderedConnectedKeyFrames.begin() + n);
+            return vector<KeyFrame *>(mvpOrderedConnectedKFs.begin(), mvpOrderedConnectedKFs.begin() + n);
         }
     }
 
@@ -298,8 +298,8 @@ namespace ORB_SLAM3 {
         unique_lock<mutex> lock(mMutexConnections);
 
         // 没有连接的话权重也就是共视点个数就是0
-        if (mConnectedKeyFrameWeights.count(pKF))
-            return mConnectedKeyFrameWeights[pKF];
+        if (mConnectedKFAndWeights.count(pKF))
+            return mConnectedKFAndWeights[pKF];
         else
             return 0;
     }
@@ -427,10 +427,6 @@ namespace ORB_SLAM3 {
                  mit != mend; mit++) {
                 if (mit->first->mnId == mnId || mit->first->isBad() || mit->first->GetMap() != mpMap)
                     continue;
-                // 这里的操作非常精彩！
-                // map[key] = value，当要插入的键存在时，会覆盖键对应的原来的值。如果键不存在，则添加一组键值对
-                // mit->first 是地图点看到的关键帧，同一个关键帧看到的地图点会累加到该关键帧计数
-                // 所以最后KFcounter 第一个参数表示某个关键帧，第2个参数表示该关键帧看到了多少当前帧的地图点，也就是共视程度
                 KFcounter[mit->first]++;
             }
         }
@@ -494,31 +490,31 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> lockCon(mMutexConnections);
 
             // 更新当前帧与其它关键帧的连接权重
-            mConnectedKeyFrameWeights = KFcounter;
-            mvpOrderedConnectedKeyFrames = vector<KeyFrame *>(lKFs.begin(), lKFs.end());
+            mConnectedKFAndWeights = KFcounter;
+            mvpOrderedConnectedKFs = vector<KeyFrame *>(lKFs.begin(), lKFs.end());
             mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 
             // Step 5 更新生成树的连接
             if (mbFirstConnection && mnId != mpMap->GetInitKFId()) {
                 // 初始化该关键帧的父关键帧为共视程度最高的那个关键帧
-                mpParent = mvpOrderedConnectedKeyFrames.front();
+                mpParentKF = mvpOrderedConnectedKFs.front();
                 // 建立双向连接关系，将当前关键帧作为其子关键帧
-                mpParent->AddChild(this);
+                mpParentKF->AddChildKF(this);
                 mbFirstConnection = false;
             }
         }
     }
 
 // 添加子关键帧（即和子关键帧具有最大共视关系的关键帧就是当前关键帧）
-    void KeyFrame::AddChild(KeyFrame *pKF) {
+    void KeyFrame::AddChildKF(KeyFrame *pKF) {
         unique_lock<mutex> lockCon(mMutexConnections);
-        mspChildrens.insert(pKF);
+        mspChildKF.insert(pKF);
     }
 
 // 删除某个子关键帧
     void KeyFrame::EraseChild(KeyFrame *pKF) {
         unique_lock<mutex> lockCon(mMutexConnections);
-        mspChildrens.erase(pKF);
+        mspChildKF.erase(pKF);
     }
 
 // 改变当前关键帧的父关键帧
@@ -529,26 +525,26 @@ namespace ORB_SLAM3 {
             throw std::invalid_argument("The parent and child can not be the same");
         }
 
-        mpParent = pKF;
-        pKF->AddChild(this);
+        mpParentKF = pKF;
+        pKF->AddChildKF(this);
     }
 
 // 获取当前关键帧的子关键帧
     set<KeyFrame *> KeyFrame::GetChilds() {
         unique_lock<mutex> lockCon(mMutexConnections);
-        return mspChildrens;
+        return mspChildKF;
     }
 
 // 获取当前关键帧的父关键帧
     KeyFrame *KeyFrame::GetParent() {
         unique_lock<mutex> lockCon(mMutexConnections);
-        return mpParent;
+        return mpParentKF;
     }
 
 // 判断某个关键帧是否是当前关键帧的子关键帧
     bool KeyFrame::hasChild(KeyFrame *pKF) {
         unique_lock<mutex> lockCon(mMutexConnections);
-        return mspChildrens.count(pKF);
+        return mspChildKF.count(pKF);
     }
 
     void KeyFrame::SetFirstConnection(bool bFirst) {
@@ -627,7 +623,7 @@ namespace ORB_SLAM3 {
         }
 
         // Step 2 遍历所有和当前关键帧共视的关键帧，删除他们与当前关键帧的联系
-        for (map<KeyFrame *, int>::iterator mit = mConnectedKeyFrameWeights.begin(), mend = mConnectedKeyFrameWeights.end();
+        for (map<KeyFrame *, int>::iterator mit = mConnectedKFAndWeights.begin(), mend = mConnectedKFAndWeights.end();
              mit != mend; mit++) {
             mit->first->EraseConnection(this);
         }
@@ -644,21 +640,21 @@ namespace ORB_SLAM3 {
             unique_lock<mutex> lock1(mMutexFeatures);
 
             // 清空自己与其它关键帧之间的联系
-            mConnectedKeyFrameWeights.clear();
-            mvpOrderedConnectedKeyFrames.clear();
+            mConnectedKFAndWeights.clear();
+            mvpOrderedConnectedKFs.clear();
 
             // Update6DoF Spanning Tree
             // Step 4 更新生成树，主要是处理好父子关键帧，不然会造成整个关键帧维护的图断裂，或者混乱，不能够为后端提供较好的初值
             // 子关键帧候选父关键帧
             set<KeyFrame *> sParentCandidates;
             // 将当前帧的父关键帧放入候选父关键帧
-            if (mpParent)
-                sParentCandidates.insert(mpParent);
+            if (mpParentKF)
+                sParentCandidates.insert(mpParentKF);
 
             // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
             // Include that children as new parent candidate for the rest
             // 如果这个关键帧有自己的子关键帧，告诉这些子关键帧，它们的父关键帧不行了，赶紧找新的父关键帧
-            while (!mspChildrens.empty()) {
+            while (!mspChildKF.empty()) {
                 bool bContinue = false;
 
                 int max = -1;
@@ -666,7 +662,7 @@ namespace ORB_SLAM3 {
                 KeyFrame *pP;
 
                 // Step 4.1 遍历每一个子关键帧，让它们更新它们指向的父关键帧
-                for (set<KeyFrame *>::iterator sit = mspChildrens.begin(), send = mspChildrens.end();
+                for (set<KeyFrame *>::iterator sit = mspChildKF.begin(), send = mspChildKF.end();
                      sit != send; sit++) {
                     KeyFrame *pKF = *sit;
                     // 跳过无效的子关键帧
@@ -703,25 +699,25 @@ namespace ORB_SLAM3 {
                     // 因为子节点找到了新的父节点并更新了父节点，那么该子节点升级，作为其它子节点的备选父节点
                     sParentCandidates.insert(pC);
                     // 该子节点处理完毕，删掉
-                    mspChildrens.erase(pC);
+                    mspChildKF.erase(pC);
                 } else
                     break;
             }
 
             // If a children has no covisibility links with any parent candidate, assign to the original parent of this KF
             // Step 4.5 如果还有子节点没有找到新的父节点
-            if (!mspChildrens.empty()) {
-                for (set<KeyFrame *>::iterator sit = mspChildrens.begin(); sit != mspChildrens.end(); sit++) {
+            if (!mspChildKF.empty()) {
+                for (set<KeyFrame *>::iterator sit = mspChildKF.begin(); sit != mspChildKF.end(); sit++) {
                     // 直接把父节点的父节点作为自己的父节点 即对于这些子节点来说,他们的新的父节点其实就是自己的爷爷节点
-                    (*sit)->ChangeParent(mpParent);
+                    (*sit)->ChangeParent(mpParentKF);
                 }
             }
 
-            if (mpParent) {
-                mpParent->EraseChild(this);
+            if (mpParentKF) {
+                mpParentKF->EraseChild(this);
                 // 如果当前的关键帧要被删除的话就要计算这个,表示原父关键帧到当前关键帧的位姿变换
                 // 注意在这个删除的过程中,其实并没有将当前关键帧中存储的父关键帧的指针删除掉
-                mTcp = mTcw * mpParent->GetPoseInverse();
+                mTcp = mTcw * mpParentKF->GetPoseInverse();
             }
             // 标记当前关键帧已经死了
             mbBad = true;
@@ -743,8 +739,8 @@ namespace ORB_SLAM3 {
         bool bUpdate = false;
         {
             unique_lock<mutex> lock(mMutexConnections);
-            if (mConnectedKeyFrameWeights.count(pKF)) {
-                mConnectedKeyFrameWeights.erase(pKF);
+            if (mConnectedKFAndWeights.count(pKF)) {
+                mConnectedKFAndWeights.erase(pKF);
                 bUpdate = true;
             }
         }
@@ -908,7 +904,7 @@ namespace ORB_SLAM3 {
         }
         // Save the id of each connected KF with it weight
         mBackupConnectedKeyFrameIdWeights.clear();
-        for (std::map<KeyFrame *, int>::const_iterator it = mConnectedKeyFrameWeights.begin(), end = mConnectedKeyFrameWeights.end();
+        for (std::map<KeyFrame *, int>::const_iterator it = mConnectedKFAndWeights.begin(), end = mConnectedKFAndWeights.end();
              it != end; ++it) {
             if (spKF.find(it->first) != spKF.end())
                 mBackupConnectedKeyFrameIdWeights[it->first->mnId] = it->second;
@@ -916,13 +912,13 @@ namespace ORB_SLAM3 {
 
         // Save the parent id
         mBackupParentId = -1;
-        if (mpParent && spKF.find(mpParent) != spKF.end())
-            mBackupParentId = mpParent->mnId;
+        if (mpParentKF && spKF.find(mpParentKF) != spKF.end())
+            mBackupParentId = mpParentKF->mnId;
 
         // Save the id of the childrens KF
         mvBackupChildrensId.clear();
-        mvBackupChildrensId.reserve(mspChildrens.size());
-        for (KeyFrame *pKFi: mspChildrens) {
+        mvBackupChildrensId.reserve(mspChildKF.size());
+        for (KeyFrame *pKFi: mspChildKF) {
             if (spKF.find(pKFi) != spKF.end())
                 mvBackupChildrensId.emplace_back(pKFi->mnId);
         }
@@ -982,22 +978,22 @@ namespace ORB_SLAM3 {
         }
 
         // Conected KeyFrames with him weight
-        mConnectedKeyFrameWeights.clear();
+        mConnectedKFAndWeights.clear();
         for (map<long unsigned int, int>::const_iterator it = mBackupConnectedKeyFrameIdWeights.begin(), end = mBackupConnectedKeyFrameIdWeights.end();
              it != end; ++it) {
             KeyFrame *pKFi = mpKFid[it->first];
-            mConnectedKeyFrameWeights[pKFi] = it->second;
+            mConnectedKFAndWeights[pKFi] = it->second;
         }
 
         // Restore parent KeyFrame
         if (mBackupParentId >= 0)
-            mpParent = mpKFid[mBackupParentId];
+            mpParentKF = mpKFid[mBackupParentId];
 
         // KeyFrame childrens
-        mspChildrens.clear();
+        mspChildKF.clear();
         for (vector<long unsigned int>::const_iterator it = mvBackupChildrensId.begin(), end = mvBackupChildrensId.end();
              it != end; ++it) {
-            mspChildrens.insert(mpKFid[*it]);
+            mspChildKF.insert(mpKFid[*it]);
         }
 
         // Loop edge KeyFrame

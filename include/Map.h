@@ -45,25 +45,6 @@ namespace ORB_SLAM3 {
 
         template<class Archive>
         void serialize(Archive &ar, const unsigned int version) {
-            ar & mnId;
-            ar & mnInitKFId;
-            ar & mnMaxKFid;
-            ar & mnBigChangeIdx;
-
-            // Save/load a set structure, the set structure is broken in libboost 1.58 for ubuntu 16.04, a vector is serializated
-            //ar & mspKeyFrames;
-            //ar & mspMapPoints;
-            ar & mvpBackupKeyFrames;
-            ar & mvpBackupMapPoints;
-
-            ar & mvBackupKeyFrameOriginsId;
-
-            ar & mnBackupKFinitialID;
-            ar & mnBackupKFlowerID;
-
-            ar & mbImuInitialized;
-            ar & mbIMU_BA1;
-            ar & mbIMU_BA2;
         }
 
     public:
@@ -112,15 +93,11 @@ namespace ORB_SLAM3 {
 
         unsigned int GetLowerKFID();
 
-        int GetLastBigChangeIdx();
-
         KeyFrame *GetOriginKF();
 
         void SetCurrentMap();
 
         void SetStoredMap();
-
-        bool HasThumbnail();
 
         bool IsInUse();
 
@@ -157,11 +134,8 @@ namespace ORB_SLAM3 {
 
         bool GetImuIniertialBA2();
 
-        void ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel = false);
+        void ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledToVel = false);
 
-        void PrintEssentialGraph();
-
-        bool CheckEssentialGraph();
 
 
         void PreSave(std::set<GeometricCamera *> &spCams);
@@ -169,11 +143,6 @@ namespace ORB_SLAM3 {
         void
         PostLoad(KeyFrameDatabase *pKFDB, ORBVocabulary *pORBVoc/*, map<long unsigned int, KeyFrame*>& mpKeyFrameId*/,
                  map<unsigned int, GeometricCamera *> &mpCams);
-
-        void printReprojectionError(list<KeyFrame *> &lpLocalWindowKFs, KeyFrame *mpCurrentKF, string &name,
-                                    string &name_folder);
-
-        void InformNewBigChange();
 
 
         vector<KeyFrame *> mvpInitKeyFrames;
@@ -231,9 +200,6 @@ namespace ORB_SLAM3 {
 
         long unsigned int mnInitKFId;
         long unsigned int mnMaxKFid;
-
-        // Index related to a big change in the map (loop closure, global BA)
-        int mnBigChangeIdx;
 
         // View of the map in aerial sight (for the AtlasViewer)
         GLubyte *mThumbnail;

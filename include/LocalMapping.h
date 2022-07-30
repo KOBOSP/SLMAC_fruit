@@ -81,7 +81,7 @@ public:
     Eigen::Matrix3d mRwg;
     Eigen::Vector3d mbg;
     Eigen::Vector3d mba;
-    double mScale;
+    double mfScale;
 
     double mFirstTs;
     bool mbBadImu;
@@ -121,7 +121,7 @@ protected:
 
     std::list<KeyFrame*> mlNewKeyFrames;
 
-    KeyFrame* mpCurrentKeyFrame;
+    KeyFrame* mpCurKF;
 
     std::list<MapPoint*> mlpRecentAddedMapPoints;
 
@@ -137,12 +137,11 @@ protected:
     bool mbAcceptKeyFrames;
     std::mutex mMutexAccept;
 
-    void InitializeIMU(float priorG = 1e2, float priorA = 1e6, bool bNeedGBA = false);
-    void ScaleRefinement();
+    void InitializeImu(float GInfo = 1e2, float AInfo = 1e6, bool bNeedGBA = false);
 
     bool bInitializing;
 
-    Eigen::MatrixXd infoInertial;
+    Eigen::MatrixXd nImuInfo;
     float mfCullKFRedundantTh;
     float mTimeFirstToCur;
     int mnWeakCovisTh, mnStrongCovisTh, mnSingleMaxCullKFsNum;

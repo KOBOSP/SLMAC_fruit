@@ -58,19 +58,6 @@ class Atlas
         // 由于保存相机是基类，但是实际使用是派生类，所以声明一下
         ar.template register_type<Pinhole>();
         ar.template register_type<KannalaBrandt8>();
-
-        // Save/load a set structure, the set structure is broken in libboost 1.58 for ubuntu 16.04, a vector is serializated
-        //ar & mspMaps;
-        // 基础类型不用管，但是自定义的类里面要进一步写serialize函数，确定保存内容
-        ar & mvpBackupMaps;
-        ar & mvpCameras;
-        // Need to save/load the static Id from Frame, KeyFrame, MapPoint and Map
-        ar & Map::nNextId;
-        ar & Frame::mnNextId;
-        ar & KeyFrame::nNextId;
-        ar & MapPoint::nNextId;
-        ar & GeometricCamera::nNextId;
-        ar & mnLastInitKFidMap;
     }
 
 public:
@@ -100,8 +87,6 @@ public:
     void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
     void SetReferenceKeyFrames(const std::vector<KeyFrame*> &vpKFs);
 
-    void InformNewBigChange();
-    int GetLastBigChangeIdx();
 
     long unsigned int MapPointsInMap();
     long unsigned KeyFramesInMap();
@@ -128,10 +113,6 @@ public:
     bool GetImuInitialized();
     void SetRtkInitialized();
     bool isRtkInitialized();
-
-    // Function for garantee the correction of serialization of this object
-    void PreSave();
-    void PostLoad();
 
     map<long unsigned int, KeyFrame*> GetAtlasKeyframes();
 

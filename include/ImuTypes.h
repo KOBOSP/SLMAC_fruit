@@ -38,7 +38,7 @@ namespace ORB_SLAM3 {
 
     namespace IMU {
 
-        const float GRAVITY_VALUE = 9.81;
+        const float GRAVITY_VALUE = 9.8;
 
 //IMU measurement (gyro, accelerometer and timestamp)
         class Point {
@@ -77,9 +77,9 @@ namespace ORB_SLAM3 {
         public:
             Bias() : mBAX(0), mBAY(0), mBAZ(0), mBGX(0), mBGY(0), mBGZ(0) {}
 
-            Bias(const float &b_acc_x, const float &b_acc_y, const float &b_acc_z,
-                 const float &b_ang_vel_x, const float &b_ang_vel_y, const float &b_ang_vel_z) :
-                    mBAX(b_acc_x), mBAY(b_acc_y), mBAZ(b_acc_z), mBGX(b_ang_vel_x), mBGY(b_ang_vel_y), mBGZ(b_ang_vel_z) {}
+            Bias(const float &BAX, const float &BAY, const float &BAZ,
+                 const float &BGX, const float &BGY, const float &BGZ) :
+                    mBAX(BAX), mBAY(BAY), mBAZ(BAZ), mBGX(BGX), mBGY(BGY), mBGZ(BGZ) {}
 
             void CopyFrom(Bias &b);
 

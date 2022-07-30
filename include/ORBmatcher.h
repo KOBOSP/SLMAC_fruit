@@ -55,7 +55,7 @@ namespace ORB_SLAM3
 
 
         // CreateNewMapPoints()
-        int SearchKFAndKFByTriangulation(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<pair<size_t, size_t> > &vMatchedPairs, const bool bSkipExistStereoMP, const bool bCoarse = false);
+        int SearchMatchKFAndKFByTriangulation(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<pair<size_t, size_t> > &vMatchedPairs, const bool bSkipExistStereoMP, const bool bCoarse = false);
 
         // FuseMapPointsInNeighbors()
         int SearchReplaceKFAndMPsByProjectInLocalMap(KeyFrame* pKF, const vector<MapPoint *> &vpMapPoints, const float nThProjRad=3.0, const bool bRight = false);

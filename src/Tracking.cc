@@ -423,10 +423,6 @@ namespace ORB_SLAM3 {
         return false;
     }
 
-    void Tracking::ResetFrameIMU() {
-        // TODO To implement...
-    }
-
 /**
  * @brief 跟踪过程，包括恒速模型跟踪、参考关键帧跟踪、局部地图跟踪
  * track包含两部分：估计运动、跟踪局部地图
@@ -756,10 +752,10 @@ namespace ORB_SLAM3 {
         mvpLocalMapPoints = mpAtlas->GetAllMapPoints();
         mpReferenceKF=pKFini;
         mCurFrame.mpReferenceKF = pKFini;
-
         // 把当前（最新的）局部MapPoints作为ReferenceMapPoints
         mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
         mpAtlas->GetCurrentMap()->mvpInitKeyFrames.emplace_back(pKFini);
+        mpAtlas->GetCurrentMap()->SetInitKFId(pKFini->mnId);
         mpMapDrawer->SetCurrentCameraPose(mCurFrame.GetPose());
         mState = OK;
     }
@@ -1851,7 +1847,7 @@ namespace ORB_SLAM3 {
  * @param  b 初始化后第一帧的偏置
  * @param  pCurrentKeyFrame 当前关键帧
  */
-    void Tracking::UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame *pCurrentKeyFrame) {
+    void Tracking::UpdateLastAndCurFrameIMU(const float s, const IMU::Bias &b, KeyFrame *pCurrentKeyFrame) {
         Map *pMap = pCurrentKeyFrame->GetMap();
         if (mpReferenceKF->GetMap() == pMap) {
             mTcFrKF.translation() *= s;
@@ -1869,6 +1865,7 @@ namespace ORB_SLAM3 {
             // 当前帧需要预积分完毕，这段函数实在localmapping里调用的
             usleep(5000);
         }
+        const Eigen::Vector3f Gz(0, 0, -IMU::GRAVITY_VALUE);
 
         // TODO 如果上一帧正好是上一帧的上一关键帧（mLastFrame.mpLastKeyFrame与mLastFrame不可能是一个，可以验证一下）
         if (mLastFrame.mnId == mLastFrame.mpPrevKeyFrame->mnFrameId) {
@@ -1876,7 +1873,6 @@ namespace ORB_SLAM3 {
                                           mLastFrame.mpPrevKeyFrame->GetImuPosition(),
                                           mLastFrame.mpPrevKeyFrame->GetVelocity());
         } else {
-            const Eigen::Vector3f Gz(0, 0, -IMU::GRAVITY_VALUE);
             const Eigen::Vector3f twb1 = mLastFrame.mpPrevKeyFrame->GetImuPosition();
             const Eigen::Matrix3f Rwb1 = mLastFrame.mpPrevKeyFrame->GetImuRotation();
             const Eigen::Vector3f Vwb1 = mLastFrame.mpPrevKeyFrame->GetVelocity();
@@ -1891,8 +1887,6 @@ namespace ORB_SLAM3 {
 
         // 当前帧是否做了预积分
         if (mCurFrame.mpImuFromPrevKF) {
-            const Eigen::Vector3f Gz(0, 0, -IMU::GRAVITY_VALUE);
-
             const Eigen::Vector3f twb1 = mCurFrame.mpPrevKeyFrame->GetImuPosition();
             const Eigen::Matrix3f Rwb1 = mCurFrame.mpPrevKeyFrame->GetImuRotation();
             const Eigen::Vector3f Vwb1 = mCurFrame.mpPrevKeyFrame->GetVelocity();

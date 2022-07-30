@@ -65,6 +65,7 @@ namespace ORB_SLAM3 {
     void LoopClosing::SetLocalMapper(LocalMapping *pLocalMapper) {
         mpLocalMapper = pLocalMapper;
     }
+
     void LoopClosing::SetViewer(Viewer *pViewer) {
         mpViewer = pViewer;
     }
@@ -498,7 +499,8 @@ namespace ORB_SLAM3 {
                                           (gScm * (gSwm.inverse())).scale());
                 vector<MapPoint *> vpMatchedMP;
                 vpMatchedMP.resize(mpCurrentKF->GetVectorMapPointsInKF().size(), static_cast<MapPoint *>(NULL));
-                nNumOriProjMatches = FindMatchesByProjection(pCurrentKF, pCandidKF, gScw_estimation, vpMPs, vpMatchedMPs);
+                nNumOriProjMatches = FindMatchesByProjection(pCurrentKF, pCandidKF, gScw_estimation, vpMPs,
+                                                             vpMatchedMPs);
                 if (nNumOriProjMatches >= mnThOptProjMatches) {
                     gScw = gScw_estimation;
                     return true;
@@ -655,7 +657,8 @@ namespace ORB_SLAM3 {
                 continue;
             }
 
-            Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among " + to_string(mnThIterInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
+            Verbose::PrintMess("BoW guess: Convergende with " + to_string(nInliers) + " geometrical inliers among " +
+                               to_string(mnThIterInliers) + " BoW matches", Verbose::VERBOSITY_DEBUG);
             // Match by reprojection
             vpCandCovKFi.clear();
             // 拿到窗口内匹配最多的帧的最佳10个共视帧和它自己组成的窗口
@@ -1132,7 +1135,7 @@ namespace ORB_SLAM3 {
             Optimizer::OptimizeEssentialGraph(pLoopMap, mpLoopMatchedKF, mpCurrentKF, NonCorrectedSim3, CorrectedSim3,
                                               LoopConnections, bFixedScale);
         }
-        mpAtlas->InformNewBigChange();
+        mpAtlas->GetCurrentMap()->IncreaseChangeIdx();
         // Add loop edge
         // Step 7：添加当前帧与闭环匹配帧之间的边（这个连接关系不优化）
         // 它在下一次的Essential Graph里面使用
@@ -1805,7 +1808,7 @@ namespace ORB_SLAM3 {
             // 利用mSold_new位姿把整个当前地图中的关键帧和地图点变换到融合帧所在地图的坐标系下
             mpAtlas->GetCurrentMap()->ApplyScaledRotation(T_on, s_on, bScaleVel);
             // 尺度更新到普通帧位姿
-            mpTracker->UpdateFrameIMU(s_on, mpCurrentKF->GetImuBias(), mpTracker->GetLastKeyFrame());
+            mpTracker->UpdateLastAndCurFrameIMU(s_on, mpCurrentKF->GetImuBias(), mpTracker->GetLastKeyFrame());
 
             std::chrono::steady_clock::time_point t3 = std::chrono::steady_clock::now();
         }
@@ -1824,7 +1827,7 @@ namespace ORB_SLAM3 {
             IMU::Bias b(ba[0], ba[1], ba[2], bg[0], bg[1], bg[2]);
             unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
             // 用优化得到的 bias 更新普通帧位姿
-            mpTracker->UpdateFrameIMU(1.0f, b, mpTracker->GetLastKeyFrame());
+            mpTracker->UpdateLastAndCurFrameIMU(1.0f, b, mpTracker->GetLastKeyFrame());
 
             // Set map initialized
             // 设置IMU已经完成初始化
@@ -2063,7 +2066,8 @@ namespace ORB_SLAM3 {
             // 新点表示pKFi对应的点，老点表示pKFi对应的回环点
             // 将vpMapPoints投到pKF里面看看有没有匹配的MP，如果没有直接添加，如果有，暂时将老点放入至vpReplacePoints
             // vpReplacePoints下标表示第n个vpMapPoints，存放着新点，可以直接找到对应信息
-            int numFused = matcher.SearchReplaceKFAndMPsByProjectInGlobalMap(pKFi, Tcw, vpMapPoints, 4, vpReplacePoints);
+            int numFused = matcher.SearchReplaceKFAndMPsByProjectInGlobalMap(pKFi, Tcw, vpMapPoints, 4,
+                                                                             vpReplacePoints);
 
             // Get Map Mutex
             unique_lock<mutex> lock(pMap->mMutexMapUpdate);
@@ -2197,149 +2201,102 @@ namespace ORB_SLAM3 {
 /**
  * @brief MergeLocalWithoutImu CorrectLoop 中调用
  * @param pActiveMap 当前地图
- * @param nLoopKF 检测到回环成功的关键帧，不是与之匹配的老关键帧
+ * @param nGBAId 检测到回环成功的关键帧，不是与之匹配的老关键帧
  */
-    void LoopClosing::RunGlobalBundleAdjustment(Map *pActiveMap, unsigned long nLoopKF) {
+    void LoopClosing::RunGlobalBundleAdjustment(Map *pActiveMap, unsigned long nGBAId) {
         Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
         const bool bImuInit = pActiveMap->GetImuInitialized();
         if (!bImuInit)
-            Optimizer::GlobalBundleAdjustemntWithoutImu(pActiveMap, 10, &mbStopGBA, nLoopKF, false);
+            Optimizer::GlobalBundleAdjustemntWithoutImu(pActiveMap, 10, &mbStopGBA, nGBAId, false);
         else {
-            Optimizer::GlobalBundleAdjustemetWithImu(pActiveMap, 7, false, nLoopKF, &mbStopGBA);
+            Optimizer::GlobalBundleAdjustemetWithImu(pActiveMap, 7, false, nGBAId, &mbStopGBA);
         }
 
-        // 记录GBA已经迭代次数,用来检查全局BA过程是否是因为意外结束的
-        int idx = mnFullBAIdx;
         {
             unique_lock<mutex> lock(mMutexGBA);
 
             if (!mbStopGBA) {
-                Verbose::PrintMess("Global Bundle Adjustment finished, Updating map ...", Verbose::VERBOSITY_NORMAL);
-
                 mpLocalMapper->RequestPause();
-                // Wait until Local Mapping has effectively stopped
-
                 while (!mpLocalMapper->CheckPaused() && !mpLocalMapper->CheckFinished()) {
                     usleep(5000);
                 }
 
-                // Get Map Mutex
+                Verbose::PrintMess("Global Bundle Adjustment finished, Updating map ...", Verbose::VERBOSITY_NORMAL);
                 unique_lock<mutex> lock(pActiveMap->mMutexMapUpdate);
-                // cout << "LC: Update6DoF Map Mutex adquired" << endl;
+                list<KeyFrame *> lpKFstoUpdate(pActiveMap->mvpInitKeyFrames.begin(),
+                                               pActiveMap->mvpInitKeyFrames.end());
+                vector<MapPoint *> vpMPsToUpdate = pActiveMap->GetAllMapPoints();
+                UpdateKFsAndMPsAfterBA(lpKFstoUpdate, vpMPsToUpdate, nGBAId);
 
-                //pActiveMap->PrintEssentialGraph();
-                // Correct keyframes starting at map first keyframe
-                list<KeyFrame *> lpKFtoCheck(pActiveMap->mvpInitKeyFrames.begin(),
-                                             pActiveMap->mvpInitKeyFrames.end());
-
-                // 通过树的方式更新未参与全局优化的关键帧，一个关键帧与其父节点的共视点数最多，所以选其作为参考帧
-                while (!lpKFtoCheck.empty()) {
-                    KeyFrame *pKF = lpKFtoCheck.front();
-                    const set<KeyFrame *> sChilds = pKF->GetChilds();
-                    Sophus::SE3f Twc = pKF->GetPoseInverse();
-                    // 广度优先搜索
-                    for (set<KeyFrame *>::const_iterator sit = sChilds.begin(); sit != sChilds.end(); sit++) {
-                        KeyFrame *pChild = *sit;
-                        if (!pChild || pChild->isBad())
-                            continue;
-
-                        // 专门处理没有参与优化的新关键帧
-                        if (pChild->mnBAGlobalForKF != nLoopKF) {
-                            //cout << "++++New child with flag " << pChild->mnBAGlobalForKF << "; LoopKF: " << nLoopKF << endl;
-                            //cout << " child id: " << pChild->mnId << endl;
-                            Sophus::SE3f Tchildc = pChild->GetPose() * Twc;
-                            //cout << "Child pose: " << Tchildc << endl;
-                            //cout << "pKF->mTcwGBA: " << pKF->mTcwGBA << endl;
-                            pChild->mTcwGBA = Tchildc * pKF->mTcwGBA;//*Tcorc*pKF->mTcwGBA;
-
-                            Sophus::SO3f Rcor = pChild->mTcwGBA.so3().inverse() * pChild->GetPose().so3();
-                            if (pChild->isVelocitySet()) {
-                                pChild->mVwbGBA = Rcor * pChild->GetVelocity();
-                            } else
-                                Verbose::PrintMess("Child velocity empty!! ", Verbose::VERBOSITY_NORMAL);
-
-
-                            //cout << "Child bias: " << pChild->GetImuBias() << endl;
-                            pChild->mBiasGBA = pChild->GetImuBias();
-
-
-                            pChild->mnBAGlobalForKF = nLoopKF;  // 标记成更新过的
-
-                        }
-                        lpKFtoCheck.emplace_back(pChild);
-                    }
-
-                    //cout << "-------Update6DoF pose" << endl;
-                    pKF->mTcwBefGBA = pKF->GetPose();
-                    //cout << "pKF->mTcwBefGBA: " << pKF->mTcwBefGBA << endl;
-                    pKF->SetPose(pKF->mTcwGBA);
-
-                    if (pKF->bImu) {
-                        //cout << "-------Update6DoF inertial values" << endl;
-                        //if (pKF->mVwbGBA.empty())
-                        //    Verbose::PrintMess("pKF->mVwbGBA is empty", Verbose::VERBOSITY_NORMAL);
-
-                        //assert(!pKF->mVwbGBA.empty());
-                        pKF->SetVelocity(pKF->mVwbGBA);
-                        pKF->SetNewBias(pKF->mBiasGBA);
-                    }
-
-                    lpKFtoCheck.pop_front();
-                }
-
-                //cout << "GBA: Correct MapPoints" << endl;
-                // Correct MapPoints
-                // 更新mp点
-                const vector<MapPoint *> vpMPs = pActiveMap->GetAllMapPoints();
-
-                for (size_t i = 0; i < vpMPs.size(); i++) {
-                    MapPoint *pMP = vpMPs[i];
-
-                    if (pMP->isBad())
-                        continue;
-
-                    // NOTICE 并不是所有的地图点都会直接参与到全局BA优化中,但是大部分的地图点需要根据全局BA优化后的结果来重新纠正自己的位姿
-                    // 如果这个地图点直接参与到了全局BA优化的过程,那么就直接重新设置器位姿即可
-                    if (pMP->mnBAGlobalForKF == nLoopKF) {
-                        // If optimized by Global BA, just update
-                        pMP->SetWorldPos(pMP->mPosGBA);
-                    } else  // 如故这个地图点并没有直接参与到全局BA优化的过程中,那么就使用器参考关键帧的新位姿来优化自己的位姿
-                    {
-                        // Update6DoF according to the correction of its reference keyframe
-                        // 说明这个关键帧，在前面的过程中也没有因为“当前关键帧”得到全局BA优化
-                        //? 可是,为什么会出现这种情况呢? 难道是因为这个地图点的参考关键帧设置成为了bad?
-                        KeyFrame *pRefKF = pMP->GetReferenceKeyFrame();
-
-                        if (pRefKF->mnBAGlobalForKF != nLoopKF)
-                            continue;
-
-                        /*if(pRefKF->mTcwBefGBA.empty())
-                        continue;*/
-
-                        // Map to non-corrected camera
-                        // cv::Mat Rcw = pRefKF->mTcwBefGBA.rowRange(0,3).colRange(0,3);
-                        // cv::Mat tcw = pRefKF->mTcwBefGBA.rowRange(0,3).col(3);
-                        // 转换到其参考关键帧相机坐标系下的坐标
-                        Eigen::Vector3f Xc = pRefKF->mTcwBefGBA * pMP->GetWorldPos();
-
-                        // Backproject using corrected camera
-                        // 然后使用已经纠正过的参考关键帧的位姿,再将该地图点变换到世界坐标系下
-                        pMP->SetWorldPos(pRefKF->GetPoseInverse() * Xc);
-                    }
-                }
-
-                pActiveMap->InformNewBigChange();
+                Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
                 pActiveMap->IncreaseChangeIdx();
 
-                // TODO Check this update
-                // mpTracker->UpdateFrameIMU(1.0f, mpTracker->GetLastKeyFrame()->GetImuBias(), mpTracker->GetLastKeyFrame());
+                mpTracker->UpdateLastAndCurFrameIMU(1.0f, mpTracker->GetLastKeyFrame()->GetImuBias(), mpTracker->GetLastKeyFrame());
                 mpLocalMapper->CancelPause();
-                Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
             }
             mbFinishedGBA = true;
             mbRunningGBA = false;
         }
     }
+
+    void LoopClosing::UpdateKFsAndMPsAfterBA(list<KeyFrame *> &lpKFstoUpdate, vector<MapPoint *> &vpMPsToUpdate,
+                                             unsigned long nGBAId) {
+        // 通过树的方式更新未参与全局优化的关键帧，一个关键帧与其父节点的共视点数最多，所以选其作为参考帧
+        while (!lpKFstoUpdate.empty()) {
+            KeyFrame *pKF = lpKFstoUpdate.front();
+            const set<KeyFrame *> sChilds = pKF->GetChilds();
+            Sophus::SE3f Twc = pKF->GetPoseInverse();
+            for (set<KeyFrame *>::const_iterator sit = sChilds.begin(); sit != sChilds.end(); sit++) {
+                KeyFrame *pChild = *sit;
+                if (!pChild || pChild->isBad())
+                    continue;
+                if (pChild->mnLMGBAFlag != nGBAId) {
+                    Sophus::SE3f Tchildwwc = pChild->GetPose() * Twc;
+                    pChild->mLMGBATcw = Tchildwwc * pKF->mLMGBATcw;//*Tcorc*pKF->mLMGBATcw;
+                    Sophus::SO3f Rcor = pChild->mLMGBATcw.so3().inverse() * pChild->GetPose().so3();
+                    if (pChild->isVelocitySet()) {
+                        pChild->mLMGBAVwb = Rcor * pChild->GetVelocity();
+                    } else {
+                        Verbose::PrintMess("Child velocity empty!! ", Verbose::VERBOSITY_NORMAL);
+                    }
+//                            pChild->mLMGBABias = pChild->GetImuBias();
+                    pChild->mLMGBABias = pKF->mLMGBABias;
+                    pChild->mnLMGBAFlag = nGBAId;  // 标记成更新过的
+                }
+                lpKFstoUpdate.emplace_back(pChild);
+            }
+            pKF->mBefGBATcw = pKF->GetPose();
+            pKF->SetPose(pKF->mLMGBATcw);
+            if (pKF->bImu) {
+                pKF->SetVelocity(pKF->mLMGBAVwb);
+                pKF->SetNewBias(pKF->mLMGBABias);
+            }
+            lpKFstoUpdate.pop_front();
+        }
+        for (size_t i = 0; i < vpMPsToUpdate.size(); i++) {
+            MapPoint *pMP = vpMPsToUpdate[i];
+
+            if (!pMP || pMP->isBad())
+                continue;
+
+            // NOTICE 并不是所有的地图点都会直接参与到全局BA优化中,但是大部分的地图点需要根据全局BA优化后的结果来重新纠正自己的位姿
+            // 如果这个地图点直接参与到了全局BA优化的过程,那么就直接重新设置器位姿即可
+            if (pMP->mnLMGBAFlag == nGBAId) {
+                // If optimized by Global BA, just update
+                pMP->SetWorldPos(pMP->mLMGBAPos);
+            } else  // 如故这个地图点并没有直接参与到全局BA优化的过程中,那么就使用器参考关键帧的新位姿来优化自己的位姿
+            {
+                // Update6DoF according to the correction of its reference keyframe
+                KeyFrame *pRefKF = pMP->GetReferenceKeyFrame();
+                if (pRefKF->mnLMGBAFlag != nGBAId)
+                    continue;
+                Eigen::Vector3f Xc = pRefKF->mBefGBATcw * pMP->GetWorldPos();
+                // Backproject using corrected camera
+                pMP->SetWorldPos(pRefKF->GetPoseInverse() * Xc);
+            }
+        }
+    }
+
 
 // 由外部线程调用,请求终止当前线程
     void LoopClosing::RequestFinish() {

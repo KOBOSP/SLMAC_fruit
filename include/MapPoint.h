@@ -76,8 +76,8 @@ class MapPoint
         //ar & mnLoopPointForKF;
         //ar & mnCorrectedByKF;
         //ar & mnCorrectedReference;
-        //serializeMatrix(ar,mPosGBA,version);
-        //ar & mnBAGlobalForKF;
+        //serializeMatrix(ar,mLMGBAPos,version);
+        //ar & mnLMGBAFlag;
         //ar & mnBALocalForMerge;
         //serializeMatrix(ar,mPosMerge,version);
         //serializeMatrix(ar,mNormalVectorMerge,version);
@@ -184,8 +184,8 @@ public:
     // Variables used by loop closing
     long unsigned int mnCorrectedByKF;
     long unsigned int mnCorrectedReference;    
-    Eigen::Vector3f mPosGBA;
-    long unsigned int mnBAGlobalForKF;
+    Eigen::Vector3f mLMGBAPos;
+    long unsigned int mnLMGBAFlag;
     long unsigned int mnBALocalForMerge;
 
     // Variable used by merging

@@ -25,7 +25,7 @@ namespace ORB_SLAM3 {
     long unsigned int Map::nNextId = 0;
 
     Map::Map()
-            : mnMaxKFid(0), mnBigChangeIdx(0), mbImuInitialized(false), mbRtkInitialized(false), mfRtkToLocalDist(1e10),
+            : mnMaxKFid(0), mbImuInitialized(false), mbRtkInitialized(false), mfRtkToLocalDist(1e10),
               mnMapChangeIdx(0), mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
               mbFail(false), mIsInUse(false), mbBad(false), mnLastMapChangeIdx(0),
               mbIMU_BA1(false), mbIMU_BA2(false) {
@@ -34,7 +34,7 @@ namespace ORB_SLAM3 {
     }
 
     Map::Map(int initKFid)
-            : mnInitKFId(initKFid), mnMaxKFid(initKFid), mnBigChangeIdx(0), mIsInUse(false),
+            : mnInitKFId(initKFid), mnMaxKFid(initKFid), mIsInUse(false),
               mbBad(false), mbImuInitialized(false), mbRtkInitialized(false), mfRtkToLocalDist(1e10),
               mpFirstRegionKF(static_cast<KeyFrame *>(NULL)),
               mnMapChangeIdx(0), mbFail(false), mnLastMapChangeIdx(0), mbIMU_BA1(false),
@@ -181,15 +181,6 @@ namespace ORB_SLAM3 {
         mvpReferenceKeyFrames = vpKFs;
     }
 
-    void Map::InformNewBigChange() {
-        unique_lock<mutex> lock(mMutexMap);
-        mnBigChangeIdx++;
-    }
-
-    int Map::GetLastBigChangeIdx() {
-        unique_lock<mutex> lock(mMutexMap);
-        return mnBigChangeIdx;
-    }
 
 // 获取地图中的所有关键帧
     vector<KeyFrame *> Map::GetAllKeyFrames() {
@@ -296,10 +287,10 @@ namespace ORB_SLAM3 {
  * 地图融合时也会使用
  * @param R 初始化时为Rgw
  * @param s 尺度
- * @param bScaledVel 将尺度更新到速度
+ * @param bScaledToVel 将尺度更新到速度
  * @param t 默认cv::Mat::zeros(cv::Size(1,3),CV_32F)
  */
-    void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel) {
+    void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledToVel) {
         unique_lock<mutex> lock(mMutexMap);
 
         // Body position (IMU) of first keyframe is fixed to (0,0,0)
@@ -328,7 +319,7 @@ namespace ORB_SLAM3 {
             pKF->SetPose(Tcy);
             // 更新关键帧速度
             Eigen::Vector3f Vw = pKF->GetVelocity();
-            if (!bScaledVel)
+            if (!bScaledToVel)
                 pKF->SetVelocity(Ryw * Vw);
             else
                 pKF->SetVelocity(Ryw * Vw * s);

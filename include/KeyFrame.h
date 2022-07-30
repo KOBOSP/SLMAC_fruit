@@ -118,7 +118,7 @@ namespace ORB_SLAM3 {
         int GetWeightBetweenKF(KeyFrame *pKF);
 
         // Spanning tree functions
-        void AddChild(KeyFrame *pKF);
+        void AddChildKF(KeyFrame *pKF);
 
         void EraseChild(KeyFrame *pKF);
 
@@ -254,11 +254,11 @@ namespace ORB_SLAM3 {
         float mPlaceRecognitionScore;
 
         // Variables used by loop closing
-        Sophus::SE3f mTcwGBA;
-        Sophus::SE3f mTcwBefGBA;
-        Eigen::Vector3f mVwbGBA;
-        IMU::Bias mBiasGBA;
-        long unsigned int mnBAGlobalForKF;
+        Sophus::SE3f mLMGBATcw;
+        Sophus::SE3f mBefGBATcw;
+        Eigen::Vector3f mLMGBAVwb;
+        IMU::Bias mLMGBABias;
+        long unsigned int mnLMGBAFlag;
 
         // Variables used by merging
         Sophus::SE3f mTcwMerge;
@@ -346,16 +346,16 @@ namespace ORB_SLAM3 {
         // Grid over the image to speed up feature matching
         std::vector<std::vector<std::vector<size_t> > > mGrid;
 
-        std::map<KeyFrame *, int> mConnectedKeyFrameWeights;
-        std::vector<KeyFrame *> mvpOrderedConnectedKeyFrames;
+        std::map<KeyFrame *, int> mConnectedKFAndWeights;
+        std::vector<KeyFrame *> mvpOrderedConnectedKFs;
         std::vector<int> mvOrderedWeights;
         // For save relation without pointer, this is necessary for save/load function
         std::map<long unsigned int, int> mBackupConnectedKeyFrameIdWeights;
 
         // Spanning Tree and Loop Edges
         bool mbFirstConnection;
-        KeyFrame *mpParent;
-        std::set<KeyFrame *> mspChildrens;
+        KeyFrame *mpParentKF;
+        std::set<KeyFrame *> mspChildKF;
         std::set<KeyFrame *> mspLoopEdges;
         std::set<KeyFrame *> mspMergeEdges;
         // For save relation without pointer, this is necessary for save/load function

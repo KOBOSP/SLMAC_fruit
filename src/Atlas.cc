@@ -160,16 +160,6 @@ namespace ORB_SLAM3 {
         mpCurrentMap->SetReferenceKeyFrames(vpKPs);
     }
 
-    void Atlas::InformNewBigChange() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        mpCurrentMap->InformNewBigChange();
-    }
-
-    int Atlas::GetLastBigChangeIdx() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->GetLastBigChangeIdx();
-    }
-
     long unsigned int Atlas::MapPointsInMap() {
         unique_lock<mutex> lock(mMutexAtlas);
         return mpCurrentMap->GetMapPointsNumInMap();
@@ -275,67 +265,6 @@ namespace ORB_SLAM3 {
         return mpCurrentMap->GetRtkInitialized();
     }
 
-/**
- * @brief 预保存，意思是在保存成地图文件之前，要保存到对应变量里面
- */
-    void Atlas::PreSave() {
-        // 1. 更新mnLastInitKFidMap
-        if (mpCurrentMap) {
-            if (!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFId())
-                mnLastInitKFidMap = mpCurrentMap->GetMaxKFId() + 1; // The init KF is the next of current maximum
-        }
-
-        // 比较map id
-        struct compFunctor {
-            inline bool operator()(Map *elem1, Map *elem2) {
-                return elem1->GetId() < elem2->GetId();
-            }
-        };
-        std::copy(mspMaps.begin(), mspMaps.end(), std::back_inserter(mvpBackupMaps));
-        // 2. 按照id从小到大排列
-        sort(mvpBackupMaps.begin(), mvpBackupMaps.end(), compFunctor());
-
-        std::set<GeometricCamera *> spCams(mvpCameras.begin(), mvpCameras.end());
-
-        // 3. 遍历所有地图，执行每个地图的预保存
-        for (Map *pMi : mvpBackupMaps) {
-            if (!pMi || pMi->IsBad())
-                continue;
-
-            // 如果地图为空，则跳过
-            if (pMi->GetKeyFramesNumInMap() == 0) {
-                // Empty map, erase before of save it.
-                SetMapBad(pMi);
-                continue;
-            }
-            pMi->PreSave(spCams);
-        }
-
-        // 4. 删除坏地图
-        RemoveBadMaps();
-    }
-
-/**
- * @brief 后加载，意思是读取地图文件后加载各个信息
- */
-    void Atlas::PostLoad() {
-        // 1. 读取当前所有相机
-        map<unsigned int, GeometricCamera *> mpCams;
-        for (GeometricCamera *pCam : mvpCameras) {
-            mpCams[pCam->GetId()] = pCam;
-        }
-
-        mspMaps.clear();
-        unsigned long int numKF = 0, numMP = 0;
-        // 2. 加载各个地图
-        for (Map *pMi : mvpBackupMaps) {
-            mspMaps.insert(pMi);
-            pMi->PostLoad(mpKeyFrameDB, mpORBVocabulary, mpCams);
-            numKF += pMi->GetKeyFramesNumInMap();
-            numMP += pMi->GetAllMapPoints().size();
-        }
-        mvpBackupMaps.clear();
-    }
 
     void Atlas::SetKeyFrameDababase(KeyFrameDatabase *pKFDB) {
         mpKeyFrameDB = pKFDB;

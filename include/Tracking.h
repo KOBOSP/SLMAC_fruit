@@ -77,7 +77,7 @@ public:
 
     void InformOnlyTracking(const bool &flag);
 
-    void UpdateFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame);
+    void UpdateLastAndCurFrameIMU(const float s, const IMU::Bias &b, KeyFrame* pCurrentKeyFrame);
     KeyFrame* GetLastKeyFrame()
     {
         return mpLastKeyFrame;
@@ -147,8 +147,6 @@ protected:
     // Perform preintegration from last frame
     void PreintegrateIMU();
 
-    // CheckRequestReset IMU biases and compute frame velocity
-    void ResetFrameIMU();
     void LoadParameter(Settings* settings);
 
 

@@ -48,9 +48,9 @@ class Optimizer
 public:
 
     void static GlobalBundleAdjustemntWithoutImu(Map* pMap, int nIterations= 5, bool *pbStopFlag= NULL, const unsigned long nLoopKF= 0, const bool bRobust = true);
-    void static GlobalBundleAdjustemetWithImu(Map *pMap, int its, const bool bFixLocal= false, const unsigned long nLoopKF= 0, bool *pbStopFlag= NULL, bool bInit= false, float priorG = 1e2, float priorA= 1e6, Eigen::VectorXd *vSingVal = NULL, bool *bHess= NULL);
+    void static GlobalBundleAdjustemetWithImu(Map *pMap, int its, const bool bFixLocal= false, const unsigned long nLoopKFId= 0, bool *pbStopFlag= NULL, bool bInited= false, float GInfo = 1e2, float AInfo= 1e6, Eigen::VectorXd *vSingVal = NULL, bool *bHess= NULL);
 
-    void static LocalBAWithoutImu(KeyFrame* pKF, bool *pbStopFlag, Map *pMap, int& nFixedKFsNum, int& num_OptKF, int& num_MPs, int& num_edges);
+    void static LocalBAWithoutImu(KeyFrame* pKF, bool *pbStopFlag, Map *pMap, int& nFixedKFsNum, int& nOptKFsNum, int& num_MPs, int& num_edges);
     void static LocalBAWithImu(KeyFrame* pCurKF, bool *pbStopFlag, Map *pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges, bool bLarge = false, bool bRecInit = false);
 
     int static PoseOptimization(Frame* pFrame);
@@ -88,7 +88,7 @@ public:
     static Eigen::MatrixXd Marginalize(const Eigen::MatrixXd &H, const int &start, const int &end);
 
     // Inertial pose-graph
-    void static InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg, Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd  &covInertial, bool bFixedVel=false, bool bGauss=false, float priorG = 1e2, float priorA = 1e6);
+    void static InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &fScale, Eigen::Vector3d &bg, Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd  &ImuInfo, bool bFixedVel=false, bool bGauss=false, float GInfo = 1e2, float AInfo = 1e6);
     void static InertialOptimization(Map *pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG = 1e2, float priorA = 1e6);
     void static InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale);
 

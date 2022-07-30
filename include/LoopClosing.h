@@ -67,7 +67,8 @@ public:
     void RequestResetActiveMap(Map* pMap);
 
     // This function will run in a separate thread
-    void RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoopKF);
+    void RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nGBAId);
+    void UpdateKFsAndMPsAfterBA(list<KeyFrame *> &lpKFstoUpdate, vector<MapPoint *> &vpMPsToUpdate, unsigned long nGBAId);
 
     bool CheckRunningGBA(){
         unique_lock<std::mutex> lock(mMutexGBA);

@@ -77,7 +77,7 @@ IMU.mImuFreq: 200.0
 IMU.mbInsertKFsWhenLost: 1
 
 # ORB Parameters
-ORB.mnFeatures: 1000
+ORB.mnFeatures: 700
 ORB.mfScaleFactor: 1.2
 ORB.mnLevels: 8
 ORB.mnInitThFAST: 20
@@ -108,7 +108,7 @@ Tracking.mfThTimeRescueLost: 5.0
 LocalMapping.mnStrongCovisTh: 15
 LocalMapping.mnWeakCovisTh: 3
 LocalMapping.mfCullKFRedundantTh: 0.5
-LocalMapping.mnSingleMaxCullKFsNum: 20
+LocalMapping.mnSingleMaxCullKFsNum: 30
 
 
 LoopClosing.mbActivateLC: 1
