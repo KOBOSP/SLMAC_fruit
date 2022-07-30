@@ -77,30 +77,15 @@ public:
     // Method for change components in the current map
     void AddKeyFrame(KeyFrame* pKF);
     void AddMapPoint(MapPoint* pMP);
-    //void EraseMapPoint(MapPoint* pMP);
-    //void EraseKeyFrame(KeyFrame* pKF);
 
     GeometricCamera* AddCamera(GeometricCamera* pCam);
     std::vector<GeometricCamera*> GetAllCameras();
 
-    /* All methods without Map pointer work on current map */
-    void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
-    void SetReferenceKeyFrames(const std::vector<KeyFrame*> &vpKFs);
 
-
-    long unsigned int MapPointsInMap();
-    long unsigned KeyFramesInMap();
-
-    // Method for get data in current map
-    std::vector<KeyFrame*> GetAllKeyFrames();
-    std::vector<MapPoint*> GetAllMapPoints();
-    std::vector<MapPoint*> GetReferenceMapPoints();
 
     vector<Map*> GetAllMaps();
 
     int CountMaps();
-
-    void clearMap();
 
     void clearAtlas();
 
@@ -109,22 +94,6 @@ public:
     void SetMapBad(Map* pMap);
     void RemoveBadMaps();
 
-    void SetImuInitialized();
-    bool GetImuInitialized();
-    void SetRtkInitialized();
-    bool isRtkInitialized();
-
-    map<long unsigned int, KeyFrame*> GetAtlasKeyframes();
-
-    void SetKeyFrameDababase(KeyFrameDatabase* pKFDB);
-    KeyFrameDatabase* GetKeyFrameDatabase();
-
-    void SetORBVocabulary(ORBVocabulary* pORBVoc);
-    ORBVocabulary* GetORBVocabulary();
-
-    long unsigned int GetNumLivedKF();
-
-    long unsigned int GetNumLivedMP();
 
 protected:
 

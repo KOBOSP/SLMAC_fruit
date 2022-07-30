@@ -136,7 +136,7 @@ namespace ORB_SLAM3 {
                         pangolin::ModelViewLookAt(mfViewpointX, mfViewpointY, mfViewpointZ, 0, 0, 0, 0.0, -1.0, 0.0));
                 MapView.Follow(Twc);
             }
-            if (menuTopView && mpMapDrawer->mpAtlas->GetImuInitialized()) {
+            if (menuTopView && mpMapDrawer->mpAtlas->GetCurrentMap()->GetImuInitialized()) {
                 menuTopView = false;
                 bCameraView = false;
                 MapView.SetProjectionMatrix(

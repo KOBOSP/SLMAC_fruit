@@ -161,6 +161,7 @@ protected:
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
     Atlas* mpAtlas;
+    Map *mpCurrentMap;
     GeometricCamera* mpCamera;
 
 

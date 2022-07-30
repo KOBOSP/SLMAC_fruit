@@ -99,6 +99,10 @@ protected:
     void KeyFrameCulling();
 
     System *mpSystem;
+    Atlas* mpAtlas;
+    LoopClosing* mpLoopCloser;
+    Tracking* mpTracker;
+    Map* mpCurrentMap;
 
     bool mbHaveMono;
     bool mbHaveImu;
@@ -114,21 +118,16 @@ protected:
     bool mbFinished;
     std::mutex mMutexFinish;
 
-    Atlas* mpAtlas;
 
-    LoopClosing* mpLoopCloser;
-    Tracking* mpTracker;
 
     std::list<KeyFrame*> mlNewKeyFrames;
-
-    KeyFrame* mpCurKF;
-
-    std::list<MapPoint*> mlpRecentAddedMapPoints;
-
     std::mutex mMutexNewKFs;
 
-    bool mbAbortBA;
+    KeyFrame* mpCurKF;
+    std::list<MapPoint*> mlpRecentAddedMapPoints;
 
+
+    bool mbAbortBA;
     bool mbPaused;
     bool mbRequestPause;
     bool mbNotPauseOrFinish;

@@ -440,8 +440,8 @@ namespace ORB_SLAM3 {
         }
 
         // 从Atlas中取出当前active的地图
-        Map *pCurrentMap = mpAtlas->GetCurrentMap();
-        if (!pCurrentMap) {
+        mpCurrentMap = mpAtlas->GetCurrentMap();
+        if (!mpCurrentMap) {
             cout << "ERROR: There is not an active map in the atlas" << endl;
         }
 
@@ -459,10 +459,10 @@ namespace ORB_SLAM3 {
                 // 如果当前图像时间戳和前一帧图像时间戳大于1s，说明时间戳明显跳变了，重置地图后直接返回
                 //根据是否是imu模式,进行imu的补偿
                 // 如果当前地图imu成功初始化
-                if (mpAtlas->GetImuInitialized()) {
+                if (mpCurrentMap->GetImuInitialized()) {
                     cout << "Timestamp jump detected. State set to LOST. Reseting IMU integration..." << endl;
                     // IMU完成第3次初始化（在localmapping线程里）
-                    if (!pCurrentMap->GetImuIniertialBA2()) {
+                    if (!mpCurrentMap->GetImuIniertialBA2()) {
                         // 如果当前子图中imu没有经过BA2，重置active地图，也就是之前的数据不要了
                         mpSystem->RequestResetActiveMap();
                     } else {
@@ -496,14 +496,14 @@ namespace ORB_SLAM3 {
         // 地图更新时加锁。保证地图不会发生变化
         // 疑问:这样子会不会影响地图的实时更新?
         // 回答：主要耗时在构造帧中特征点的提取和匹配部分,在那个时候地图是没有被上锁的,有足够的时间更新地图
-        unique_lock<mutex> lock(pCurrentMap->mMutexMapUpdate);
+        unique_lock<mutex> lock(mpCurrentMap->mMutexMapUpdate);
         mbMapUpdated = false;
         // 判断地图id是否更新了
-        int nCurMapChangeIndex = pCurrentMap->GetMapChangeIdx();
-        int nMapChangeIndex = pCurrentMap->GetLastMapChangeIdx();
+        int nCurMapChangeIndex = mpCurrentMap->GetMapChangeIdx();
+        int nMapChangeIndex = mpCurrentMap->GetLastMapChangeIdx();
         if (nCurMapChangeIndex > nMapChangeIndex) {
             // 检测到地图更新了
-            pCurrentMap->SetLastMapChangeIdx(nCurMapChangeIndex);
+            mpCurrentMap->SetLastMapChangeIdx(nCurMapChangeIndex);
             mbMapUpdated = true;
         }
         // Step 5 初始化
@@ -528,13 +528,13 @@ namespace ORB_SLAM3 {
                 // 第一个条件,如果运动模型为空并且imu未初始化,说明是刚开始第一帧跟踪，或者已经跟丢了。
                 // 第二个条件,如果当前帧紧紧地跟着在重定位的帧的后面，我们用重定位帧来恢复位姿
                 // mnFrameIdLastReloc 上一次重定位的那一帧
-                if ((!mbVelocity && !pCurrentMap->GetImuInitialized()) ||
+                if ((!mbVelocity && !mpCurrentMap->GetImuInitialized()) ||
                     (mCurFrame.mnId < mnFrameIdLastReloc + mnFrameNumDurRefLoc)) {
                     bOK = TrackReferenceKeyFrame();
                 } else {
                     // Update6DoF last frame pose according to its reference keyframe
                     UpdateLastFramePose();
-                    if (mpAtlas->GetImuInitialized()) {
+                    if (mpCurrentMap->GetImuInitialized()) {
                         // Predict state with IMU if it is initialized and it doesnt need reset
                         bOK = TrackWithIMU();
                     }
@@ -579,9 +579,9 @@ namespace ORB_SLAM3 {
             if (bOK) {
                 mState = OK;
             } else if (mState == OK) {  // 由上图可知只有当第一阶段跟踪成功，但第二阶段局部地图跟踪失败时执行
-                if (pCurrentMap->GetImuInitialized() &&
+                if (mpCurrentMap->GetImuInitialized() &&
                     (mCurFrame.mnId > (mnFrameIdLastReloc + mnFrameNumDurRefLoc)) &&
-                    (pCurrentMap->GetKeyFramesNumInMap() > mnMaxFrames / 3.0)) {
+                    (mpCurrentMap->GetKeyFramesNumInMap() > mnMaxFrames / 3.0)) {
                     // cout << "KF in map: " << pCurrentMap->GetKeyFramesNumInMap() << endl;
                     // 条件1：当前地图中关键帧数目较多（大于10）
                     // 条件2（隐藏条件）：当前帧距离上次重定位帧超过1s或者非IMU模式
@@ -647,7 +647,7 @@ namespace ORB_SLAM3 {
                 }
             } else if (mState == LOST) {
                 if (mCurFrame.mnId > (mnFrameIdLastLost + mnFrameNumDurLost)) {
-                    if (!pCurrentMap->GetImuInitialized() || pCurrentMap->GetKeyFramesNumInMap() <= mnMaxFrames / 3) {
+                    if (!mpCurrentMap->GetImuInitialized() || mpCurrentMap->GetKeyFramesNumInMap() <= mnMaxFrames / 3) {
                         mpSystem->RequestResetActiveMap();
                     } else {
                         SaveAndCreateMapInAtlas();
@@ -709,7 +709,7 @@ namespace ORB_SLAM3 {
 
         // Create KeyFrame
         // 将当前帧构造为初始关键帧
-        KeyFrame *pKFini = new KeyFrame(mCurFrame, mpAtlas->GetCurrentMap(), mpKeyFrameDB);
+        KeyFrame *pKFini = new KeyFrame(mCurFrame, mpCurrentMap, mpKeyFrameDB);
 
         // Insert KeyFrame in the map
         // 在地图中添加该初始关键帧
@@ -723,7 +723,7 @@ namespace ORB_SLAM3 {
                 // 通过反投影得到该特征点的世界坐标系下3D坐标
                 Eigen::Vector3f x3D;
                 mCurFrame.UnprojectStereo(i, x3D);
-                MapPoint *pNewMP = new MapPoint(x3D, pKFini, mpAtlas->GetCurrentMap());
+                MapPoint *pNewMP = new MapPoint(x3D, pKFini, mpCurrentMap);
                 // 为该MapPoint添加属性：
                 // a.观测到该MapPoint的关键帧
                 // mBiasOri.该MapPoint的描述子
@@ -738,7 +738,7 @@ namespace ORB_SLAM3 {
         }
 
 
-        Verbose::PrintMess("New Map created with " + to_string(mpAtlas->MapPointsInMap()) + " points",
+        Verbose::PrintMess("New Map created with " + to_string(mpCurrentMap->GetMapPointsNumInMap()) + " points",
                            Verbose::VERBOSITY_QUIET);
 
         // 在局部地图中添加该初始关键帧
@@ -749,13 +749,13 @@ namespace ORB_SLAM3 {
         mpLastKeyFrame = pKFini;
 
         mvpLocalKeyFrames.emplace_back(pKFini);
-        mvpLocalMapPoints = mpAtlas->GetAllMapPoints();
+        mvpLocalMapPoints = mpCurrentMap->GetAllMapPoints();
         mpReferenceKF=pKFini;
         mCurFrame.mpReferenceKF = pKFini;
         // 把当前（最新的）局部MapPoints作为ReferenceMapPoints
-        mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
-        mpAtlas->GetCurrentMap()->mvpInitKeyFrames.emplace_back(pKFini);
-        mpAtlas->GetCurrentMap()->SetInitKFId(pKFini->mnId);
+        mpCurrentMap->SetReferenceMapPoints(mvpLocalMapPoints);
+        mpCurrentMap->mvpInitKeyFrames.emplace_back(pKFini);
+        mpCurrentMap->SetInitKFId(pKFini->mnId);
         mpMapDrawer->SetCurrentCameraPose(mCurFrame.GetPose());
         mState = OK;
     }
@@ -978,7 +978,7 @@ namespace ORB_SLAM3 {
         // Step 3：前面新增了更多的匹配关系，BA优化得到更准确的位姿
         int inliers;
         // IMU未初始化，仅优化位姿||初始化，重定位，重新开启一个地图都会使mnLastRelocFrameId变化
-        if (!mpAtlas->GetImuInitialized() || mCurFrame.mnId <= mnFrameIdLastReloc + mnFrameNumDurRefLoc) {
+        if (!mpCurrentMap->GetImuInitialized() || mCurFrame.mnId <= mnFrameIdLastReloc + mnFrameNumDurRefLoc) {
 //            Verbose::PrintMess("TLM: PoseOptimization ", Verbose::VERBOSITY_DEBUG);
             Optimizer::PoseOptimization(&mCurFrame);
         } else {
@@ -1044,7 +1044,7 @@ namespace ORB_SLAM3 {
  */
     bool Tracking::NeedNewKeyFrame() {
         // 如果是IMU模式并且当前地图中未完成IMU初始化
-        if (!mpAtlas->GetCurrentMap()->GetImuInitialized()) {
+        if (!mpCurrentMap->GetImuInitialized()) {
             // 如果是IMU模式，当前帧距离上一关键帧时间戳超过0.25s，则说明需要插入关键帧，不再进行后续判断
             if ((mCurFrame.mdTimestamp - mpLastKeyFrame->mdTimestamp) >= 0.5)
                 return true;
@@ -1059,7 +1059,7 @@ namespace ORB_SLAM3 {
         }
 
         // 获取当前地图中的关键帧数目
-        const int nKFs = mpAtlas->KeyFramesInMap();
+        const int nKFs = mpCurrentMap->GetKeyFramesNumInMap();
 
         // Do not insert keyframes if not enough frames have passed from last relocalisation
         // mCurFrame.mnId是当前帧的ID
@@ -1162,7 +1162,7 @@ namespace ORB_SLAM3 {
  */
     void Tracking::CreateNewKeyFrame() {
         // 如果局部建图线程正在初始化且没做完或关闭了,就无法插入关键帧
-        if (mpLocalMapping->IsInitializing() && !mpAtlas->GetImuInitialized()) {
+        if (mpLocalMapping->IsInitializing() && !mpCurrentMap->GetImuInitialized()) {
             return;
         }
 
@@ -1171,9 +1171,9 @@ namespace ORB_SLAM3 {
         }
 
         // Step 1：将当前帧构造成关键帧
-        KeyFrame *pKF = new KeyFrame(mCurFrame, mpAtlas->GetCurrentMap(), mpKeyFrameDB);
+        KeyFrame *pKF = new KeyFrame(mCurFrame, mpCurrentMap, mpKeyFrameDB);
 
-        if (mpAtlas->GetImuInitialized()) //  || mpLocalMapping->IsInitializing())
+        if (mpCurrentMap->GetImuInitialized()) //  || mpLocalMapping->IsInitializing())
             pKF->bImu = true;
 
         pKF->SetNewBias(mCurFrame.mImuBias);
@@ -1238,7 +1238,7 @@ namespace ORB_SLAM3 {
                     Eigen::Vector3f x3D;
                     mCurFrame.UnprojectStereo(i, x3D);
 
-                    MapPoint *pNewMP = new MapPoint(x3D, pKF, mpAtlas->GetCurrentMap());
+                    MapPoint *pNewMP = new MapPoint(x3D, pKF, mpCurrentMap);
                     // 这些添加属性的操作是每次创建MapPoint后都要做的
                     pNewMP->AddObsKFAndLRIdx(pKF, i);
                     pKF->AddMapPoint(pNewMP, i);
@@ -1331,13 +1331,13 @@ namespace ORB_SLAM3 {
         }
         ORBmatcher matcher(0.8);
         int nThProjRad = 1;
-        if (mpAtlas->GetImuInitialized()) {
-            if (mpAtlas->GetCurrentMap()->GetImuIniertialBA2()) {
+        if (mpCurrentMap->GetImuInitialized()) {
+            if (mpCurrentMap->GetImuIniertialBA2()) {
                 nThProjRad = 2;
             } else {
                 nThProjRad = 6;  // 0.4版本这里是3
             }
-        } else if (!mpAtlas->GetImuInitialized()) {
+        } else if (!mpCurrentMap->GetImuInitialized()) {
             nThProjRad = 10;
         }
         // If the camera has been relocalised recently, perform a coarser search
@@ -1370,8 +1370,8 @@ namespace ORB_SLAM3 {
 
         // This is for visualization
         // 设置参考地图点用于绘图显示局部地图点（红色）
-        mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
-        mpAtlas->SetReferenceKeyFrames(mvpLocalKeyFrames);
+        mpCurrentMap->SetReferenceMapPoints(mvpLocalMapPoints);
+        mpCurrentMap->SetReferenceKeyFrames(mvpLocalKeyFrames);
     }
 
 /*
@@ -1423,7 +1423,7 @@ namespace ORB_SLAM3 {
         // Step 1：遍历当前帧的地图点，记录所有能观测到当前帧地图点的关键帧
         map<KeyFrame *, int> keyframeCounter;
         // 如果IMU未初始化 或者 刚刚完成重定位
-        if (!mpAtlas->GetImuInitialized() || (mCurFrame.mnId < mnFrameIdLastReloc + mnFrameNumDurRefLoc)) {
+        if (!mpCurrentMap->GetImuInitialized() || (mCurFrame.mnId < mnFrameIdLastReloc + mnFrameNumDurRefLoc)) {
             for (int i = 0; i < mCurFrame.mnKPsLeftNum; i++) {
                 MapPoint *pMP = mCurFrame.mvpMPs[i];
                 if (pMP) {
@@ -1590,8 +1590,7 @@ namespace ORB_SLAM3 {
         // Relocalization is performed when tracking is lost
         // Track Lost: Query KeyFrame Database for keyframe candidates for relocalisation
         // Step 2：找到与当前帧相似的候选关键帧组
-        vector<KeyFrame *> vpCandidateKFs = mpKeyFrameDB->DetectRelocalizationCandidates(&mCurFrame,
-                                                                                         mpAtlas->GetCurrentMap());
+        vector<KeyFrame *> vpCandidateKFs = mpKeyFrameDB->DetectRelocalizationCandidates(&mCurFrame,mpCurrentMap);
 
         if (vpCandidateKFs.empty()) {
             Verbose::PrintMess("There are not candidates", Verbose::VERBOSITY_NORMAL);
@@ -1817,7 +1816,7 @@ namespace ORB_SLAM3 {
         Verbose::PrintMess("Reset Database Done", Verbose::VERBOSITY_NORMAL);
 
         // Clear Map (this erase MapPoints and KeyFrames)
-        mpAtlas->clearMap();
+        pMap->clear();
 
         mState = NO_IMAGES_YET;
         mnFrameIdLastReloc = mCurFrame.mnId;

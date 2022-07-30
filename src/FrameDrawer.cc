@@ -159,8 +159,8 @@ namespace ORB_SLAM3 {
         }
         sShow << "| EFps:" << mnExtraFps << " TFps:" << mnTrackFps << " | ";
         int nMaps = mpAtlas->CountMaps();
-        int nKFs = mpAtlas->KeyFramesInMap();
-        int nMPs = mpAtlas->MapPointsInMap();
+        int nKFs = mpAtlas->GetCurrentMap()->GetKeyFramesNumInMap();
+        int nMPs = mpAtlas->GetCurrentMap()->GetMapPointsNumInMap();
         sShow << "Maps: " << nMaps << ", KFs: " << nKFs << ", MPs: " << nMPs << ", TMap: " << mnTMap << " , MStero: "
               << mnMStereo;
 

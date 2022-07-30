@@ -99,7 +99,7 @@ namespace ORB_SLAM3 {
             // Step 1 告诉Tracking，LocalMapping正处于繁忙状态，请不要给我发送关键帧打扰我
             // LocalMapping线程处理的关键帧都是Tracking线程发过来的
             SetAcceptKeyFrames(false);
-
+            mpCurrentMap = mpAtlas->GetCurrentMap();
             // Check if there are keyframes in the queue
             // 等待处理的关键帧列表不为空 并且imu正常
             if (HaveNewKeyFrames() && !mbBadImu) {
@@ -134,7 +134,7 @@ namespace ORB_SLAM3 {
 
                 // 已经处理完队列中的最后的一个关键帧，并且闭环检测没有请求停止LocalMapping
                 if (!HaveNewKeyFrames() && !CheckRequestPause()) {
-                    if (mpAtlas->KeyFramesInMap() < 3) {
+                    if (mpCurrentMap->GetKeyFramesNumInMap() < 3) {
                         continue;
                     }
                     // Step 6.1 处于IMU模式并且当前关键帧所在的地图已经完成IMU初始化
@@ -566,7 +566,7 @@ namespace ORB_SLAM3 {
                     continue;
 
 
-                MapPoint *pMP = new MapPoint(x3D, mpCurKF, mpAtlas->GetCurrentMap());
+                MapPoint *pMP = new MapPoint(x3D, mpCurKF, mpCurrentMap);
                 pMP->AddObsKFAndLRIdx(mpCurKF, idx1);
                 pMP->AddObsKFAndLRIdx(pKF2, idx2);
                 mpCurKF->AddMapPoint(pMP, idx1);
@@ -833,7 +833,7 @@ namespace ORB_SLAM3 {
         mpCurKF->UpdateBestCovisibles();
         // 1. 根据Covisibility Graph提取当前帧的共视关键帧
         vector<KeyFrame *> vpLocalKeyFrames = mpCurKF->GetVectorCovisibleKeyFrames();
-        const bool bInitImu = mpAtlas->GetImuInitialized();
+        const bool bInitImu = mpCurrentMap->GetImuInitialized();
 
         // Compoute last KF from optimizable window:
         unsigned int nBeginKFId;
@@ -911,7 +911,7 @@ namespace ORB_SLAM3 {
             if (nRedMPs > mfCullKFRedundantTh * nTotMPs) {
                 // imu模式下需要更改前后关键帧的连续性，且预积分要叠加起来
                 // 关键帧少于Nd个，跳过不删
-                if (mpAtlas->KeyFramesInMap() <= mnSingleMaxCullKFsNum)
+                if (mpCurrentMap->GetKeyFramesNumInMap() <= mnSingleMaxCullKFsNum)
                     continue;
 
                 // 关键帧与当前关键帧id差一个，跳过不删
@@ -1067,7 +1067,7 @@ namespace ORB_SLAM3 {
         int nMinKF = 10;
 
         // 当前地图大于10帧才进行初始化
-        if (mpAtlas->KeyFramesInMap() < nMinKF)
+        if (mpCurrentMap->GetKeyFramesNumInMap() < nMinKF)
             return;
 
         // Retrieve all keyframe in temporal order
@@ -1159,7 +1159,7 @@ namespace ORB_SLAM3 {
 
         mfScale = 1.0;
         // 3. 计算残差及偏置差，优化尺度重力方向及速度偏置，偏置先验为0，双目时不优化尺度
-        Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mfScale, mbg, mba, mbHaveMono, nImuInfo,
+        Optimizer::InertialOptimization(mpCurrentMap, mRwg, mfScale, mbg, mba, mbHaveMono, nImuInfo,
                                         false, false, GInfo, AInfo);
 
         // 尺度太小的话初始化认为失败
@@ -1171,18 +1171,18 @@ namespace ORB_SLAM3 {
 
         // Before this line we are not changing the map
         {
-            unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
+            unique_lock<mutex> lock(mpCurrentMap->mMutexMapUpdate);
             // 尺度变化超过设定值，或者非单目时（无论带不带imu，但这个函数只在带imu时才执行，所以这个可以理解为双目imu）
             if ((fabs(mfScale - 1.f) > 0.00001) || !mbHaveMono) {
                 Sophus::SE3f Twg(mRwg.cast<float>().transpose(), Eigen::Vector3f::Zero());
-                mpAtlas->GetCurrentMap()->ApplyScaledRotation(Twg, mfScale, true);
+                mpCurrentMap->ApplyScaledRotation(Twg, mfScale, true);
             }
 
             // Check if initialization OK
             // 即使初始化成功后面还会执行这个函数重新初始化
             // 在之前没有初始化成功情况下（此时刚刚初始化成功）对每一帧都标记，后面的kf全部都在tracking里面标记为true
             // 也就是初始化之前的那些关键帧即使有imu信息也不算
-            if (!mpAtlas->GetImuInitialized()) {
+            if (!mpCurrentMap->GetImuInitialized()) {
                 for (int i = 0; i < nNearKFsNum; i++) {
                     KeyFrame *pKF2 = vpNearKFs[i];
                     pKF2->bImu = true;
@@ -1191,8 +1191,8 @@ namespace ORB_SLAM3 {
         }
 
         // 设置经过初始化了
-        if (!mpAtlas->GetImuInitialized()) {
-            mpAtlas->SetImuInitialized();
+        if (!mpCurrentMap->GetImuInitialized()) {
+            mpCurrentMap->SetImuInitialized();
             mpCurKF->bImu = true;
         }
 
@@ -1201,11 +1201,11 @@ namespace ORB_SLAM3 {
             // 5. 承接上一步纯imu优化，按照之前的结果更新了尺度信息及适应重力方向，所以要结合地图进行一次视觉加imu的全局优化，这次带了MP等信息
             // 1.0版本里面不直接赋值了，而是将所有优化后的信息保存到变量里面
             if (AInfo != 0.f) {
-                Optimizer::GlobalBundleAdjustemetWithImu(mpAtlas->GetCurrentMap(), 100, false, GBAId,
+                Optimizer::GlobalBundleAdjustemetWithImu(mpCurrentMap, 100, false, GBAId,
                                                          NULL, true,
                                                          GInfo, AInfo);
             } else {
-                Optimizer::GlobalBundleAdjustemetWithImu(mpAtlas->GetCurrentMap(), 100, false, GBAId,
+                Optimizer::GlobalBundleAdjustemetWithImu(mpCurrentMap, 100, false, GBAId,
                                                          NULL, false);
             }
         }
@@ -1216,10 +1216,10 @@ namespace ORB_SLAM3 {
         }
 
         Verbose::PrintMess("Global Bundle Adjustment finished, Updating map ...", Verbose::VERBOSITY_NORMAL);
-        unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
-        list<KeyFrame *> lpKFstoUpdate(mpAtlas->GetCurrentMap()->mvpInitKeyFrames.begin(),
-                                       mpAtlas->GetCurrentMap()->mvpInitKeyFrames.end());
-        vector<MapPoint *> vpMPsToUpdate = mpAtlas->GetCurrentMap()->GetAllMapPoints();
+        unique_lock<mutex> lock(mpCurrentMap->mMutexMapUpdate);
+        list<KeyFrame *> lpKFstoUpdate(mpCurrentMap->mvpInitKeyFrames.begin(),
+                                       mpCurrentMap->mvpInitKeyFrames.end());
+        vector<MapPoint *> vpMPsToUpdate = mpCurrentMap->GetAllMapPoints();
         mpLoopCloser->UpdateKFsAndMPsAfterBA(lpKFstoUpdate, vpMPsToUpdate, GBAId);
 
         Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
@@ -1228,11 +1228,6 @@ namespace ORB_SLAM3 {
 
         mpTracker->mState = Tracking::OK;
         bInitializing = false;
-//        for (list<KeyFrame *>::iterator lit = mlNewKeyFrames.begin(), lend = mlNewKeyFrames.end(); lit != lend; lit++) {
-//            (*lit)->SetBadFlag();
-//            delete *lit;
-//        }
-//        mlNewKeyFrames.clear();
         return;
     }
 

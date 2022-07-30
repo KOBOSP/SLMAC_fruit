@@ -37,11 +37,9 @@ namespace ORB_SLAM3 {
     Atlas::~Atlas() {
         for (std::set<Map *>::iterator it = mspMaps.begin(), end = mspMaps.end(); it != end;) {
             Map *pMi = *it;
-
             if (pMi) {
                 delete pMi;
                 pMi = static_cast<Map *>(NULL);
-
                 it = mspMaps.erase(it);
             } else
                 ++it;
@@ -150,40 +148,7 @@ namespace ORB_SLAM3 {
         return mvpCameras;
     }
 
-    void Atlas::SetReferenceMapPoints(const std::vector<MapPoint *> &vpMPs) {
-        unique_lock<mutex> lock(mMutexAtlas);
-        mpCurrentMap->SetReferenceMapPoints(vpMPs);
-    }
 
-    void Atlas::SetReferenceKeyFrames(const std::vector<KeyFrame *> &vpKPs) {
-        unique_lock<mutex> lock(mMutexAtlas);
-        mpCurrentMap->SetReferenceKeyFrames(vpKPs);
-    }
-
-    long unsigned int Atlas::MapPointsInMap() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->GetMapPointsNumInMap();
-    }
-
-    long unsigned Atlas::KeyFramesInMap() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->GetKeyFramesNumInMap();
-    }
-
-    std::vector<KeyFrame *> Atlas::GetAllKeyFrames() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->GetAllKeyFrames();
-    }
-
-    std::vector<MapPoint *> Atlas::GetAllMapPoints() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->GetAllMapPoints();
-    }
-
-    std::vector<MapPoint *> Atlas::GetReferenceMapPoints() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->GetReferenceMapPoints();
-    }
 
     vector<Map *> Atlas::GetAllMaps() {
         unique_lock<mutex> lock(mMutexAtlas);
@@ -202,10 +167,6 @@ namespace ORB_SLAM3 {
         return mspMaps.size();
     }
 
-    void Atlas::clearMap() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        mpCurrentMap->clear();
-    }
 
     void Atlas::clearAtlas() {
         unique_lock<mutex> lock(mMutexAtlas);
@@ -225,14 +186,12 @@ namespace ORB_SLAM3 {
             SaveAndCreateNewMap();
         while (mpCurrentMap->IsBad())
             usleep(5000);
-
         return mpCurrentMap;
     }
 
     void Atlas::SetMapBad(Map *pMap) {
         mspMaps.erase(pMap);
         pMap->SetBad();
-
         mspBadMaps.insert(pMap);
     }
 
@@ -245,77 +204,5 @@ namespace ORB_SLAM3 {
         mspBadMaps.clear();
     }
 
-
-    void Atlas::SetImuInitialized() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        mpCurrentMap->SetImuInitialized();
-    }
-
-    bool Atlas::GetImuInitialized() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->GetImuInitialized();
-    }
-    void Atlas::SetRtkInitialized() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        mpCurrentMap->SetRtkInitialized(true);
-    }
-
-    bool Atlas::isRtkInitialized() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        return mpCurrentMap->GetRtkInitialized();
-    }
-
-
-    void Atlas::SetKeyFrameDababase(KeyFrameDatabase *pKFDB) {
-        mpKeyFrameDB = pKFDB;
-    }
-
-    KeyFrameDatabase *Atlas::GetKeyFrameDatabase() {
-        return mpKeyFrameDB;
-    }
-
-    void Atlas::SetORBVocabulary(ORBVocabulary *pORBVoc) {
-        mpORBVocabulary = pORBVoc;
-    }
-
-/**
- * @brief 以下函数暂未用到
- */
-    ORBVocabulary *Atlas::GetORBVocabulary() {
-        return mpORBVocabulary;
-    }
-
-    long unsigned int Atlas::GetNumLivedKF() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        long unsigned int num = 0;
-        for (Map *pMap_i : mspMaps) {
-            num += pMap_i->GetKeyFramesNumInMap();
-        }
-
-        return num;
-    }
-
-    long unsigned int Atlas::GetNumLivedMP() {
-        unique_lock<mutex> lock(mMutexAtlas);
-        long unsigned int num = 0;
-        for (Map *pMap_i : mspMaps) {
-            num += pMap_i->GetAllMapPoints().size();
-        }
-
-        return num;
-    }
-
-    map<long unsigned int, KeyFrame *> Atlas::GetAtlasKeyframes() {
-        map<long unsigned int, KeyFrame *> mpIdKFs;
-        for (Map *pMap_i : mvpBackupMaps) {
-            vector<KeyFrame *> vpKFs_Mi = pMap_i->GetAllKeyFrames();
-
-            for (KeyFrame *pKF_j_Mi : vpKFs_Mi) {
-                mpIdKFs[pKF_j_Mi->mnId] = pKF_j_Mi;
-            }
-        }
-
-        return mpIdKFs;
-    }
 
 } // namespace ORB_SLAM3
