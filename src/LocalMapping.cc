@@ -231,9 +231,9 @@ namespace ORB_SLAM3 {
  * @param pKF 新的关键帧
  */
     void LocalMapping::InsertKeyFrame(KeyFrame *pKF) {
-        unique_lock<mutex> lock(mMutexNewKFs);
+        unique_lock<mutex> lock(mMutexNewKFQueue);
         // 将关键帧插入到列表中
-        mlNewKeyFrames.emplace_back(pKF);
+        mlpKFQueueInLM.emplace_back(pKF);
         mbAbortBA = true;
     }
 
@@ -241,8 +241,8 @@ namespace ORB_SLAM3 {
  * @brief 查看列表中是否有等待被插入的关键帧
  */
     bool LocalMapping::HaveNewKeyFrames() {
-        unique_lock<mutex> lock(mMutexNewKFs);
-        return (!mlNewKeyFrames.empty());
+        unique_lock<mutex> lock(mMutexNewKFQueue);
+        return (!mlpKFQueueInLM.empty());
     }
 
 /**
@@ -252,11 +252,11 @@ namespace ORB_SLAM3 {
         // Step 1：从缓冲队列中取出一帧关键帧
         // 该关键帧队列是Tracking线程向LocalMapping中插入的关键帧组成
         {
-            unique_lock<mutex> lock(mMutexNewKFs);
+            unique_lock<mutex> lock(mMutexNewKFQueue);
             // 取出列表中最前面的关键帧，作为当前要处理的关键帧
-            mpCurKF = mlNewKeyFrames.front();
+            mpCurKF = mlpKFQueueInLM.front();
             // 取出最前面的关键帧后，在原来的列表里删掉该关键帧
-            mlNewKeyFrames.pop_front();
+            mlpKFQueueInLM.pop_front();
         }
 
         // Compute Bags of Words structures
@@ -751,7 +751,7 @@ namespace ORB_SLAM3 {
     void LocalMapping::RequestPause() {
         unique_lock<mutex> lock(mMutexStop);
         mbRequestPause = true;
-        unique_lock<mutex> lock2(mMutexNewKFs);
+        unique_lock<mutex> lock2(mMutexNewKFQueue);
         mbAbortBA = true;
     }
 
@@ -765,9 +765,9 @@ namespace ORB_SLAM3 {
             return;
         mbPaused = false;
         mbRequestPause = false;
-        for (list<KeyFrame *>::iterator lit = mlNewKeyFrames.begin(), lend = mlNewKeyFrames.end(); lit != lend; lit++)
+        for (list<KeyFrame *>::iterator lit = mlpKFQueueInLM.begin(), lend = mlpKFQueueInLM.end(); lit != lend; lit++)
             delete *lit;
-        mlNewKeyFrames.clear();
+        mlpKFQueueInLM.clear();
         cout << "LM: LM Begin" << endl;
     }
 
@@ -1004,7 +1004,7 @@ namespace ORB_SLAM3 {
             if (mbResetRequested || mbResetRequestedActiveMap) {
                 executed_reset = true;
                 cout << "LM: ActiveMap Reset Doing" << endl;
-                mlNewKeyFrames.clear();
+                mlpKFQueueInLM.clear();
                 mlpRecentAddedMapPoints.clear();
                 mTimeFirstToCur = 0.f;
                 mbBadImu = false;

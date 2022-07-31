@@ -267,6 +267,8 @@ namespace ORB_SLAM3 {
         mnThOptInliers = ReadParameter<int>(fSettings, "LoopClosing.mnThOptInliers", found);
         mnThIterProjMatches = ReadParameter<int>(fSettings, "LoopClosing.mnThIterProjMatches", found);
         mnThOptProjMatches = ReadParameter<int>(fSettings, "LoopClosing.mnThOptProjMatches", found);
+        mnThContiCoinSuccess = ReadParameter<int>(fSettings, "LoopClosing.mnThContiCoinSuccess", found);
+        mnThContiCoinGiveup = ReadParameter<int>(fSettings, "LoopClosing.mnThContiCoinGiveup", found);
     }
 
     void Settings::PrecomputeRectificationMaps() {
@@ -375,4 +377,5 @@ namespace ORB_SLAM3 {
 
         return output;
     }
+
 };

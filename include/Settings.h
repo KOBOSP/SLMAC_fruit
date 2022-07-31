@@ -168,6 +168,8 @@ namespace ORB_SLAM3 {
         float mfCullKFRedundantTh;
         int mnWeakCovisTh, mnStrongCovisTh, mnSingleMaxCullKFsNum;
         int mnThOriProjMatches, mnThBoWMatches, mnThIterInliers, mnThOptInliers, mnThIterProjMatches, mnThOptProjMatches;
+        int mnThContiCoinSuccess;
+        int mnThContiCoinGiveup;
         float mfThTimeRescueLost;
     };
 };

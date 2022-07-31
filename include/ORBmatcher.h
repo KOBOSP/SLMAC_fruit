@@ -59,11 +59,11 @@ namespace ORB_SLAM3
 
         // FuseMapPointsInNeighbors()
         int SearchReplaceKFAndMPsByProjectInLocalMap(KeyFrame* pKF, const vector<MapPoint *> &vpMapPoints, const float nThProjRad=3.0, const bool bRight = false);
-        // FuseBetweenKFs() and FuseBetweenKFAndMPs()
+        // FuseBetweenKFsAndMPsWithPose() and FuseBetweenKFsAndMPsWithoutPose()
         int SearchReplaceKFAndMPsByProjectInGlobalMap(KeyFrame* pKF, Sophus::SE3f &Tcw, const std::vector<MapPoint*> &vpCandidMPs, float nThProjRad, vector<MapPoint *> &vpReplacePoint);
-        // DetectCommonRegionsByBoWSearchAndProjectVerify() and FindMatchesByProjection()
+        // MatchKFsByBowAndIterSim3AndMatchKFAndMPsByProAndOptSIm3AndPro() and FindMatchesByProjection()
         int SearchMatchKFAndMPsByProject(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpCandidMPs, std::vector<MapPoint*> &vpMatchedMPs, int th, float ratioHamming= 1.0);
-        // DetectCommonRegionsByBoWSearchAndProjectVerify()
+        // MatchKFsByBowAndIterSim3AndMatchKFAndMPsByProAndOptSIm3AndPro()
         int SearchMatchKFAndKFByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
 
     public:

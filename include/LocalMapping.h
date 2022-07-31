@@ -71,8 +71,8 @@ public:
     bool CheckFinished();
 
     int KeyframesInQueue(){
-        unique_lock<std::mutex> lock(mMutexNewKFs);
-        return mlNewKeyFrames.size();
+        unique_lock<std::mutex> lock(mMutexNewKFQueue);
+        return mlpKFQueueInLM.size();
     }
 
     bool IsInitializing();
@@ -120,8 +120,8 @@ protected:
 
 
 
-    std::list<KeyFrame*> mlNewKeyFrames;
-    std::mutex mMutexNewKFs;
+    std::list<KeyFrame*> mlpKFQueueInLM;
+    std::mutex mMutexNewKFQueue;
 
     KeyFrame* mpCurKF;
     std::list<MapPoint*> mlpRecentAddedMapPoints;

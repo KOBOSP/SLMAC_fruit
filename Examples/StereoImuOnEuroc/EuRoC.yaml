@@ -116,5 +116,7 @@ LoopClosing.mnThOriProjMatches: 20
 LoopClosing.mnThBoWMatches: 20
 LoopClosing.mnThIterInliers: 15
 LoopClosing.mnThOptInliers: 30
-LoopClosing.mnThIterProjMatches: 50
-LoopClosing.mnThOptProjMatches: 70
+LoopClosing.mnThIterProjMatches: 45
+LoopClosing.mnThOptProjMatches: 60
+LoopClosing.mnThContiCoinSuccess: 3
+LoopClosing.mnThContiCoinGiveup: 3
